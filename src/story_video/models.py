@@ -13,7 +13,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -161,6 +161,8 @@ class StoryConfig(BaseModel):
         scene_word_max: Maximum acceptable word count per scene.
     """
 
+    model_config = ConfigDict(frozen=True)
+
     target_duration_minutes: int = Field(default=30, gt=0)
     words_per_minute: int = Field(default=150, gt=0)
     scene_word_target: int = Field(default=1800, gt=0)
@@ -180,6 +182,8 @@ class TTSConfig(BaseModel):
         speed: Playback speed multiplier.
         output_format: Audio file format.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     provider: str = Field(default="openai")
     model: str = Field(default="tts-1-hd")
@@ -202,6 +206,8 @@ class ImageConfig(BaseModel):
         style: DALL-E style parameter.
         style_prefix: Text prepended to every image prompt.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     provider: str = Field(default="openai")
     model: str = Field(default="dall-e-3")
@@ -230,6 +236,8 @@ class VideoConfig(BaseModel):
         fade_in_duration: Fade-from-black duration at video start in seconds.
         fade_out_duration: Fade-to-black duration at video end in seconds.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     resolution: str = Field(default="1920x1080")
     fps: int = Field(default=30, gt=0)
@@ -261,6 +269,8 @@ class SubtitleConfig(BaseModel):
         max_lines: Maximum number of subtitle lines.
     """
 
+    model_config = ConfigDict(frozen=True)
+
     font: str = Field(default="Montserrat")
     font_fallback: str = Field(default="Arial")
     font_size: int = Field(default=48, gt=0)
@@ -285,6 +295,8 @@ class PipelineConfig(BaseModel):
         save_originals_on_revision: If True, save original files before revision.
     """
 
+    model_config = ConfigDict(frozen=True)
+
     autonomous: bool = Field(default=False)
     max_retries: int = Field(default=3, ge=0)
     retry_base_delay: int = Field(default=2, gt=0)
@@ -297,6 +309,8 @@ class OutputConfig(BaseModel):
     Fields:
         directory: Base directory where project outputs are stored.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     directory: Path = Field(default=Path("./output"))
 
@@ -315,6 +329,8 @@ class AppConfig(BaseModel):
         pipeline: Pipeline behavior parameters.
         output: Output directory configuration.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     story: StoryConfig = Field(default_factory=StoryConfig)
     tts: TTSConfig = Field(default_factory=TTSConfig)
@@ -345,6 +361,8 @@ class SceneAssetStatus(BaseModel):
         video_segment: Status of the rendered video segment.
     """
 
+    model_config = ConfigDict(validate_assignment=True)
+
     text: SceneStatus = Field(default=SceneStatus.PENDING)
     narration_text: SceneStatus = Field(default=SceneStatus.PENDING)
     audio: SceneStatus = Field(default=SceneStatus.PENDING)
@@ -368,6 +386,8 @@ class Scene(BaseModel):
         image_prompt: DALL-E prompt for scene illustration (set during image prompt generation).
         asset_status: Per-asset production status tracking.
     """
+
+    model_config = ConfigDict(validate_assignment=True)
 
     scene_number: int = Field(gt=0)
     title: str = Field(min_length=1)
@@ -398,6 +418,8 @@ class ProjectMetadata(BaseModel):
         config: Full application configuration used for this project.
         scenes: List of scenes in the project.
     """
+
+    model_config = ConfigDict(validate_assignment=True)
 
     project_id: str = Field(min_length=1)
     mode: InputMode

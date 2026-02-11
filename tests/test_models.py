@@ -588,6 +588,13 @@ class TestSceneAssetStatus:
         restored = SceneAssetStatus(**data)
         assert restored == status
 
+    def test_asset_status_fields_match_asset_type_members(self):
+        from story_video.models import AssetType, SceneAssetStatus
+
+        expected_fields = {member.value for member in AssetType}
+        actual_fields = set(SceneAssetStatus.model_fields.keys())
+        assert actual_fields == expected_fields
+
 
 # ---------------------------------------------------------------------------
 # Scene tests
