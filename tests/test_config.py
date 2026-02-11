@@ -1,0 +1,285 @@
+"""Tests for story_video.config — Configuration loading and merging.
+
+TDD: These tests are written first, before the implementation.
+Each test verifies one logical behavior of the load_config function.
+"""
+
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from story_video.config import load_config
+
+# ---------------------------------------------------------------------------
+# Defaults-only tests (no file, no CLI overrides)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadConfigDefaultsOnly:
+    """load_config with no arguments returns Pydantic defaults."""
+
+    def test_returns_app_config_instance(self):
+        config = load_config()
+        from story_video.models import AppConfig
+
+        assert isinstance(config, AppConfig)
+
+    def test_story_defaults(self):
+        config = load_config()
+        assert config.story.target_duration_minutes == 30
+        assert config.story.words_per_minute == 150
+
+    def test_tts_defaults(self):
+        config = load_config()
+        assert config.tts.voice == "nova"
+        assert config.tts.provider == "openai"
+
+    def test_pipeline_defaults(self):
+        config = load_config()
+        assert config.pipeline.autonomous is False
+
+    def test_output_defaults(self):
+        config = load_config()
+        assert config.output.directory == Path("./output")
+
+    def test_none_config_path_is_same_as_no_arg(self):
+        config = load_config(config_path=None)
+        assert config.story.target_duration_minutes == 30
+
+    def test_none_cli_overrides_is_same_as_no_arg(self):
+        config = load_config(cli_overrides=None)
+        assert config.tts.voice == "nova"
+
+
+# ---------------------------------------------------------------------------
+# Loading from YAML file
+# ---------------------------------------------------------------------------
+
+
+class TestLoadConfigFromYaml:
+    """load_config reads a YAML file and merges with defaults."""
+
+    def test_loads_values_from_yaml(self, tmp_path):
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("tts:\n  voice: alloy\n")
+        config = load_config(config_path=yaml_file)
+        assert config.tts.voice == "alloy"
+
+    def test_unspecified_fields_get_pydantic_defaults(self, tmp_path):
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("tts:\n  voice: alloy\n")
+        config = load_config(config_path=yaml_file)
+        # voice is overridden, but other TTS fields get defaults
+        assert config.tts.provider == "openai"
+        assert config.tts.model == "tts-1-hd"
+        # Other sections are entirely defaults
+        assert config.story.target_duration_minutes == 30
+        assert config.video.fps == 30
+
+    def test_loads_multiple_sections(self, tmp_path):
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            "story:\n"
+            "  target_duration_minutes: 60\n"
+            "tts:\n"
+            "  voice: echo\n"
+            "pipeline:\n"
+            "  autonomous: true\n"
+        )
+        config = load_config(config_path=yaml_file)
+        assert config.story.target_duration_minutes == 60
+        assert config.tts.voice == "echo"
+        assert config.pipeline.autonomous is True
+
+    def test_empty_yaml_file_gives_defaults(self, tmp_path):
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("")
+        config = load_config(config_path=yaml_file)
+        assert config.story.target_duration_minutes == 30
+        assert config.tts.voice == "nova"
+
+    def test_yaml_with_only_comments_gives_defaults(self, tmp_path):
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("# This is a comment\n# Another comment\n")
+        config = load_config(config_path=yaml_file)
+        assert config.story.target_duration_minutes == 30
+
+
+# ---------------------------------------------------------------------------
+# CLI overrides
+# ---------------------------------------------------------------------------
+
+
+class TestLoadConfigCLIOverrides:
+    """CLI overrides (dotted keys) override both defaults and YAML values."""
+
+    def test_override_single_value_no_yaml(self):
+        config = load_config(cli_overrides={"tts.voice": "echo"})
+        assert config.tts.voice == "echo"
+
+    def test_override_multiple_values_no_yaml(self):
+        config = load_config(
+            cli_overrides={
+                "tts.voice": "alloy",
+                "video.fps": 60,
+                "pipeline.autonomous": True,
+            }
+        )
+        assert config.tts.voice == "alloy"
+        assert config.video.fps == 60
+        assert config.pipeline.autonomous is True
+
+    def test_override_output_directory(self):
+        config = load_config(cli_overrides={"output.directory": "/custom/path"})
+        assert config.output.directory == Path("/custom/path")
+
+    def test_override_story_config(self):
+        config = load_config(cli_overrides={"story.target_duration_minutes": 120})
+        assert config.story.target_duration_minutes == 120
+
+    def test_unoverridden_fields_keep_defaults(self):
+        config = load_config(cli_overrides={"tts.voice": "echo"})
+        assert config.tts.provider == "openai"
+        assert config.story.target_duration_minutes == 30
+
+    def test_empty_overrides_dict_is_no_op(self):
+        config = load_config(cli_overrides={})
+        assert config.tts.voice == "nova"
+
+
+# ---------------------------------------------------------------------------
+# Merge precedence: defaults < YAML < CLI
+# ---------------------------------------------------------------------------
+
+
+class TestMergePrecedence:
+    """Merge precedence: Pydantic defaults < config.yaml < CLI overrides."""
+
+    def test_yaml_overrides_defaults(self, tmp_path):
+        """YAML value wins over Pydantic default."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("tts:\n  voice: alloy\n")
+        config = load_config(config_path=yaml_file)
+        # Default is "nova", YAML says "alloy"
+        assert config.tts.voice == "alloy"
+
+    def test_cli_overrides_defaults(self):
+        """CLI override wins over Pydantic default."""
+        config = load_config(cli_overrides={"tts.voice": "echo"})
+        # Default is "nova", CLI says "echo"
+        assert config.tts.voice == "echo"
+
+    def test_cli_overrides_yaml(self, tmp_path):
+        """CLI override wins over YAML value."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("tts:\n  voice: alloy\n")
+        config = load_config(
+            config_path=yaml_file,
+            cli_overrides={"tts.voice": "echo"},
+        )
+        # YAML says "alloy", CLI says "echo" — CLI wins
+        assert config.tts.voice == "echo"
+
+    def test_cli_overrides_yaml_in_same_section(self, tmp_path):
+        """CLI overrides one field in a section while YAML sets another."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("tts:\n  voice: alloy\n  speed: 1.5\n")
+        config = load_config(
+            config_path=yaml_file,
+            cli_overrides={"tts.voice": "echo"},
+        )
+        # CLI overrides voice, YAML speed is preserved
+        assert config.tts.voice == "echo"
+        assert config.tts.speed == 1.5
+
+    def test_three_way_merge(self, tmp_path):
+        """All three sources contribute to the final config."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            "tts:\n  voice: alloy\n  speed: 1.2\nstory:\n  target_duration_minutes: 45\n"
+        )
+        config = load_config(
+            config_path=yaml_file,
+            cli_overrides={"tts.voice": "echo", "pipeline.autonomous": True},
+        )
+        # CLI wins for tts.voice
+        assert config.tts.voice == "echo"
+        # YAML wins for tts.speed (not overridden by CLI)
+        assert config.tts.speed == 1.2
+        # YAML wins for story.target_duration_minutes (not overridden by CLI)
+        assert config.story.target_duration_minutes == 45
+        # CLI sets pipeline.autonomous
+        assert config.pipeline.autonomous is True
+        # Pydantic default for video.fps (not in YAML or CLI)
+        assert config.video.fps == 30
+
+
+# ---------------------------------------------------------------------------
+# Error cases
+# ---------------------------------------------------------------------------
+
+
+class TestLoadConfigErrors:
+    """Error cases for load_config."""
+
+    def test_file_not_found_raises(self):
+        with pytest.raises(FileNotFoundError, match="nonexistent"):
+            load_config(config_path=Path("/tmp/nonexistent/config.yaml"))
+
+    def test_file_not_found_includes_path(self):
+        bad_path = Path("/tmp/no_such_dir_12345/config.yaml")
+        with pytest.raises(FileNotFoundError, match=str(bad_path)):
+            load_config(config_path=bad_path)
+
+    def test_invalid_yaml_raises_value_error(self, tmp_path):
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("invalid: yaml: content: [unbalanced")
+        with pytest.raises(ValueError, match="[Ii]nvalid YAML"):
+            load_config(config_path=yaml_file)
+
+    def test_invalid_yaml_includes_path_in_error(self, tmp_path):
+        yaml_file = tmp_path / "bad.yaml"
+        yaml_file.write_text("{{{{not yaml")
+        with pytest.raises(ValueError, match=str(yaml_file)):
+            load_config(config_path=yaml_file)
+
+    def test_invalid_config_values_raise_validation_error(self, tmp_path):
+        """Pydantic rejects invalid values (e.g., negative FPS)."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("video:\n  fps: -1\n")
+        with pytest.raises(ValidationError):
+            load_config(config_path=yaml_file)
+
+    def test_invalid_cli_override_raises_validation_error(self):
+        """Pydantic rejects invalid CLI override values."""
+        with pytest.raises(ValidationError):
+            load_config(cli_overrides={"video.fps": -1})
+
+    def test_yaml_not_a_dict_raises_value_error(self, tmp_path):
+        """YAML that parses to a non-dict (e.g., a list) is invalid."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("- item1\n- item2\n")
+        with pytest.raises(ValueError, match="[Mm]apping|[Dd]ict"):
+            load_config(config_path=yaml_file)
+
+
+# ---------------------------------------------------------------------------
+# Determinism
+# ---------------------------------------------------------------------------
+
+
+class TestLoadConfigDeterminism:
+    """load_config is deterministic — same inputs produce same outputs."""
+
+    def test_repeated_calls_give_same_result(self, tmp_path):
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("tts:\n  voice: alloy\n")
+        config1 = load_config(config_path=yaml_file)
+        config2 = load_config(config_path=yaml_file)
+        assert config1 == config2
+
+    def test_defaults_only_is_deterministic(self):
+        config1 = load_config()
+        config2 = load_config()
+        assert config1 == config2
