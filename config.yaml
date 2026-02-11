@@ -1,0 +1,56 @@
+# Story Video Generator — Default Configuration
+
+story:
+  target_duration_minutes: 30
+  words_per_minute: 150
+  scene_word_target: 1800
+  scene_word_min: 500
+  scene_word_max: 3000
+
+tts:
+  provider: openai
+  model: tts-1-hd
+  voice: nova
+  speed: 1.0
+  output_format: mp3
+
+images:
+  provider: openai
+  model: dall-e-3
+  size: 1024x1024
+  quality: standard
+  style: vivid
+  style_prefix: "Cinematic digital painting, dramatic lighting:"
+
+video:
+  resolution: 1920x1080
+  fps: 30
+  codec: libx264
+  crf: 18
+  background_mode: blur
+  background_blur_radius: 40
+  background_image: null
+  ken_burns_zoom: 1.08
+  transition_duration: 1.5
+  fade_in_duration: 2.0
+  fade_out_duration: 3.0
+
+subtitles:
+  font: Montserrat
+  font_fallback: Arial
+  font_size: 48
+  color: "#FFFFFF"
+  outline_color: "#000000"
+  outline_width: 3
+  position_bottom: 80
+  max_chars_per_line: 42
+  max_lines: 2
+
+pipeline:
+  autonomous: false
+  max_retries: 3
+  retry_base_delay: 2
+  save_originals_on_revision: true
+
+output:
+  directory: ./output
