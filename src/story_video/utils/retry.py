@@ -60,7 +60,10 @@ def with_retry(
         A decorator that adds retry behavior to the wrapped function.
 
     Raises:
-        tenacity.RetryError: When all retry attempts are exhausted.
+        The original exception when all retry attempts are exhausted.
+            With reraise=True, the last exception raised by the wrapped
+            function is re-raised directly, allowing callers to catch
+            specific exception types (e.g., rate-limit vs auth errors).
 
     Example:
         @with_retry(max_retries=3, base_delay=2.0)
@@ -78,7 +81,7 @@ def with_retry(
             wait=wait_exponential(multiplier=base_delay, max=60),
             retry=retry_if_exception_type(retry_on),
             before_sleep=before_sleep_log(logger, logging.WARNING),
-            reraise=False,
+            reraise=True,
         )(func)
         return decorated  # type: ignore[return-value]
 

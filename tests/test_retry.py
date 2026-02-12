@@ -76,15 +76,18 @@ class TestWithRetryBasicBehavior:
         assert result == "success"
         assert tracker.call_count == 3
 
-    def test_exhausts_all_retries_raises_retry_error(self):
-        """When all attempts fail, RetryError is raised after max_retries+1 total calls."""
+    def test_exhausts_all_retries_raises_original_exception(self):
+        """When all attempts fail, the original exception is re-raised.
+
+        Total calls = max_retries + 1.
+        """
         tracker = TrackedCallable(fail_times=100)
 
         @with_retry(max_retries=3, base_delay=0.01)
         def fn():
             return tracker()
 
-        with pytest.raises(RetryError):
+        with pytest.raises(RuntimeError):
             fn()
         # 1 initial + 3 retries = 4 total
         assert tracker.call_count == 4
@@ -115,7 +118,7 @@ class TestWithRetryCustomParameters:
         def fn():
             return tracker()
 
-        with pytest.raises(RetryError):
+        with pytest.raises(RuntimeError):
             fn()
         assert tracker.call_count == 2
 
@@ -127,7 +130,7 @@ class TestWithRetryCustomParameters:
         def fn():
             return tracker()
 
-        with pytest.raises(RetryError):
+        with pytest.raises(RuntimeError):
             fn()
         assert tracker.call_count == 6
 
@@ -139,7 +142,7 @@ class TestWithRetryCustomParameters:
         def fn():
             return tracker()
 
-        with pytest.raises(RetryError):
+        with pytest.raises(RuntimeError):
             fn()
         assert tracker.call_count == 1
 
@@ -293,7 +296,7 @@ class TestApiRetry:
         def fn():
             return tracker()
 
-        with pytest.raises(RetryError):
+        with pytest.raises(RuntimeError):
             fn()
         assert tracker.call_count == 4
 
@@ -319,20 +322,20 @@ class TestRetryErrorReexport:
 class TestWithRetryMetadata:
     """with_retry preserves function metadata."""
 
-    def test_decorated_function_is_callable(self):
-        """The decorated function remains callable."""
+    def test_decorated_function_preserves_name(self):
+        """The decorated function preserves the original function's __name__."""
 
         @with_retry(max_retries=1, base_delay=0.01)
-        def fn():
+        def my_function():
             return 42
 
-        assert callable(fn)
+        assert my_function.__name__ == "my_function"
 
-    def test_api_retry_decorated_function_is_callable(self):
-        """The api_retry decorated function remains callable."""
+    def test_api_retry_preserves_name(self):
+        """The api_retry decorated function preserves the original function's __name__."""
 
         @api_retry
-        def fn():
+        def my_function():
             return 42
 
-        assert callable(fn)
+        assert my_function.__name__ == "my_function"

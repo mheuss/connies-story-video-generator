@@ -248,6 +248,11 @@ def estimate_cost(
     Character count formula (projected mode):
         character_count = scene_count * scene_word_target * 5.5
 
+    Note:
+        scene_count and character_count can be provided independently. When only
+        scene_count is given, character_count is projected from it. When only
+        character_count is given, scene_count is still calculated from config.
+
     Args:
         mode: Input mode (affects Claude API cost estimate).
         config: Application configuration (TTS model, image quality, duration).
@@ -316,15 +321,15 @@ def format_cost_estimate(estimate: CostEstimate) -> str:
     for svc in estimate.services:
         label = f"  {svc.service} ({svc.description})"
         cost_str = _format_cost_value(svc.low, svc.high)
-        lines.append(f"{label:<35} {cost_str}")
+        lines.append(f"{label:<40} {cost_str}")
 
     # Separator before total
     separator = "\u2500" * 13
-    lines.append(f"{'':>35} {separator}")
+    lines.append(f"{'':>40} {separator}")
 
     # Total
     total_str = _format_cost_value(estimate.total_low, estimate.total_high)
-    lines.append(f"{'  Estimated total':<35} {total_str}")
+    lines.append(f"{'  Estimated total':<40} {total_str}")
 
     return "\n".join(lines)
 

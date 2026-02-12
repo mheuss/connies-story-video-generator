@@ -370,7 +370,7 @@ Lists all projects with mode, status, and creation date.
 ### Formula
 
 ```
-scene_count = target_duration_minutes * words_per_minute / scene_word_target
+scene_count = ceil(target_duration_minutes * words_per_minute / scene_word_target)
 characters  = scene_count * scene_word_target * 5.5
 ```
 

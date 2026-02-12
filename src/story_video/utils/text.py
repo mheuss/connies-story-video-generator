@@ -267,6 +267,11 @@ def _replace_dollar_amount(match: re.Match[str]) -> str:
     cents_str = match.group(2)  # May be None if no cents part
 
     dollars = int(dollars_str)
+
+    # _int_to_words only handles 0-999; let TTS handle larger amounts natively
+    if dollars > 999:
+        return match.group(0)
+
     dollars_word = _int_to_words(dollars)
 
     if cents_str is None:
@@ -321,7 +326,7 @@ _DOLLAR_PATTERN = re.compile(r"\$(\d+)(?:\.(\d{2}))?")
 _DECADE_PATTERN = re.compile(r"\b(\d{4})s\b")
 _ORDINAL_PATTERN = re.compile(r"\b(\d{1,2})(st|nd|rd|th)\b")
 _YEAR_PATTERN = re.compile(r"\b(1[89]\d{2}|20\d{2})\b")
-_INTEGER_PATTERN = re.compile(r"\b(\d{1,3})\b")
+_INTEGER_PATTERN = re.compile(r"(?<![\d.])\b(\d{1,3})\b(?![\d.])")
 
 
 def numbers_to_words(text: str) -> str:
@@ -364,14 +369,19 @@ def numbers_to_words(text: str) -> str:
 def insert_pause_markers(text: str) -> str:
     """Insert pause markers at natural dramatic breaks.
 
-    Adds an ellipsis ("...") pause marker at the end of each paragraph
+    Adds a unicode ellipsis ("\u2026") pause marker at the end of each paragraph
     (before double-newline paragraph breaks) to create natural pauses
-    in TTS output.
+    in TTS output. When the paragraph ends with sentence-ending punctuation
+    (".", "!", "?"), the terminal punctuation is replaced rather than appended.
+
+    Uses unicode ellipsis ("\u2026") instead of three dots ("...") for
+    consistency with smooth_punctuation, which normalizes "..." to "\u2026".
+    This ensures prepare_narration is idempotent.
 
     Single newlines within paragraphs are left untouched.
 
-    The function is idempotent: paragraphs already ending with "..." are
-    not given an additional pause marker.
+    The function is idempotent: paragraphs already ending with "..." or
+    "\u2026" are not given an additional pause marker.
 
     Args:
         text: Input text with paragraph breaks.
@@ -393,8 +403,11 @@ def insert_pause_markers(text: str) -> str:
         if i < len(paragraphs) - 1:
             # Add pause marker to end of paragraph if not already present
             stripped = paragraph.rstrip()
-            if not stripped.endswith("..."):
-                result_parts.append(stripped + "...")
+            if not stripped.endswith("...") and not stripped.endswith("\u2026"):
+                if stripped.endswith((".", "!", "?")):
+                    result_parts.append(stripped[:-1] + "\u2026")
+                else:
+                    result_parts.append(stripped + "\u2026")
             else:
                 result_parts.append(stripped)
         else:

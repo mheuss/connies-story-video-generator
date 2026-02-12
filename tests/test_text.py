@@ -141,12 +141,6 @@ class TestNumbersToWords:
         assert numbers_to_words("The 2nd attempt.") == "The second attempt."
 
     def test_ordinal_3rd(self):
-        assert (
-            numbers_to_words("The 3rd time.") == "The third attempt."
-            or numbers_to_words("The 3rd time.") == "The third time."
-        )
-
-    def test_ordinal_3rd_correct(self):
         assert numbers_to_words("The 3rd time.") == "The third time."
 
     def test_ordinal_11th(self):
@@ -183,6 +177,26 @@ class TestNumbersToWords:
     def test_number_at_end_of_string(self):
         assert numbers_to_words("She scored 10") == "She scored ten"
 
+    def test_decimal_number_preserved(self):
+        """Decimal numbers like 3.5 should not be split and converted."""
+        assert numbers_to_words("It was 3.5 meters.") == "It was 3.5 meters."
+
+    def test_decimal_number_with_larger_parts(self):
+        """Decimal like 12.7 should stay as-is."""
+        assert numbers_to_words("The value is 12.7 percent.") == ("The value is 12.7 percent.")
+
+    def test_dollar_amount_above_999_preserved(self):
+        """Dollar amounts above $999 should be left for TTS to handle."""
+        assert numbers_to_words("It cost $1500 to fix.") == "It cost $1500 to fix."
+
+    def test_dollar_amount_at_999_converted(self):
+        """Dollar amounts at $999 should still be converted."""
+        assert numbers_to_words("It cost $999.") == ("It cost nine hundred ninety-nine dollars.")
+
+    def test_dollar_amount_1000_preserved(self):
+        """$1000 is above 999 and should be preserved."""
+        assert numbers_to_words("She paid $1000.") == "She paid $1000."
+
 
 # ---------------------------------------------------------------------------
 # insert_pause_markers tests
@@ -211,8 +225,8 @@ class TestInsertPauseMarkers:
         result = insert_pause_markers(text)
         # Each paragraph break should have a pause marker
         parts = result.split("\n\n")
-        # The first paragraph should end with a pause indicator
-        assert parts[0].rstrip().endswith("...")
+        # The first paragraph should end with a pause indicator (unicode ellipsis)
+        assert parts[0].rstrip().endswith("\u2026")
 
     def test_preserves_single_newlines(self):
         """Single newlines (within a paragraph) should not get pause markers."""
@@ -230,6 +244,43 @@ class TestInsertPauseMarkers:
         once = insert_pause_markers(text)
         twice = insert_pause_markers(once)
         assert once == twice
+
+    def test_unicode_ellipsis_not_doubled(self):
+        """Paragraphs ending with unicode ellipsis should not get another marker."""
+        text = "First paragraph\u2026\n\nSecond paragraph."
+        result = insert_pause_markers(text)
+        parts = result.split("\n\n")
+        # Should not append "..." after unicode ellipsis
+        assert parts[0] == "First paragraph\u2026"
+
+    def test_replaces_terminal_period_instead_of_appending(self):
+        """Pause marker replaces terminal period to avoid 4 dots ('....' bug)."""
+        text = "Hello world.\n\nNext paragraph."
+        result = insert_pause_markers(text)
+        parts = result.split("\n\n")
+        assert parts[0] == "Hello world\u2026"
+        assert "...." not in result
+
+    def test_replaces_terminal_exclamation(self):
+        """Pause marker replaces terminal exclamation mark."""
+        text = "Wow!\n\nNext."
+        result = insert_pause_markers(text)
+        parts = result.split("\n\n")
+        assert parts[0] == "Wow\u2026"
+
+    def test_replaces_terminal_question_mark(self):
+        """Pause marker replaces terminal question mark."""
+        text = "Really?\n\nNext."
+        result = insert_pause_markers(text)
+        parts = result.split("\n\n")
+        assert parts[0] == "Really\u2026"
+
+    def test_appends_when_no_terminal_punctuation(self):
+        """When paragraph doesn't end with sentence punctuation, append ellipsis."""
+        text = "No ending punctuation\n\nNext."
+        result = insert_pause_markers(text)
+        parts = result.split("\n\n")
+        assert parts[0] == "No ending punctuation\u2026"
 
 
 # ---------------------------------------------------------------------------
@@ -361,6 +412,18 @@ class TestPrepareNarration:
         assert "five dollars and fifty cents" in result
         assert "versus" in result
         assert "Missus" in result
+
+    def test_idempotent(self):
+        """Running prepare_narration twice produces the same result as once.
+
+        This verifies that smooth_punctuation converting '...' to unicode
+        ellipsis does not cause insert_pause_markers to add new markers
+        on a second pass.
+        """
+        text = "Dr. Smith had 3 cats.\n\nHe left forever."
+        once = prepare_narration(text)
+        twice = prepare_narration(once)
+        assert once == twice
 
     def test_transformation_order_matters(self):
         """Verify that transformations are applied in the correct order.
