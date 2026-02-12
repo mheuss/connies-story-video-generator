@@ -443,6 +443,11 @@ class TestAddScene:
         project_state.add_scene(3, "Third", "Third scene.")
         assert len(project_state.metadata.scenes) == 3
 
+    def test_rejects_duplicate_scene_number(self, project_state):
+        project_state.add_scene(1, "Scene One", "First prose.")
+        with pytest.raises(ValueError, match="Scene 1 already exists"):
+            project_state.add_scene(1, "Scene One Again", "Different prose.")
+
 
 # ---------------------------------------------------------------------------
 # update_scene_asset — status updates and dependency enforcement

@@ -209,23 +209,17 @@ class ProjectState:
         # Using the same directory ensures the rename is atomic on POSIX
         # (same filesystem).
         fd, tmp_path_str = tempfile.mkstemp(
-            dir=self._project_dir,
-            prefix="project.json.",
             suffix=".tmp",
+            dir=str(json_path.parent),
         )
+        os.close(fd)  # Close mkstemp's fd immediately; write_text opens its own.
         tmp_path = Path(tmp_path_str)
         try:
             tmp_path.write_text(content, encoding="utf-8")
             tmp_path.replace(json_path)
         except BaseException:
-            # Clean up temp file on any failure
             tmp_path.unlink(missing_ok=True)
             raise
-        finally:
-            # mkstemp returns an open file descriptor; close it.
-            # The write_text call opens/closes its own handle, but the
-            # original fd from mkstemp must still be closed.
-            os.close(fd)
 
     # -------------------------------------------------------------------
     # Phase transitions
@@ -302,7 +296,14 @@ class ProjectState:
             scene_number: 1-based scene index.
             title: Scene title or beat description.
             prose: The actual story text for this scene.
+
+        Raises:
+            ValueError: If a scene with the given number already exists.
         """
+        for existing in self._metadata.scenes:
+            if existing.scene_number == scene_number:
+                msg = f"Scene {scene_number} already exists in project."
+                raise ValueError(msg)
         scene = Scene(scene_number=scene_number, title=title, prose=prose)
         self._metadata.scenes.append(scene)
 
