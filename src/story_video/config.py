@@ -115,6 +115,13 @@ def _apply_dotted_overrides(
         for part in parts[:-1]:
             if part not in target:
                 target[part] = {}
-            target = target[part]
+            next_target = target[part]
+            if not isinstance(next_target, dict):
+                msg = (
+                    f"Cannot apply override '{dotted_key}': "
+                    f"'{part}' is {type(next_target).__name__}, not a mapping"
+                )
+                raise ValueError(msg)
+            target = next_target
         # Set the leaf value
         target[parts[-1]] = value

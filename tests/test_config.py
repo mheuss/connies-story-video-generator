@@ -105,6 +105,13 @@ class TestLoadConfigFromYaml:
         config = load_config(config_path=yaml_file)
         assert config.story.target_duration_minutes == 30
 
+    def test_unknown_yaml_keys_are_silently_ignored(self, tmp_path):
+        """Extra keys in YAML that don't match any config section are ignored."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("nonexistent_section:\n  foo: bar\n")
+        config = load_config(config_path=yaml_file)
+        assert config.tts.voice == "nova"  # defaults still work
+
 
 # ---------------------------------------------------------------------------
 # CLI overrides
@@ -262,6 +269,13 @@ class TestLoadConfigErrors:
         yaml_file.write_text("- item1\n- item2\n")
         with pytest.raises(ValueError, match="[Mm]apping|[Dd]ict"):
             load_config(config_path=yaml_file)
+
+    def test_dotted_override_on_non_dict_intermediate_raises(self, tmp_path):
+        """Dotted override where an intermediate key is not a dict raises ValueError."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text("tts: some_string\n")
+        with pytest.raises(ValueError, match="Cannot apply override.*'tts'.*not a mapping"):
+            load_config(config_path=yaml_file, cli_overrides={"tts.voice": "alloy"})
 
 
 # ---------------------------------------------------------------------------
