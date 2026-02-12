@@ -105,12 +105,12 @@ class TestLoadConfigFromYaml:
         config = load_config(config_path=yaml_file)
         assert config.story.target_duration_minutes == 30
 
-    def test_unknown_yaml_keys_are_silently_ignored(self, tmp_path):
-        """Extra keys in YAML that don't match any config section are ignored."""
+    def test_unknown_yaml_keys_raise_validation_error(self, tmp_path):
+        """Extra keys in YAML that don't match any config section are rejected."""
         yaml_file = tmp_path / "config.yaml"
         yaml_file.write_text("nonexistent_section:\n  foo: bar\n")
-        config = load_config(config_path=yaml_file)
-        assert config.tts.voice == "nova"  # defaults still work
+        with pytest.raises(ValidationError):
+            load_config(config_path=yaml_file)
 
 
 # ---------------------------------------------------------------------------

@@ -398,6 +398,12 @@ class TestPhaseTransitions:
         adapt_project_state.start_phase(PipelinePhase.IMAGE_PROMPTS)
         assert adapt_project_state.metadata.current_phase == PipelinePhase.IMAGE_PROMPTS
 
+    def test_rejects_start_phase_while_in_progress(self, project_state):
+        """Cannot start a new phase while another is still in progress."""
+        project_state.start_phase(PipelinePhase.ANALYSIS)
+        with pytest.raises(ValueError, match="still in progress"):
+            project_state.start_phase(PipelinePhase.STORY_BIBLE)
+
     def test_complete_then_start_next_phase(self, project_state):
         """After completing a phase, we can start the next one."""
         project_state.start_phase(PipelinePhase.ANALYSIS)
@@ -669,16 +675,16 @@ class TestPhaseSequenceHelpers:
 
     def test_original_mode_returns_creative_phases(self, project_state):
         phases = project_state.get_phase_sequence()
-        assert phases == CREATIVE_FLOW_PHASES
+        assert phases == list(CREATIVE_FLOW_PHASES)
 
     def test_inspired_by_returns_creative_phases(self, output_dir, config):
         output_dir.mkdir(parents=True, exist_ok=True)
         state = ProjectState.create("inspired", InputMode.INSPIRED_BY, config, output_dir)
-        assert state.get_phase_sequence() == CREATIVE_FLOW_PHASES
+        assert state.get_phase_sequence() == list(CREATIVE_FLOW_PHASES)
 
     def test_adapt_mode_returns_adapt_phases(self, adapt_project_state):
         phases = adapt_project_state.get_phase_sequence()
-        assert phases == ADAPT_FLOW_PHASES
+        assert phases == list(ADAPT_FLOW_PHASES)
 
     def test_get_next_phase_returns_first_when_no_current(self, project_state):
         """When no phase has been started, next phase is the first one."""

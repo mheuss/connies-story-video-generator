@@ -28,6 +28,8 @@ from story_video.models import (
     SceneStatus,
 )
 
+__all__ = ["ASSET_DEPENDENCIES", "PHASE_ASSET_MAP", "ProjectState"]
+
 # ---------------------------------------------------------------------------
 # Phase-to-asset mapping — which asset type each pipeline phase produces
 # ---------------------------------------------------------------------------
@@ -231,12 +233,27 @@ class ProjectState:
         Validates that the requested phase belongs to the phase sequence for
         this project's input mode.
 
+        Note:
+            This method validates that the phase belongs to the correct mode
+            but does NOT enforce sequential ordering. The caller (orchestrator)
+            is responsible for starting phases in the correct sequence.
+
         Args:
             phase: The pipeline phase to start.
 
         Raises:
-            ValueError: If the phase is not valid for the current input mode.
+            ValueError: If the phase is not valid for the current input mode,
+                or if another phase is currently in progress.
         """
+        # Guard: cannot start a new phase while one is already in progress
+        is_in_progress = self._metadata.status == PhaseStatus.IN_PROGRESS
+        if is_in_progress and self._metadata.current_phase is not None:
+            msg = (
+                f"Cannot start phase '{phase.value}' while phase "
+                f"'{self._metadata.current_phase.value}' is still in progress."
+            )
+            raise ValueError(msg)
+
         # State transition validation: only phases in this mode's sequence are
         # allowed. This prevents starting a creative-only phase (e.g. ANALYSIS)
         # in adapt mode, or an adapt-only phase (e.g. SCENE_SPLITTING) in
@@ -281,8 +298,14 @@ class ProjectState:
 
     def _require_phase_in_progress(self) -> None:
         """Raise ValueError if no phase is currently in progress."""
-        if self._metadata.current_phase is None or self._metadata.status != PhaseStatus.IN_PROGRESS:
-            msg = "No phase is currently in progress."
+        if self._metadata.current_phase is None:
+            msg = "No phase has been started."
+            raise ValueError(msg)
+        if self._metadata.status != PhaseStatus.IN_PROGRESS:
+            msg = (
+                f"Phase '{self._metadata.current_phase.value}' is "
+                f"'{self._metadata.status.value}', not 'in_progress'."
+            )
             raise ValueError(msg)
 
     # -------------------------------------------------------------------
@@ -396,9 +419,7 @@ class ProjectState:
         Raises:
             ValueError: If no phase is currently in progress.
         """
-        if self._metadata.current_phase is None or self._metadata.status not in (
-            PhaseStatus.IN_PROGRESS,
-        ):
+        if self._metadata.current_phase is None or self._metadata.status != PhaseStatus.IN_PROGRESS:
             msg = "No phase is currently in progress."
             raise ValueError(msg)
 

@@ -15,6 +15,27 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+__all__ = [
+    "ADAPT_FLOW_PHASES",
+    "CREATIVE_FLOW_PHASES",
+    "AppConfig",
+    "AssetType",
+    "ImageConfig",
+    "InputMode",
+    "OutputConfig",
+    "PhaseStatus",
+    "PipelineConfig",
+    "PipelinePhase",
+    "ProjectMetadata",
+    "Scene",
+    "SceneAssetStatus",
+    "SceneStatus",
+    "StoryConfig",
+    "SubtitleConfig",
+    "TTSConfig",
+    "VideoConfig",
+]
+
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
@@ -111,11 +132,11 @@ class PipelinePhase(str, Enum):
 
 
 # ---------------------------------------------------------------------------
-# Phase sequences — ordered lists of phases for each input mode
+# Phase sequences — ordered tuples of phases for each input mode
 # ---------------------------------------------------------------------------
 
 
-CREATIVE_FLOW_PHASES: list[PipelinePhase] = [
+CREATIVE_FLOW_PHASES: tuple[PipelinePhase, ...] = (
     PipelinePhase.ANALYSIS,
     PipelinePhase.STORY_BIBLE,
     PipelinePhase.OUTLINE,
@@ -127,10 +148,10 @@ CREATIVE_FLOW_PHASES: list[PipelinePhase] = [
     PipelinePhase.IMAGE_GENERATION,
     PipelinePhase.CAPTION_GENERATION,
     PipelinePhase.VIDEO_ASSEMBLY,
-]
-"""Phase sequence for original and inspired_by modes."""
+)
+"""Phase sequence for original and inspired_by modes (immutable)."""
 
-ADAPT_FLOW_PHASES: list[PipelinePhase] = [
+ADAPT_FLOW_PHASES: tuple[PipelinePhase, ...] = (
     PipelinePhase.SCENE_SPLITTING,
     PipelinePhase.NARRATION_FLAGGING,
     PipelinePhase.IMAGE_PROMPTS,
@@ -139,8 +160,8 @@ ADAPT_FLOW_PHASES: list[PipelinePhase] = [
     PipelinePhase.IMAGE_GENERATION,
     PipelinePhase.CAPTION_GENERATION,
     PipelinePhase.VIDEO_ASSEMBLY,
-]
-"""Phase sequence for adapt mode."""
+)
+"""Phase sequence for adapt mode (immutable)."""
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +340,7 @@ class AppConfig(BaseModel):
     """Top-level application configuration combining all subsystem configs.
 
     Each section has sensible defaults per the design document (section 13).
+    Extra fields are forbidden to catch config typos at load time.
 
     Fields:
         story: Story generation parameters.
@@ -330,7 +352,7 @@ class AppConfig(BaseModel):
         output: Output directory configuration.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     story: StoryConfig = Field(default_factory=StoryConfig)
     tts: TTSConfig = Field(default_factory=TTSConfig)

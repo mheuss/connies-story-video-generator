@@ -14,6 +14,8 @@ import yaml
 
 from story_video.models import AppConfig
 
+__all__ = ["load_config"]
+
 
 def load_config(
     config_path: Path | None = None,
