@@ -47,3 +47,10 @@ coverage.xml
 
 # Claude Code local config
 .claude/
+
+# Local workflow and tracking files (agent-specific)
+BUGS_AND_TODOS.md
+CHANGELOG.md
+CLAUDE.md
+DEVELOPMENT.md
+VERSION_HISTORY.md
