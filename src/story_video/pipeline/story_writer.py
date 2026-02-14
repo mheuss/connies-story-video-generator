@@ -5,11 +5,15 @@ Scene splitting divides a source story into scenes at natural boundaries.
 Narration flagging identifies TTS-unfriendly content in scene texts.
 """
 
+import logging
+
 from story_video.models import AssetType, SceneStatus
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.state import ProjectState
 
-__all__ = ["split_scenes"]
+__all__ = ["flag_narration", "split_scenes"]
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -47,6 +51,71 @@ SCENE_SPLIT_SCHEMA = {
         }
     },
     "required": ["scenes"],
+}
+
+NARRATION_FLAGS_SYSTEM = (
+    "You are a narration quality reviewer preparing story text"
+    " for text-to-speech.\n\n"
+    "Identify content that will sound wrong or confusing when"
+    " read aloud by a TTS engine:\n"
+    '- Footnote references (e.g., "[1]", "as noted in [3]")\n'
+    "- Visual formatting that won't translate to audio"
+    " (tables, bullet lists, ASCII art)\n"
+    "- Unusual typography (em dashes used decoratively,"
+    " ellipsis chains)\n"
+    "- Long parentheticals that break speech flow\n"
+    "- Non-prose content (headers, captions, author notes)\n"
+    "- Ambiguous pronunciation (acronyms, abbreviations not"
+    " caught by text prep)\n\n"
+    "For each issue, provide:\n"
+    "- The scene number where it occurs\n"
+    "- The location within the scene (paragraph and sentence)\n"
+    "- The category of issue\n"
+    "- The exact original text\n"
+    "- A suggested fix for natural speech\n"
+    '- Severity: "must_fix" for show-stoppers,'
+    ' "should_fix" for noticeable issues'
+)
+
+NARRATION_FLAGS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "flags": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "scene_number": {"type": "integer", "description": "1-based scene number"},
+                    "location": {"type": "string", "description": "e.g. paragraph 2, sentence 1"},
+                    "category": {
+                        "type": "string",
+                        "description": "e.g. footnote, formatting, typography",
+                    },
+                    "original_text": {
+                        "type": "string",
+                        "description": "The exact problematic text",
+                    },
+                    "suggested_fix": {
+                        "type": "string",
+                        "description": "Suggested replacement for natural speech",
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": ["must_fix", "should_fix"],
+                    },
+                },
+                "required": [
+                    "scene_number",
+                    "location",
+                    "category",
+                    "original_text",
+                    "suggested_fix",
+                    "severity",
+                ],
+            },
+        }
+    },
+    "required": ["flags"],
 }
 
 
@@ -121,6 +190,103 @@ def split_scenes(state: ProjectState, client: ClaudeClient) -> None:
         (scenes_dir / filename).write_text(content, encoding="utf-8")
 
     # 9. Persist state
+    state.save()
+
+
+def flag_narration(state: ProjectState, client: ClaudeClient) -> None:
+    """Identify TTS-unfriendly content in scene texts.
+
+    Sends all scene texts to Claude for analysis, writes a human-readable
+    flags report, and optionally applies fixes in autonomous mode.
+
+    Args:
+        state: Project state (must have scenes populated by split_scenes).
+        client: Claude API client for making calls.
+
+    Raises:
+        ValueError: If no scenes exist in state.
+    """
+    # 1. Get scenes — raise if empty
+    scenes = state.metadata.scenes
+    if not scenes:
+        msg = "No scenes in project"
+        raise ValueError(msg)
+
+    # 2. Build user message with numbered scenes
+    parts = []
+    for scene in scenes:
+        parts.append(f"=== Scene {scene.scene_number}: {scene.title} ===")
+        parts.append(scene.prose)
+        parts.append("")
+    scene_text = "\n".join(parts)
+
+    # 3. Call Claude for narration flagging
+    result = client.generate_structured(
+        system=NARRATION_FLAGS_SYSTEM,
+        user_message=scene_text,
+        tool_name="flag_narration_issues",
+        tool_schema=NARRATION_FLAGS_SCHEMA,
+    )
+
+    # 4. Extract flags
+    flags = result["flags"]
+
+    # 5. Write narration_flags.md
+    flags_path = state.project_dir / "narration_flags.md"
+    if flags:
+        lines = ["# Narration Flags\n"]
+        for i, flag in enumerate(flags):
+            lines.append(f"## Scene {flag['scene_number']}: {flag['category']}\n")
+            lines.append(f"**Location:** {flag['location']}")
+            lines.append(f"**Severity:** {flag['severity']}")
+            lines.append(f"**Original:** {flag['original_text']}")
+            lines.append(f"**Suggested fix:** {flag['suggested_fix']}\n")
+            if i < len(flags) - 1:
+                lines.append("---\n")
+        flags_path.write_text("\n".join(lines), encoding="utf-8")
+    else:
+        flags_path.write_text(
+            "# Narration Flags\n\nNo TTS issues found. All scenes are narration-ready.\n",
+            encoding="utf-8",
+        )
+
+    # 6. Autonomous mode: apply fixes
+    if state.metadata.config.pipeline.autonomous:
+        # Build a lookup of scene_number -> scene for fast access
+        scene_map = {s.scene_number: s for s in scenes}
+
+        for flag in flags:
+            scene_num = flag["scene_number"]
+            scene = scene_map.get(scene_num)
+            if scene is None:
+                logger.warning(
+                    "Flag references scene %d which does not exist; skipping",
+                    scene_num,
+                )
+                continue
+
+            # Copy prose to narration_text if not already set
+            if scene.narration_text is None:
+                scene.narration_text = scene.prose
+
+            # Apply fix: replace original_text with suggested_fix.
+            # NOTE: str.replace() affects all occurrences. If the same phrase
+            # appears multiple times, all instances will be changed. This is
+            # acceptable because flagged text patterns are typically unique.
+            before = scene.narration_text
+            scene.narration_text = scene.narration_text.replace(
+                flag["original_text"], flag["suggested_fix"]
+            )
+            if scene.narration_text == before:
+                logger.warning(
+                    "Flag original_text not found in scene %d; fix not applied: %r",
+                    scene_num,
+                    flag["original_text"],
+                )
+
+    # 7. Semi-auto mode: flags file only — no narration_text changes
+
+    # 8. Persist state
     state.save()
 
 

@@ -1,18 +1,22 @@
-"""Tests for story_video.pipeline.story_writer — scene splitting.
+"""Tests for story_video.pipeline.story_writer — scene splitting and narration flagging.
 
 TDD: These tests are written first, before the implementation.
-Each test verifies one logical behavior of the split_scenes function.
+Each test verifies one logical behavior of the split_scenes or flag_narration function.
 """
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
 
-from story_video.models import AppConfig, InputMode, SceneStatus
+from story_video.models import AppConfig, AssetType, InputMode, PipelineConfig, SceneStatus
 from story_video.pipeline.story_writer import (
+    NARRATION_FLAGS_SCHEMA,
+    NARRATION_FLAGS_SYSTEM,
     SCENE_SPLIT_SCHEMA,
     SCENE_SPLIT_SYSTEM,
     _check_preservation,
+    flag_narration,
     split_scenes,
 )
 from story_video.state import ProjectState
@@ -352,3 +356,400 @@ class TestPreservationCheckNormalizesWhitespace:
 
         with pytest.raises(ValueError, match="mismatch"):
             _check_preservation(original, scenes)
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — test data
+# ---------------------------------------------------------------------------
+
+SAMPLE_FLAGS_RESPONSE = {
+    "flags": [
+        {
+            "scene_number": 1,
+            "location": "paragraph 1, sentence 2",
+            "category": "footnote",
+            "original_text": "as noted in [1]",
+            "suggested_fix": "as noted in the first reference",
+            "severity": "must_fix",
+        },
+        {
+            "scene_number": 2,
+            "location": "paragraph 2, sentence 1",
+            "category": "typography",
+            "original_text": "he paused... ... ... then spoke",
+            "suggested_fix": "he paused, then spoke",
+            "severity": "should_fix",
+        },
+    ]
+}
+
+ZERO_FLAGS_RESPONSE = {"flags": []}
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def flagging_client():
+    """Create a mock ClaudeClient for narration flagging."""
+    client = MagicMock()
+    client.generate_structured.return_value = SAMPLE_FLAGS_RESPONSE
+    return client
+
+
+@pytest.fixture()
+def state_with_scenes(tmp_path):
+    """Create a project state with pre-populated scenes."""
+    state = ProjectState.create(
+        project_id="flag-test",
+        mode=InputMode.ADAPT,
+        config=AppConfig(),
+        output_dir=tmp_path,
+    )
+    state.add_scene(1, "The Storm", "The storm raged as noted in [1] and the wind howled.")
+    state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+    state.add_scene(
+        2,
+        "The Journey",
+        "The hero set out. he paused... ... ... then spoke to no one.",
+    )
+    state.update_scene_asset(2, AssetType.TEXT, SceneStatus.COMPLETED)
+    state.add_scene(3, "The Ending", "They all lived happily ever after.")
+    state.update_scene_asset(3, AssetType.TEXT, SceneStatus.COMPLETED)
+    return state
+
+
+@pytest.fixture()
+def autonomous_state(tmp_path):
+    """Create a project state in autonomous mode with pre-populated scenes."""
+    config = AppConfig(pipeline=PipelineConfig(autonomous=True))
+    state = ProjectState.create(
+        project_id="auto-flag-test",
+        mode=InputMode.ADAPT,
+        config=config,
+        output_dir=tmp_path,
+    )
+    state.add_scene(1, "The Storm", "The storm raged as noted in [1] and the wind howled.")
+    state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+    state.add_scene(
+        2,
+        "The Journey",
+        "The hero set out. he paused... ... ... then spoke to no one.",
+    )
+    state.update_scene_asset(2, AssetType.TEXT, SceneStatus.COMPLETED)
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — happy path with flags
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationHappyPathWithFlags:
+    """flag_narration() writes a flags file when issues are found."""
+
+    def test_flag_narration_happy_path_with_flags(self, state_with_scenes, flagging_client):
+        """Flags returned -> flags file written with content."""
+        flag_narration(state_with_scenes, flagging_client)
+
+        flags_file = state_with_scenes.project_dir / "narration_flags.md"
+        assert flags_file.exists()
+        content = flags_file.read_text()
+        assert "# Narration Flags" in content
+        assert "footnote" in content
+        assert "as noted in [1]" in content
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — zero flags
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationZeroFlags:
+    """flag_narration() writes 'no issues' message when no flags found."""
+
+    def test_flag_narration_zero_flags(self, state_with_scenes, flagging_client):
+        """No issues -> 'no issues found' written."""
+        flagging_client.generate_structured.return_value = ZERO_FLAGS_RESPONSE
+
+        flag_narration(state_with_scenes, flagging_client)
+
+        flags_file = state_with_scenes.project_dir / "narration_flags.md"
+        content = flags_file.read_text()
+        assert (
+            content == "# Narration Flags\n\nNo TTS issues found. All scenes are narration-ready.\n"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — no scenes raises
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationNoScenesRaises:
+    """flag_narration() raises ValueError when no scenes exist."""
+
+    def test_flag_narration_no_scenes_raises(self, tmp_path, flagging_client):
+        """Empty scenes list -> ValueError."""
+        state = ProjectState.create(
+            project_id="empty-scenes",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+
+        with pytest.raises(ValueError, match="No scenes in project"):
+            flag_narration(state, flagging_client)
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — user message format
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationBuildsUserMessage:
+    """flag_narration() builds correctly formatted user message with numbered scenes."""
+
+    def test_flag_narration_builds_user_message_correctly(self, state_with_scenes, flagging_client):
+        """Verify numbered scene format sent to Claude."""
+        flag_narration(state_with_scenes, flagging_client)
+
+        call_kwargs = flagging_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+
+        assert "=== Scene 1: The Storm ===" in user_msg
+        assert "=== Scene 2: The Journey ===" in user_msg
+        assert "=== Scene 3: The Ending ===" in user_msg
+        assert "The storm raged" in user_msg
+        assert "They all lived happily ever after." in user_msg
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — Claude call parameters
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationClaudeParams:
+    """flag_narration() calls Claude with correct system prompt, tool name, and schema."""
+
+    def test_flag_narration_calls_claude_with_correct_params(
+        self, state_with_scenes, flagging_client
+    ):
+        """Verify system prompt, tool name, schema passed to generate_structured."""
+        flag_narration(state_with_scenes, flagging_client)
+
+        flagging_client.generate_structured.assert_called_once()
+        call_kwargs = flagging_client.generate_structured.call_args.kwargs
+
+        assert call_kwargs["system"] == NARRATION_FLAGS_SYSTEM
+        assert call_kwargs["tool_name"] == "flag_narration_issues"
+        assert call_kwargs["tool_schema"] == NARRATION_FLAGS_SCHEMA
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — autonomous applies fixes
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationAutonomousAppliesFixes:
+    """flag_narration() in autonomous mode applies suggested fixes to narration_text."""
+
+    def test_flag_narration_autonomous_applies_fixes(self, autonomous_state, flagging_client):
+        """autonomous=True -> narration_text updated with fix."""
+        flag_narration(autonomous_state, flagging_client)
+
+        scene1 = autonomous_state.metadata.scenes[0]
+        assert scene1.narration_text is not None
+        assert "as noted in the first reference" in scene1.narration_text
+        assert "as noted in [1]" not in scene1.narration_text
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — autonomous copies prose first
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationAutonomousCopiesProseFirst:
+    """flag_narration() copies prose to narration_text before applying fix."""
+
+    def test_flag_narration_autonomous_copies_prose_first(self, autonomous_state, flagging_client):
+        """narration_text is None -> copies from prose, then applies fix."""
+        # Confirm narration_text starts as None
+        scene1 = autonomous_state.metadata.scenes[0]
+        assert scene1.narration_text is None
+
+        flag_narration(autonomous_state, flagging_client)
+
+        scene1 = autonomous_state.metadata.scenes[0]
+        # Should contain the rest of the prose with the fix applied
+        assert "The storm raged" in scene1.narration_text
+        assert "and the wind howled" in scene1.narration_text
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — autonomous preserves existing narration_text
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationAutonomousPreservesExistingNarrationText:
+    """flag_narration() applies fix to existing narration_text, not prose."""
+
+    def test_flag_narration_autonomous_preserves_existing_narration_text(
+        self, autonomous_state, flagging_client
+    ):
+        """If narration_text already set, applies fix to it (not prose)."""
+        # Set narration_text to something different from prose
+        scene1 = autonomous_state.metadata.scenes[0]
+        scene1.narration_text = "The storm raged, as noted in [1], and the wind howled fiercely."
+
+        flag_narration(autonomous_state, flagging_client)
+
+        scene1 = autonomous_state.metadata.scenes[0]
+        # Fix applied to narration_text, not prose
+        assert "as noted in the first reference" in scene1.narration_text
+        # Should keep the modified ending from the existing narration_text
+        assert "fiercely" in scene1.narration_text
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — semi-auto no fixes
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationSemiAutoNoFixes:
+    """flag_narration() in semi-auto mode writes flags but doesn't apply fixes."""
+
+    def test_flag_narration_semi_auto_no_fixes(self, state_with_scenes, flagging_client):
+        """autonomous=False -> narration_text unchanged (None)."""
+        flag_narration(state_with_scenes, flagging_client)
+
+        for scene in state_with_scenes.metadata.scenes:
+            assert scene.narration_text is None
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — invalid scene number skipped
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationInvalidSceneNumberSkipped:
+    """flag_narration() skips flags with invalid scene numbers."""
+
+    def test_flag_narration_invalid_scene_number_skipped(
+        self, autonomous_state, flagging_client, caplog
+    ):
+        """Flag with scene_number=99 -> skipped, no crash."""
+        flagging_client.generate_structured.return_value = {
+            "flags": [
+                {
+                    "scene_number": 99,
+                    "location": "paragraph 1, sentence 1",
+                    "category": "footnote",
+                    "original_text": "see [1]",
+                    "suggested_fix": "see the reference",
+                    "severity": "must_fix",
+                }
+            ]
+        }
+
+        with caplog.at_level(logging.WARNING):
+            flag_narration(autonomous_state, flagging_client)
+
+        # No crash; warning logged
+        assert any("99" in record.message for record in caplog.records)
+
+        # narration_text untouched since the only flag was invalid
+        for scene in autonomous_state.metadata.scenes:
+            assert scene.narration_text is None
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — flags file format
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationFlagsFileFormat:
+    """flag_narration() writes flags file with correct format."""
+
+    def test_flag_narration_flags_file_format(self, state_with_scenes, flagging_client):
+        """Verify flags file contains scene number, category, original, fix."""
+        flag_narration(state_with_scenes, flagging_client)
+
+        flags_file = state_with_scenes.project_dir / "narration_flags.md"
+        content = flags_file.read_text()
+
+        # Check format elements for first flag
+        assert "## Scene 1: footnote" in content
+        assert "**Location:** paragraph 1, sentence 2" in content
+        assert "**Severity:** must_fix" in content
+        assert "**Original:** as noted in [1]" in content
+        assert "**Suggested fix:** as noted in the first reference" in content
+
+        # Check format elements for second flag
+        assert "## Scene 2: typography" in content
+        assert "**Severity:** should_fix" in content
+
+        # Check separator
+        assert "---" in content
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — state saved
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationStateSaved:
+    """flag_narration() persists state via state.save()."""
+
+    def test_flag_narration_state_saved(self, state_with_scenes, flagging_client):
+        """Verify state.save() called."""
+        flag_narration(state_with_scenes, flagging_client)
+
+        # Reload from disk — if save was called, project.json is updated
+        reloaded = ProjectState.load(state_with_scenes.project_dir)
+        assert len(reloaded.metadata.scenes) == 3
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — multiple flags same scene
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationMultipleFlagsSameScene:
+    """flag_narration() applies multiple fixes to the same scene sequentially."""
+
+    def test_flag_narration_multiple_flags_same_scene(self, autonomous_state, flagging_client):
+        """Multiple fixes applied to same scene sequentially."""
+        flagging_client.generate_structured.return_value = {
+            "flags": [
+                {
+                    "scene_number": 1,
+                    "location": "paragraph 1, sentence 1",
+                    "category": "footnote",
+                    "original_text": "as noted in [1]",
+                    "suggested_fix": "as noted in the first reference",
+                    "severity": "must_fix",
+                },
+                {
+                    "scene_number": 1,
+                    "location": "paragraph 1, sentence 1",
+                    "category": "typography",
+                    "original_text": "the wind howled",
+                    "suggested_fix": "the wind roared",
+                    "severity": "should_fix",
+                },
+            ]
+        }
+
+        flag_narration(autonomous_state, flagging_client)
+
+        scene1 = autonomous_state.metadata.scenes[0]
+        assert scene1.narration_text is not None
+        # Both fixes applied
+        assert "as noted in the first reference" in scene1.narration_text
+        assert "the wind roared" in scene1.narration_text
+        # Originals replaced
+        assert "as noted in [1]" not in scene1.narration_text
+        assert "the wind howled" not in scene1.narration_text
