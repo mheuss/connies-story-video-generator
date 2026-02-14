@@ -12,6 +12,8 @@ venv/
 
 # Environment variables
 .env
+.env.*
+!.env.example
 
 # IDE
 .idea/
@@ -25,3 +27,23 @@ output/
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets and credentials
+credentials.json
+secrets.yaml
+*.pem
+*.key
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Test artifacts
+.pytest_cache/
+
+# Ruff cache
+.ruff_cache/
+
+# Claude Code local config
+.claude/
