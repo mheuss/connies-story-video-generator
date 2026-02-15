@@ -666,3 +666,36 @@ class TestProjectMetadata:
         restored = ProjectMetadata.model_validate_json(json_str)
         assert restored.project_id == project.project_id
         assert restored.mode == project.mode
+
+
+# ---------------------------------------------------------------------------
+# Caption data models — importable from models module
+# ---------------------------------------------------------------------------
+
+
+class TestCaptionModels:
+    """Caption data models are importable from story_video.models."""
+
+    def test_caption_word_fields(self):
+        """CaptionWord has word, start, end fields."""
+        from story_video.models import CaptionWord
+
+        word = CaptionWord(word="hello", start=0.0, end=0.5)
+        assert word.word == "hello"
+        assert word.start == 0.0
+        assert word.end == 0.5
+
+    def test_caption_segment_fields(self):
+        """CaptionSegment has text, start, end fields."""
+        from story_video.models import CaptionSegment
+
+        seg = CaptionSegment(text="hello world", start=0.0, end=1.0)
+        assert seg.text == "hello world"
+
+    def test_caption_result_fields(self):
+        """CaptionResult has segments, words, language, duration fields."""
+        from story_video.models import CaptionResult
+
+        result = CaptionResult(segments=[], words=[], language="en", duration=1.0)
+        assert result.language == "en"
+        assert result.duration == 1.0

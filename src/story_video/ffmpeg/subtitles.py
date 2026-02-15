@@ -10,8 +10,7 @@ Public functions:
 
 from pathlib import Path
 
-from story_video.models import SubtitleConfig, VideoConfig
-from story_video.pipeline.caption_generator import CaptionResult, CaptionWord
+from story_video.models import CaptionResult, CaptionWord, SubtitleConfig, VideoConfig
 
 __all__ = [
     "generate_ass_content",

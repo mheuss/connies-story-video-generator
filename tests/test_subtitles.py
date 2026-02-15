@@ -12,8 +12,13 @@ from story_video.ffmpeg.subtitles import (
     generate_ass_content,
     subtitle_filter,
 )
-from story_video.models import SubtitleConfig, VideoConfig
-from story_video.pipeline.caption_generator import CaptionResult, CaptionSegment, CaptionWord
+from story_video.models import (
+    CaptionResult,
+    CaptionSegment,
+    CaptionWord,
+    SubtitleConfig,
+    VideoConfig,
+)
 
 # ---------------------------------------------------------------------------
 # Test data helpers

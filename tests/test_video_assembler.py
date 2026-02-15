@@ -10,11 +10,15 @@ from unittest.mock import patch
 import pytest
 
 from story_video.ffmpeg.commands import FFmpegError
-from story_video.models import AppConfig, AssetType, InputMode, SceneStatus, TTSConfig
-from story_video.pipeline.caption_generator import (
+from story_video.models import (
+    AppConfig,
+    AssetType,
     CaptionResult,
     CaptionSegment,
     CaptionWord,
+    InputMode,
+    SceneStatus,
+    TTSConfig,
 )
 from story_video.pipeline.video_assembler import assemble_scene, assemble_video
 from story_video.state import ProjectState

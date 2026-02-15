@@ -20,6 +20,9 @@ __all__ = [
     "CREATIVE_FLOW_PHASES",
     "AppConfig",
     "AssetType",
+    "CaptionResult",
+    "CaptionSegment",
+    "CaptionWord",
     "ImageConfig",
     "InputMode",
     "OutputConfig",
@@ -391,6 +394,36 @@ class SceneAssetStatus(BaseModel):
     image: SceneStatus = Field(default=SceneStatus.PENDING)
     captions: SceneStatus = Field(default=SceneStatus.PENDING)
     video_segment: SceneStatus = Field(default=SceneStatus.PENDING)
+
+
+# ---------------------------------------------------------------------------
+# Caption data models
+# ---------------------------------------------------------------------------
+
+
+class CaptionWord(BaseModel):
+    """A single transcribed word with timing."""
+
+    word: str
+    start: float  # seconds
+    end: float  # seconds
+
+
+class CaptionSegment(BaseModel):
+    """A transcribed segment (roughly sentence-level) with timing."""
+
+    text: str
+    start: float
+    end: float
+
+
+class CaptionResult(BaseModel):
+    """Complete transcription result with segments and word timestamps."""
+
+    segments: list[CaptionSegment]
+    words: list[CaptionWord]
+    language: str
+    duration: float
 
 
 class Scene(BaseModel):

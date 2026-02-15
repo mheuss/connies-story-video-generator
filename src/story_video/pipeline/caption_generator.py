@@ -10,9 +10,15 @@ from typing import Protocol
 
 import openai
 from openai import APIConnectionError, InternalServerError, RateLimitError
-from pydantic import BaseModel
 
-from story_video.models import AssetType, Scene, SceneStatus
+from story_video.models import (
+    AssetType,
+    CaptionResult,
+    CaptionSegment,
+    CaptionWord,
+    Scene,
+    SceneStatus,
+)
 from story_video.state import ProjectState
 from story_video.utils.retry import with_retry
 
@@ -26,36 +32,6 @@ __all__ = [
 ]
 
 TRANSIENT_ERRORS = (APIConnectionError, RateLimitError, InternalServerError)
-
-
-# ---------------------------------------------------------------------------
-# Data models
-# ---------------------------------------------------------------------------
-
-
-class CaptionWord(BaseModel):
-    """A single transcribed word with timing."""
-
-    word: str
-    start: float  # seconds
-    end: float  # seconds
-
-
-class CaptionSegment(BaseModel):
-    """A transcribed segment (roughly sentence-level) with timing."""
-
-    text: str
-    start: float
-    end: float
-
-
-class CaptionResult(BaseModel):
-    """Complete transcription result with segments and word timestamps."""
-
-    segments: list[CaptionSegment]
-    words: list[CaptionWord]
-    language: str
-    duration: float
 
 
 # ---------------------------------------------------------------------------

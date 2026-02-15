@@ -17,8 +17,7 @@ from story_video.ffmpeg.commands import (
     run_ffmpeg,
 )
 from story_video.ffmpeg.subtitles import generate_ass_content
-from story_video.models import AssetType, Scene, SceneStatus
-from story_video.pipeline.caption_generator import CaptionResult
+from story_video.models import AssetType, CaptionResult, Scene, SceneStatus
 from story_video.state import ProjectState
 
 __all__ = [
