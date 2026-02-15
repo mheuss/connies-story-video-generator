@@ -119,5 +119,6 @@ def generate_audio(scene: Scene, state: ProjectState, provider: TTSProvider) -> 
     audio_path = audio_dir / filename
     audio_path.write_bytes(audio_bytes)
 
+    state.update_scene_asset(scene.scene_number, AssetType.AUDIO, SceneStatus.IN_PROGRESS)
     state.update_scene_asset(scene.scene_number, AssetType.AUDIO, SceneStatus.COMPLETED)
     state.save()

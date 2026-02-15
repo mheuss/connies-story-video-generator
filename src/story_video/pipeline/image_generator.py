@@ -106,5 +106,6 @@ def generate_image(scene: Scene, state: ProjectState, provider: ImageProvider) -
     image_path = images_dir / filename
     image_path.write_bytes(image_bytes)
 
+    state.update_scene_asset(scene.scene_number, AssetType.IMAGE, SceneStatus.IN_PROGRESS)
     state.update_scene_asset(scene.scene_number, AssetType.IMAGE, SceneStatus.COMPLETED)
     state.save()

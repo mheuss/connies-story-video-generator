@@ -177,6 +177,9 @@ def split_scenes(state: ProjectState, client: ClaudeClient) -> None:
         scene_number = i + 1
         state.add_scene(scene_number=scene_number, title=scene["title"], prose=scene["text"])
         state.update_scene_asset(
+            scene_number=scene_number, asset=AssetType.TEXT, status=SceneStatus.IN_PROGRESS
+        )
+        state.update_scene_asset(
             scene_number=scene_number, asset=AssetType.TEXT, status=SceneStatus.COMPLETED
         )
 

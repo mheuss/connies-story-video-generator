@@ -133,5 +133,6 @@ def generate_captions(scene: Scene, state: ProjectState, provider: CaptionProvid
     caption_path = captions_dir / caption_filename
     caption_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
 
+    state.update_scene_asset(scene.scene_number, AssetType.CAPTIONS, SceneStatus.IN_PROGRESS)
     state.update_scene_asset(scene.scene_number, AssetType.CAPTIONS, SceneStatus.COMPLETED)
     state.save()
