@@ -4,12 +4,19 @@ import json
 import logging
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from story_video.models import PhaseStatus
+from story_video.config import load_config
+from story_video.models import InputMode, PhaseStatus
+from story_video.pipeline.caption_generator import OpenAIWhisperProvider
+from story_video.pipeline.claude_client import ClaudeClient
+from story_video.pipeline.image_generator import OpenAIImageProvider
+from story_video.pipeline.orchestrator import run_pipeline
+from story_video.pipeline.tts_generator import OpenAITTSProvider
 from story_video.state import ProjectState
 
 logger = logging.getLogger(__name__)
@@ -174,9 +181,103 @@ def _display_outcome(state: ProjectState) -> None:
 
 
 @app.command()
-def create() -> None:
+def create(
+    mode: str = typer.Option(..., help="Input mode: adapt (original/inspired_by coming soon)"),
+    source_material: str | None = typer.Option(None, help="Source story text or path to file"),
+    topic: str | None = typer.Option(None, help="Story topic/premise (for original mode)"),
+    style_reference: Path | None = typer.Option(None, exists=True, help="Path to style sample"),
+    duration: int | None = typer.Option(None, help="Target duration in minutes"),
+    voice: str | None = typer.Option(None, help="TTS voice name"),
+    autonomous: bool = typer.Option(False, help="Skip human review checkpoints"),
+    output_dir: Path = typer.Option(Path("./output"), help="Output directory"),
+    config: Path | None = typer.Option(None, help="Path to config.yaml"),
+) -> None:
     """Start a new story video project."""
-    typer.echo("Not yet implemented.")
+    # --- Validate mode ---
+    try:
+        input_mode = InputMode(mode)
+    except ValueError:
+        console.print(
+            Panel(
+                f"Unknown mode: '{mode}'. Valid modes: adapt, original, inspired_by",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    if input_mode in (InputMode.ORIGINAL, InputMode.INSPIRED_BY):
+        console.print(
+            Panel(
+                f"Mode '{mode}' is not yet implemented. Only 'adapt' is currently supported.",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    # --- Validate adapt requires --source-material ---
+    if input_mode == InputMode.ADAPT and source_material is None:
+        console.print(
+            Panel(
+                "Adapt mode requires --source-material (path to file or inline text).",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    # --- Build config overrides ---
+    cli_overrides: dict[str, Any] = {}
+    if voice is not None:
+        cli_overrides["tts.voice"] = voice
+    if duration is not None:
+        cli_overrides["story.target_duration_minutes"] = duration
+    if autonomous:
+        cli_overrides["pipeline.autonomous"] = True
+
+    # --- Load config ---
+    try:
+        app_config = load_config(config_path=config, cli_overrides=cli_overrides)
+    except Exception as exc:
+        console.print(Panel(str(exc), title="Configuration Error", border_style="red"))
+        raise typer.Exit(1)
+
+    # --- Create project ---
+    project_id = _generate_project_id(mode, output_dir)
+
+    try:
+        state = ProjectState.create(project_id, input_mode, app_config, output_dir)
+    except Exception as exc:
+        console.print(Panel(str(exc), title="Project Creation Error", border_style="red"))
+        raise typer.Exit(1)
+
+    # --- Write source material ---
+    if source_material is not None:
+        text = _read_text_input(source_material)
+        (state.project_dir / "source_story.txt").write_text(text, encoding="utf-8")
+
+    console.print(f"Created project {project_id}")
+
+    # --- Instantiate providers and run pipeline ---
+    try:
+        claude_client = ClaudeClient()
+        tts_provider = OpenAITTSProvider()
+        image_provider = OpenAIImageProvider()
+        caption_provider = OpenAIWhisperProvider()
+
+        run_pipeline(
+            state,
+            claude_client=claude_client,
+            tts_provider=tts_provider,
+            image_provider=image_provider,
+            caption_provider=caption_provider,
+        )
+    except Exception as exc:
+        console.print(Panel(str(exc), title="Pipeline Error", border_style="red"))
+        raise typer.Exit(1)
+
+    _display_outcome(state)
 
 
 @app.command()

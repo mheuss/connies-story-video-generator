@@ -5,15 +5,20 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+from typer.testing import CliRunner
 
 from story_video.cli import (
     _display_outcome,
     _find_most_recent_project,
     _generate_project_id,
     _read_text_input,
+    app,
 )
 from story_video.models import PhaseStatus, PipelinePhase
+
+runner = CliRunner()
 
 
 class TestCLIEntryPoint:
@@ -216,3 +221,185 @@ class TestDisplayOutcome:
 
         captured = capsys.readouterr().out.lower()
         assert "failed" in captured or "error" in captured
+
+
+class TestCreateCommand:
+    """Tests for the create CLI command — validate, configure, run pipeline."""
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_create_adapt_happy_path(
+        self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
+    ):
+        """Creates project, writes source_story.txt, calls run_pipeline."""
+        source_file = tmp_path / "story.txt"
+        source_file.write_text("Once upon a time...", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--source-material",
+                str(source_file),
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        call_state = mock_run.call_args[0][0]
+        assert (call_state.project_dir / "source_story.txt").read_text(
+            encoding="utf-8"
+        ) == "Once upon a time..."
+
+    def test_create_adapt_missing_source_material(self, tmp_path):
+        """Adapt without --source-material -> error."""
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code != 0
+        assert "source-material" in result.output.lower()
+
+    def test_create_original_mode_not_implemented(self, tmp_path):
+        """Original mode -> 'not yet implemented'."""
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "original",
+                "--topic",
+                "A lighthouse",
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code != 0
+        assert "not yet implemented" in result.output.lower()
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_create_config_overrides(
+        self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
+    ):
+        """--voice, --duration, --autonomous flow to config."""
+        source_file = tmp_path / "story.txt"
+        source_file.write_text("Story.", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--source-material",
+                str(source_file),
+                "--output-dir",
+                str(tmp_path / "output"),
+                "--voice",
+                "alloy",
+                "--duration",
+                "45",
+                "--autonomous",
+            ],
+        )
+        assert result.exit_code == 0
+        call_state = mock_run.call_args[0][0]
+        assert call_state.metadata.config.tts.voice == "alloy"
+        assert call_state.metadata.config.story.target_duration_minutes == 45
+        assert call_state.metadata.config.pipeline.autonomous is True
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_create_reads_inline_source(
+        self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
+    ):
+        """Inline text (not file) used as source."""
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--source-material",
+                "Once upon a time in a land far away...",
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code == 0
+        call_state = mock_run.call_args[0][0]
+        assert (call_state.project_dir / "source_story.txt").read_text(
+            encoding="utf-8"
+        ) == "Once upon a time in a land far away..."
+
+    @patch("story_video.cli.run_pipeline", side_effect=RuntimeError("API failed"))
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_create_pipeline_error_shown(
+        self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
+    ):
+        """Pipeline error -> error panel, non-zero exit."""
+        source_file = tmp_path / "story.txt"
+        source_file.write_text("Story.", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--source-material",
+                str(source_file),
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code != 0
+        assert "api failed" in result.output.lower()
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_create_providers_passed_to_pipeline(
+        self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
+    ):
+        """All 4 providers passed to run_pipeline."""
+        source_file = tmp_path / "story.txt"
+        source_file.write_text("Text.", encoding="utf-8")
+        runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--source-material",
+                str(source_file),
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["claude_client"] == mock_claude.return_value
+        assert call_kwargs["tts_provider"] == mock_tts.return_value
+        assert call_kwargs["image_provider"] == mock_image.return_value
+        assert call_kwargs["caption_provider"] == mock_whisper.return_value
