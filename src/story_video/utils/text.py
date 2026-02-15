@@ -14,6 +14,7 @@ See ADR-006 in DEVELOPMENT.md for architectural rationale.
 """
 
 import re
+from collections.abc import Callable
 
 __all__ = [
     "expand_abbreviations",
@@ -79,7 +80,7 @@ def _build_abbreviation_patterns() -> list[tuple[re.Pattern[str], str, bool]]:
 _ABBREVIATION_PATTERNS = _build_abbreviation_patterns()
 
 
-def _make_replacer(expansion: str, text: str):
+def _make_replacer(expansion: str, text: str) -> Callable[[re.Match[str]], str]:
     """Create a regex replacement function that preserves sentence-ending periods.
 
     When an abbreviation that can end a sentence (e.g. "etc.") appears at end of

@@ -351,7 +351,12 @@ class TestOpenAITransientErrors:
 
     def test_is_tuple_of_three(self):
         """Contains exactly three exception types."""
+        from openai import APIConnectionError, InternalServerError, RateLimitError
+
         from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS
 
         assert isinstance(OPENAI_TRANSIENT_ERRORS, tuple)
         assert len(OPENAI_TRANSIENT_ERRORS) == 3
+        assert APIConnectionError in OPENAI_TRANSIENT_ERRORS
+        assert RateLimitError in OPENAI_TRANSIENT_ERRORS
+        assert InternalServerError in OPENAI_TRANSIENT_ERRORS

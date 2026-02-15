@@ -33,8 +33,7 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     generates ASS subtitles, and calls FFmpeg to produce a video segment
     combining the image, audio, and burned-in subtitles.
 
-    Does NOT mark the scene as IN_PROGRESS — that is the orchestrator's
-    responsibility.
+    Transitions the video_segment asset through IN_PROGRESS to COMPLETED.
 
     Args:
         scene: The scene to render.

@@ -289,7 +289,10 @@ def flag_narration(state: ProjectState, client: ClaudeClient) -> None:
 
     # 7. Semi-auto mode: flags file only — no narration_text changes
 
-    # 8. Update NARRATION_TEXT status for all scenes
+    # 8. Update NARRATION_TEXT status for all scenes.
+    # In semi-auto mode narration_text may still be None — downstream TTS
+    # falls back to scene.prose when narration_text is unset, so marking
+    # the phase complete is correct regardless of mode.
     for scene in scenes:
         state.update_scene_asset(
             scene.scene_number, AssetType.NARRATION_TEXT, SceneStatus.IN_PROGRESS
