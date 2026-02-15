@@ -90,6 +90,7 @@ class TestOpenAIImageProviderReturnsDecodedBytes:
         provider = OpenAIImageProvider()
         result = provider.generate(
             prompt="A forest",
+            model="dall-e-3",
             size="1024x1024",
             quality="standard",
             style="vivid",
@@ -117,6 +118,7 @@ class TestOpenAIImageProviderPassesParams:
         provider = OpenAIImageProvider()
         provider.generate(
             prompt="A castle on a hill",
+            model="dall-e-3",
             size="1792x1024",
             quality="hd",
             style="natural",
@@ -184,6 +186,7 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
         provider = OpenAIImageProvider()
         result = provider.generate(
             prompt="test",
+            model="dall-e-3",
             size="1024x1024",
             quality="standard",
             style="vivid",
@@ -209,6 +212,7 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
         provider = OpenAIImageProvider()
         result = provider.generate(
             prompt="test",
+            model="dall-e-3",
             size="1024x1024",
             quality="standard",
             style="vivid",
@@ -242,6 +246,7 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
         provider = OpenAIImageProvider()
         result = provider.generate(
             prompt="test",
+            model="dall-e-3",
             size="1024x1024",
             quality="standard",
             style="vivid",
@@ -278,6 +283,7 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
         with pytest.raises(BadRequestError):
             provider.generate(
                 prompt="test",
+                model="dall-e-3",
                 size="1024x1024",
                 quality="standard",
                 style="vivid",
@@ -304,6 +310,7 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
         with pytest.raises(AuthenticationError):
             provider.generate(
                 prompt="test",
+                model="dall-e-3",
                 size="1024x1024",
                 quality="standard",
                 style="vivid",
@@ -330,6 +337,7 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
         with pytest.raises(PermissionDeniedError):
             provider.generate(
                 prompt="test",
+                model="dall-e-3",
                 size="1024x1024",
                 quality="standard",
                 style="vivid",
@@ -492,3 +500,20 @@ class TestGenerateImageStateSaved:
 
         reloaded = ProjectState.load(project_state.project_dir)
         assert reloaded.metadata.scenes[0].asset_status.image == SceneStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# generate_image — passes model from config
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateImagePassesModelFromConfig:
+    """generate_image() passes the model from ImageConfig to the provider."""
+
+    def test_passes_model_from_config(self, project_state, fake_provider):
+        """model kwarg passed to provider.generate matches ImageConfig.model."""
+        scene = project_state.metadata.scenes[0]
+        generate_image(scene, project_state, fake_provider)
+
+        call_kwargs = fake_provider.generate.call_args.kwargs
+        assert call_kwargs["model"] == "dall-e-3"  # default from ImageConfig

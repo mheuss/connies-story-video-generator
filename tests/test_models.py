@@ -390,6 +390,15 @@ class TestPipelineConfig:
         assert restored == config
 
 
+class TestPipelineConfigRetryBaseDelay:
+    """PipelineConfig.retry_base_delay accepts float values."""
+
+    def test_retry_base_delay_accepts_float(self):
+        """Sub-second delays are valid."""
+        config = PipelineConfig(retry_base_delay=0.5)
+        assert config.retry_base_delay == 0.5
+
+
 class TestOutputConfig:
     """OutputConfig — output directory configuration."""
 

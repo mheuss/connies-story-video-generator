@@ -323,7 +323,7 @@ class PipelineConfig(BaseModel):
 
     autonomous: bool = Field(default=False)
     max_retries: int = Field(default=3, ge=0)
-    retry_base_delay: int = Field(default=2, gt=0)
+    retry_base_delay: float = Field(default=2.0, gt=0)
     save_originals_on_revision: bool = Field(default=True)
 
 

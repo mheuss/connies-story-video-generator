@@ -19,11 +19,12 @@ __all__ = ["ImageProvider", "OpenAIImageProvider", "generate_image"]
 class ImageProvider(Protocol):
     """Interface for image generation providers."""
 
-    def generate(self, prompt: str, size: str, quality: str, style: str) -> bytes:
+    def generate(self, prompt: str, *, model: str, size: str, quality: str, style: str) -> bytes:
         """Generate an image from a text prompt.
 
         Args:
             prompt: Text description of the image to generate.
+            model: Model identifier (e.g. "dall-e-3").
             size: Image dimensions (e.g. "1024x1024").
             quality: Quality tier (e.g. "standard", "hd").
             style: Style parameter (e.g. "vivid", "natural").
@@ -45,11 +46,12 @@ class OpenAIImageProvider:
         self._client = openai.OpenAI()
 
     @with_retry(max_retries=3, base_delay=2.0, retry_on=OPENAI_TRANSIENT_ERRORS)
-    def generate(self, prompt: str, size: str, quality: str, style: str) -> bytes:
-        """Generate an image via DALL-E 3.
+    def generate(self, prompt: str, *, model: str, size: str, quality: str, style: str) -> bytes:
+        """Generate an image via the specified model.
 
         Args:
             prompt: Text description of the image.
+            model: Model identifier (e.g. "dall-e-3").
             size: Image dimensions.
             quality: Quality tier.
             style: DALL-E style parameter.
@@ -58,7 +60,7 @@ class OpenAIImageProvider:
             Raw PNG image bytes decoded from the base64 API response.
         """
         response = self._client.images.generate(
-            model="dall-e-3",
+            model=model,
             prompt=prompt,
             size=size,
             quality=quality,
@@ -92,6 +94,7 @@ def generate_image(scene: Scene, state: ProjectState, provider: ImageProvider) -
 
     image_bytes = provider.generate(
         full_prompt,
+        model=img_config.model,
         size=img_config.size,
         quality=img_config.quality,
         style=img_config.style,
