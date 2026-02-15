@@ -20,6 +20,7 @@ import logging
 from collections.abc import Callable
 from typing import Any, TypeVar
 
+from openai import APIConnectionError, InternalServerError, RateLimitError
 from tenacity import (
     RetryError,
     before_sleep_log,
@@ -29,7 +30,7 @@ from tenacity import (
     wait_exponential,
 )
 
-__all__ = ["RetryError", "api_retry", "with_retry"]
+__all__ = ["OPENAI_TRANSIENT_ERRORS", "RetryError", "api_retry", "with_retry"]
 
 logger = logging.getLogger(__name__)
 
@@ -106,3 +107,8 @@ def api_retry(func: F) -> F:
             ...
     """
     return with_retry()(func)
+
+
+# Shared transient error tuple for OpenAI API calls.
+# Used by tts_generator, image_generator, and caption_generator.
+OPENAI_TRANSIENT_ERRORS = (APIConnectionError, RateLimitError, InternalServerError)

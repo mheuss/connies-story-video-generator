@@ -8,15 +8,12 @@ or other providers.
 from typing import Protocol
 
 import openai
-from openai import APIConnectionError, InternalServerError, RateLimitError
 
 from story_video.models import AssetType, Scene, SceneStatus
 from story_video.state import ProjectState
-from story_video.utils.retry import with_retry
+from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS, with_retry
 
 __all__ = ["OpenAITTSProvider", "TTSProvider", "generate_audio"]
-
-TRANSIENT_ERRORS = (APIConnectionError, RateLimitError, InternalServerError)
 
 
 class TTSProvider(Protocol):
@@ -54,7 +51,7 @@ class OpenAITTSProvider:
     def __init__(self) -> None:
         self._client = openai.OpenAI()
 
-    @with_retry(max_retries=3, base_delay=2.0, retry_on=TRANSIENT_ERRORS)
+    @with_retry(max_retries=3, base_delay=2.0, retry_on=OPENAI_TRANSIENT_ERRORS)
     def synthesize(
         self,
         text: str,

@@ -339,3 +339,19 @@ class TestWithRetryMetadata:
             return 42
 
         assert my_function.__name__ == "my_function"
+
+
+# ---------------------------------------------------------------------------
+# OPENAI_TRANSIENT_ERRORS — shared constant
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAITransientErrors:
+    """OPENAI_TRANSIENT_ERRORS is a shared tuple for retry configuration."""
+
+    def test_is_tuple_of_three(self):
+        """Contains exactly three exception types."""
+        from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS
+
+        assert isinstance(OPENAI_TRANSIENT_ERRORS, tuple)
+        assert len(OPENAI_TRANSIENT_ERRORS) == 3
