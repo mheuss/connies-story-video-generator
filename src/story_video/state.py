@@ -15,6 +15,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from story_video.models import (
     ADAPT_FLOW_PHASES,
     CREATIVE_FLOW_PHASES,
@@ -187,7 +189,7 @@ class ProjectState:
         content = json_path.read_text(encoding="utf-8")
         try:
             metadata = ProjectMetadata.model_validate_json(content)
-        except Exception as exc:
+        except (ValidationError, ValueError) as exc:
             msg = f"Invalid project.json in {project_dir}: {exc}"
             raise ValueError(msg) from exc
 
