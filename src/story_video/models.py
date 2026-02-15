@@ -8,12 +8,12 @@ This module defines all data shapes used across the application:
 Pure data definitions only — no file I/O, no business logic.
 """
 
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 __all__ = [
     "ADAPT_FLOW_PHASES",
@@ -269,11 +269,20 @@ class VideoConfig(BaseModel):
     crf: int = Field(default=18, ge=0)
     background_mode: str = Field(default="blur")
     background_blur_radius: int = Field(default=40, ge=0)
-    background_image: Optional[Path] = Field(default=None)
+    background_image: Path | None = Field(default=None)
     ken_burns_zoom: float = Field(default=1.08, gt=0)
     transition_duration: float = Field(default=1.5, ge=0)
     fade_in_duration: float = Field(default=2.0, ge=0)
     fade_out_duration: float = Field(default=3.0, ge=0)
+
+    @field_validator("resolution")
+    @classmethod
+    def validate_resolution(cls, v: str) -> str:
+        """Validate resolution is in WIDTHxHEIGHT format."""
+        if not re.match(r"^\d+x\d+$", v):
+            msg = f"Resolution must be 'WIDTHxHEIGHT', got '{v}'"
+            raise ValueError(msg)
+        return v
 
 
 class SubtitleConfig(BaseModel):
@@ -447,8 +456,8 @@ class Scene(BaseModel):
     scene_number: int = Field(gt=0)
     title: str = Field(min_length=1)
     prose: str = Field(min_length=1)
-    narration_text: Optional[str] = Field(default=None)
-    image_prompt: Optional[str] = Field(default=None)
+    narration_text: str | None = Field(default=None)
+    image_prompt: str | None = Field(default=None)
     asset_status: SceneAssetStatus = Field(default_factory=SceneAssetStatus)
 
 
@@ -479,7 +488,7 @@ class ProjectMetadata(BaseModel):
     project_id: str = Field(min_length=1)
     mode: InputMode
     created_at: datetime = Field(default_factory=_utc_now)
-    current_phase: Optional[PipelinePhase] = Field(default=None)
+    current_phase: PipelinePhase | None = Field(default=None)
     status: PhaseStatus = Field(default=PhaseStatus.PENDING)
     config: AppConfig = Field(default_factory=AppConfig)
     scenes: list[Scene] = Field(default_factory=list)

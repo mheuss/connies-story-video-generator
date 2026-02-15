@@ -678,6 +678,45 @@ class TestProjectMetadata:
 
 
 # ---------------------------------------------------------------------------
+# VideoConfig resolution validation tests
+# ---------------------------------------------------------------------------
+
+
+class TestVideoConfigResolutionValidation:
+    """VideoConfig.resolution validates WIDTHxHEIGHT format."""
+
+    def test_valid_resolution_1080p(self):
+        """Standard 1080p resolution is accepted."""
+        config = VideoConfig(resolution="1920x1080")
+        assert config.resolution == "1920x1080"
+
+    def test_valid_resolution_4k(self):
+        """4K resolution is accepted."""
+        config = VideoConfig(resolution="3840x2160")
+        assert config.resolution == "3840x2160"
+
+    def test_invalid_resolution_uppercase_x(self):
+        """Uppercase X is rejected."""
+        with pytest.raises(ValidationError):
+            VideoConfig(resolution="1920X1080")
+
+    def test_invalid_resolution_colon(self):
+        """Colon separator is rejected."""
+        with pytest.raises(ValidationError):
+            VideoConfig(resolution="1920:1080")
+
+    def test_invalid_resolution_extra_dimension(self):
+        """Three dimensions are rejected."""
+        with pytest.raises(ValidationError):
+            VideoConfig(resolution="1920x1080x3")
+
+    def test_invalid_resolution_text(self):
+        """Non-numeric text is rejected."""
+        with pytest.raises(ValidationError):
+            VideoConfig(resolution="widexhigh")
+
+
+# ---------------------------------------------------------------------------
 # Caption data models — importable from models module
 # ---------------------------------------------------------------------------
 
