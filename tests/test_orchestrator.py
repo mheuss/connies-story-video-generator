@@ -21,6 +21,7 @@ from story_video.models import (
 from story_video.pipeline.orchestrator import (
     _CHECKPOINT_PHASES,
     _determine_start_phase,
+    _dispatch_phase,
     run_pipeline,
 )
 from story_video.state import ProjectState
@@ -742,3 +743,27 @@ class TestRunPipelineAutonomousCompleted:
 
         assert state.metadata.current_phase == PipelinePhase.VIDEO_ASSEMBLY
         assert state.metadata.status == PhaseStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# TestDispatchPhaseUnknown — defensive ValueError for unknown phases
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchPhaseUnknown:
+    """_dispatch_phase raises ValueError for unrecognized phases."""
+
+    def test_unknown_phase_raises_value_error(self, tmp_path):
+        """Passing an unrecognized phase raises ValueError."""
+        state = _make_adapt_state(tmp_path)
+        # Use a phase not in the adapt flow dispatch table
+        # PipelinePhase.ANALYSIS is a creative-flow phase, not handled by dispatch
+        with pytest.raises(ValueError, match="Unknown phase"):
+            _dispatch_phase(
+                PipelinePhase.ANALYSIS,
+                state,
+                claude_client=None,
+                tts_provider=None,
+                image_provider=None,
+                caption_provider=None,
+            )

@@ -214,3 +214,16 @@ class TestGenerateImagePromptsSceneMissingFromResponse:
         # Scene 2 not in response — stays None, stays PENDING
         assert scenes[1].image_prompt is None
         assert scenes[1].asset_status.image_prompt == SceneStatus.PENDING
+
+    def test_missing_scenes_logged_as_warning(self, state_with_scenes, mock_client, caplog):
+        """Scenes omitted from Claude response trigger a warning log."""
+        mock_client.generate_structured.return_value = {
+            "prompts": [
+                {"scene_number": 1, "image_prompt": "A dark forest"},
+            ]
+        }
+
+        with caplog.at_level("WARNING"):
+            generate_image_prompts(state_with_scenes, mock_client)
+
+        assert "Claude did not return prompts for scenes: [2]" in caplog.text

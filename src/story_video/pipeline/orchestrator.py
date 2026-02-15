@@ -12,14 +12,18 @@ The orchestrator is the single entry point for running a pipeline. It:
 See ADR-001 in DEVELOPMENT.md for architectural rationale.
 """
 
-import logging
+from __future__ import annotations
 
-from story_video.models import PhaseStatus, PipelinePhase
-from story_video.pipeline.caption_generator import generate_captions
-from story_video.pipeline.image_generator import generate_image
+import logging
+from collections.abc import Callable
+
+from story_video.models import PhaseStatus, PipelinePhase, Scene
+from story_video.pipeline.caption_generator import CaptionProvider, generate_captions
+from story_video.pipeline.claude_client import ClaudeClient
+from story_video.pipeline.image_generator import ImageProvider, generate_image
 from story_video.pipeline.image_prompt_writer import generate_image_prompts
 from story_video.pipeline.story_writer import flag_narration, split_scenes
-from story_video.pipeline.tts_generator import generate_audio
+from story_video.pipeline.tts_generator import TTSProvider, generate_audio
 from story_video.pipeline.video_assembler import assemble_scene, assemble_video
 from story_video.state import ProjectState
 from story_video.utils.text import prepare_narration
@@ -43,10 +47,10 @@ _CHECKPOINT_PHASES = frozenset(
 def run_pipeline(
     state: ProjectState,
     *,
-    claude_client=None,
-    tts_provider=None,
-    image_provider=None,
-    caption_provider=None,
+    claude_client: ClaudeClient | None = None,
+    tts_provider: TTSProvider | None = None,
+    image_provider: ImageProvider | None = None,
+    caption_provider: CaptionProvider | None = None,
 ) -> None:
     """Run the adapt flow pipeline from current state to completion or checkpoint.
 
@@ -74,6 +78,11 @@ def run_pipeline(
     start_idx = phases.index(start)
     autonomous = state.metadata.config.pipeline.autonomous
 
+    # State is saved at three points: checkpoint pause, phase failure, and
+    # end of full run. Intermediate phase completions accumulate in memory
+    # and are persisted together. On failure, the exception handler saves
+    # all accumulated state alongside the FAILED status, so completed
+    # phases are not lost.
     for phase in phases[start_idx:]:
         state.start_phase(phase)
         try:
@@ -104,7 +113,9 @@ def run_pipeline(
     state.save()
 
 
-def _determine_start_phase(state, phases):
+def _determine_start_phase(
+    state: ProjectState, phases: list[PipelinePhase]
+) -> PipelinePhase | None:
     """Determine which phase to start or resume from.
 
     Resume logic handles five cases:
@@ -133,7 +144,15 @@ def _determine_start_phase(state, phases):
     return state.get_next_phase()
 
 
-def _dispatch_phase(phase, state, *, claude_client, tts_provider, image_provider, caption_provider):
+def _dispatch_phase(
+    phase: PipelinePhase,
+    state: ProjectState,
+    *,
+    claude_client: ClaudeClient | None,
+    tts_provider: TTSProvider | None,
+    image_provider: ImageProvider | None,
+    caption_provider: CaptionProvider | None,
+) -> None:
     """Route a phase to the appropriate pipeline module.
 
     Args:
@@ -177,7 +196,7 @@ def _dispatch_phase(phase, state, *, claude_client, tts_provider, image_provider
         raise ValueError(msg)
 
 
-def _run_narration_prep(state):
+def _run_narration_prep(state: ProjectState) -> None:
     """Apply narration preparation transforms to all scenes.
 
     Narration prep runs on ALL scenes (not just pending ones) because
@@ -200,7 +219,7 @@ def _run_narration_prep(state):
             scene.narration_text = prepare_narration(scene.prose)
 
 
-def _run_per_scene(state, process_fn):
+def _run_per_scene(state: ProjectState, process_fn: Callable[[Scene], None]) -> None:
     """Run a processing function on each scene that needs work.
 
     Uses ``state.get_scenes_for_processing()`` to find scenes whose

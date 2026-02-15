@@ -102,5 +102,12 @@ def generate_image_prompts(state: ProjectState, client: ClaudeClient) -> None:
         state.update_scene_asset(scene_num, AssetType.IMAGE_PROMPT, SceneStatus.IN_PROGRESS)
         state.update_scene_asset(scene_num, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
 
+    # Warn about scenes that Claude omitted from its response — these will
+    # fail later at IMAGE_GENERATION when generate_image() requires a prompt.
+    scenes_in_response = {p["scene_number"] for p in result["prompts"]}
+    missing = sorted(set(scene_map.keys()) - scenes_in_response)
+    if missing:
+        logger.warning("Claude did not return prompts for scenes: %s", missing)
+
     # Persist state
     state.save()
