@@ -67,6 +67,7 @@ def project_state(tmp_path):
     state.add_scene(scene_number=1, title="Test Scene", prose="Story text.")
     state.metadata.scenes[0].image_prompt = "A dark forest at night"
     state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+    state.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
     state.save()
     return state
 
@@ -447,6 +448,7 @@ class TestGenerateImageAlwaysWritesPng:
         state.add_scene(1, "Scene One", "Some text.")
         state.metadata.scenes[0].image_prompt = "A sunrise"
         state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
 
         scene = state.metadata.scenes[0]
         generate_image(scene, state, fake_provider)
@@ -477,6 +479,7 @@ class TestGenerateImageMultiDigitSceneNumber:
         state.add_scene(12, "Scene Twelve", "The twelfth scene of the story.")
         state.metadata.scenes[0].image_prompt = "A mountain landscape"
         state.update_scene_asset(12, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(12, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
 
         scene = state.metadata.scenes[0]
         generate_image(scene, state, fake_provider)

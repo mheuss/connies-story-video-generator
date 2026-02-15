@@ -128,8 +128,11 @@ class TestAssetType:
     def test_has_video_segment(self):
         assert AssetType.VIDEO_SEGMENT == "video_segment"
 
-    def test_has_exactly_six_members(self):
-        assert len(AssetType) == 6
+    def test_has_image_prompt(self):
+        assert AssetType.IMAGE_PROMPT == "image_prompt"
+
+    def test_has_exactly_seven_members(self):
+        assert len(AssetType) == 7
 
 
 class TestPipelinePhase:
@@ -461,6 +464,7 @@ class TestSceneAssetStatus:
         status = SceneAssetStatus()
         assert status.text == SceneStatus.PENDING
         assert status.narration_text == SceneStatus.PENDING
+        assert status.image_prompt == SceneStatus.PENDING
         assert status.audio == SceneStatus.PENDING
         assert status.image == SceneStatus.PENDING
         assert status.captions == SceneStatus.PENDING

@@ -72,6 +72,7 @@ def project_state(tmp_path):
     state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
     state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
     state.update_scene_asset(1, AssetType.AUDIO, SceneStatus.COMPLETED)
+    state.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
     state.update_scene_asset(1, AssetType.IMAGE, SceneStatus.COMPLETED)
     state.update_scene_asset(1, AssetType.CAPTIONS, SceneStatus.COMPLETED)
     state.save()
@@ -242,6 +243,7 @@ class TestAssembleVideoHappyPath:
             state.update_scene_asset(i, AssetType.TEXT, SceneStatus.COMPLETED)
             state.update_scene_asset(i, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
             state.update_scene_asset(i, AssetType.AUDIO, SceneStatus.COMPLETED)
+            state.update_scene_asset(i, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
             state.update_scene_asset(i, AssetType.IMAGE, SceneStatus.COMPLETED)
             state.update_scene_asset(i, AssetType.CAPTIONS, SceneStatus.COMPLETED)
             state.update_scene_asset(i, AssetType.VIDEO_SEGMENT, SceneStatus.COMPLETED)
@@ -276,6 +278,7 @@ class TestAssembleVideoHappyPath:
             state.update_scene_asset(i, AssetType.TEXT, SceneStatus.COMPLETED)
             state.update_scene_asset(i, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
             state.update_scene_asset(i, AssetType.AUDIO, SceneStatus.COMPLETED)
+            state.update_scene_asset(i, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
             state.update_scene_asset(i, AssetType.IMAGE, SceneStatus.COMPLETED)
             state.update_scene_asset(i, AssetType.CAPTIONS, SceneStatus.COMPLETED)
 

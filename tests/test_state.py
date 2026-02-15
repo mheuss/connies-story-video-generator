@@ -112,8 +112,8 @@ class TestPhaseAssetMap:
     def test_outline_maps_to_none(self):
         assert PHASE_ASSET_MAP[PipelinePhase.OUTLINE] is None
 
-    def test_image_prompts_maps_to_none(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.IMAGE_PROMPTS] is None
+    def test_image_prompts_maps_to_image_prompt(self):
+        assert PHASE_ASSET_MAP[PipelinePhase.IMAGE_PROMPTS] == AssetType.IMAGE_PROMPT
 
     def test_narration_prep_maps_to_narration_text(self):
         assert PHASE_ASSET_MAP[PipelinePhase.NARRATION_PREP] == AssetType.NARRATION_TEXT
@@ -145,8 +145,11 @@ class TestAssetDependencies:
     def test_audio_depends_on_narration_text(self):
         assert ASSET_DEPENDENCIES[AssetType.AUDIO] == [AssetType.NARRATION_TEXT]
 
-    def test_image_depends_on_text(self):
-        assert ASSET_DEPENDENCIES[AssetType.IMAGE] == [AssetType.TEXT]
+    def test_image_prompt_depends_on_text(self):
+        assert ASSET_DEPENDENCIES[AssetType.IMAGE_PROMPT] == [AssetType.TEXT]
+
+    def test_image_depends_on_image_prompt(self):
+        assert ASSET_DEPENDENCIES[AssetType.IMAGE] == [AssetType.IMAGE_PROMPT]
 
     def test_captions_depends_on_audio(self):
         assert ASSET_DEPENDENCIES[AssetType.CAPTIONS] == [AssetType.AUDIO]
@@ -535,14 +538,16 @@ class TestAssetDependencyEnforcement:
         scene = next(s for s in project_with_scenes.metadata.scenes if s.scene_number == 1)
         assert scene.asset_status.audio == SceneStatus.IN_PROGRESS
 
-    def test_image_requires_text_completed(self, project_with_scenes):
-        """Cannot start image if text is not completed."""
+    def test_image_requires_image_prompt_completed(self, project_with_scenes):
+        """Cannot start image if image_prompt is not completed."""
         with pytest.raises(ValueError, match="[Dd]ependenc"):
             project_with_scenes.update_scene_asset(1, AssetType.IMAGE, SceneStatus.IN_PROGRESS)
 
-    def test_image_allowed_when_text_completed(self, project_with_scenes):
+    def test_image_allowed_when_image_prompt_completed(self, project_with_scenes):
         project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
         project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        project_with_scenes.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.IN_PROGRESS)
+        project_with_scenes.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
         project_with_scenes.update_scene_asset(1, AssetType.IMAGE, SceneStatus.IN_PROGRESS)
         scene = next(s for s in project_with_scenes.metadata.scenes if s.scene_number == 1)
         assert scene.asset_status.image == SceneStatus.IN_PROGRESS
@@ -559,8 +564,8 @@ class TestAssetDependencyEnforcement:
             )
 
     def test_video_segment_allowed_when_all_deps_completed(self, project_with_scenes):
-        """Full chain: text -> narration_text -> audio, text -> image, audio -> captions.
-        Then video_segment requires audio + image + captions."""
+        """Full chain: text -> narration_text -> audio, text -> image_prompt -> image,
+        audio -> captions. Then video_segment requires audio + image + captions."""
         ps = project_with_scenes
         # text
         ps.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
@@ -571,6 +576,9 @@ class TestAssetDependencyEnforcement:
         # audio
         ps.update_scene_asset(1, AssetType.AUDIO, SceneStatus.IN_PROGRESS)
         ps.update_scene_asset(1, AssetType.AUDIO, SceneStatus.COMPLETED)
+        # image_prompt
+        ps.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.IN_PROGRESS)
+        ps.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
         # image
         ps.update_scene_asset(1, AssetType.IMAGE, SceneStatus.IN_PROGRESS)
         ps.update_scene_asset(1, AssetType.IMAGE, SceneStatus.COMPLETED)

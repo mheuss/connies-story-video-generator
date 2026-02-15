@@ -90,11 +90,12 @@ class SceneStatus(str, Enum):
 class AssetType(str, Enum):
     """Per-scene asset types tracked in status.
 
-    Each scene tracks the status of these six asset types independently.
+    Each scene tracks the status of these seven asset types independently.
     """
 
     TEXT = "text"
     NARRATION_TEXT = "narration_text"
+    IMAGE_PROMPT = "image_prompt"
     AUDIO = "audio"
     IMAGE = "image"
     CAPTIONS = "captions"
@@ -389,6 +390,7 @@ class SceneAssetStatus(BaseModel):
     Fields:
         text: Status of the prose text asset.
         narration_text: Status of the TTS-optimized narration text.
+        image_prompt: Status of the generated image prompt.
         audio: Status of the generated audio file.
         image: Status of the generated scene image.
         captions: Status of the generated caption data.
@@ -399,6 +401,7 @@ class SceneAssetStatus(BaseModel):
 
     text: SceneStatus = Field(default=SceneStatus.PENDING)
     narration_text: SceneStatus = Field(default=SceneStatus.PENDING)
+    image_prompt: SceneStatus = Field(default=SceneStatus.PENDING)
     audio: SceneStatus = Field(default=SceneStatus.PENDING)
     image: SceneStatus = Field(default=SceneStatus.PENDING)
     captions: SceneStatus = Field(default=SceneStatus.PENDING)

@@ -44,7 +44,7 @@ PHASE_ASSET_MAP: dict[PipelinePhase, AssetType | None] = {
     PipelinePhase.CRITIQUE_REVISION: AssetType.TEXT,
     PipelinePhase.SCENE_SPLITTING: AssetType.TEXT,
     PipelinePhase.NARRATION_FLAGGING: AssetType.NARRATION_TEXT,
-    PipelinePhase.IMAGE_PROMPTS: None,  # Sets image_prompt field, not an asset status
+    PipelinePhase.IMAGE_PROMPTS: AssetType.IMAGE_PROMPT,
     PipelinePhase.NARRATION_PREP: AssetType.NARRATION_TEXT,
     PipelinePhase.TTS_GENERATION: AssetType.AUDIO,
     PipelinePhase.IMAGE_GENERATION: AssetType.IMAGE,
@@ -60,7 +60,7 @@ PHASE_ASSET_MAP: dict[PipelinePhase, AssetType | None] = {
 # this asset can transition to in_progress. The rules enforce the production
 # pipeline order:
 #   text (no deps) -> narration_text -> audio -> captions
-#   text -> image
+#   text -> image_prompt -> image
 #   audio + image + captions -> video_segment
 #
 # This prevents impossible states like generating audio without narration text,
@@ -69,8 +69,9 @@ PHASE_ASSET_MAP: dict[PipelinePhase, AssetType | None] = {
 ASSET_DEPENDENCIES: dict[AssetType, list[AssetType]] = {
     AssetType.TEXT: [],  # No dependencies — text is the root asset
     AssetType.NARRATION_TEXT: [AssetType.TEXT],
+    AssetType.IMAGE_PROMPT: [AssetType.TEXT],
     AssetType.AUDIO: [AssetType.NARRATION_TEXT],
-    AssetType.IMAGE: [AssetType.TEXT],
+    AssetType.IMAGE: [AssetType.IMAGE_PROMPT],
     AssetType.CAPTIONS: [AssetType.AUDIO],
     AssetType.VIDEO_SEGMENT: [AssetType.AUDIO, AssetType.IMAGE, AssetType.CAPTIONS],
 }
