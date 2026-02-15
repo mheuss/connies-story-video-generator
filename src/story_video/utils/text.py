@@ -47,26 +47,64 @@ _ABBREVIATIONS: dict[str, str] = {
 # whitespace, newline, or end-of-string), the period must be preserved.
 _SENTENCE_ENDING_ABBREVS = {"etc.", "vs.", "e.g.", "i.e."}
 
+
 # Pre-compiled regex patterns for each abbreviation.
 # Each entry is (pattern, expansion, can_end_sentence).
 # Uses word boundary (\b) or positional matching to avoid partial replacements.
-_ABBREVIATION_PATTERNS: list[tuple[re.Pattern[str], str, bool]] = []
+def _build_abbreviation_patterns() -> list[tuple[re.Pattern[str], str, bool]]:
+    """Build pre-compiled regex patterns for abbreviation expansion.
 
-for _abbr, _expansion in _ABBREVIATIONS.items():
-    # Escape the abbreviation for regex (dots become literal dots)
-    _escaped = re.escape(_abbr)
-    _can_end = _abbr in _SENTENCE_ENDING_ABBREVS
-    # Use a pattern that matches the abbreviation with appropriate boundaries.
-    # For multi-dot abbreviations like "e.g." and "i.e.", we match them as-is
-    # since the dots act as natural delimiters.
-    # For single-dot abbreviations, we use word boundary before.
-    if _abbr in ("e.g.", "i.e."):
-        # These are typically preceded by a space or opening paren
-        _pattern = re.compile(_escaped)
-    else:
-        # Word boundary before, literal match of abbreviation
-        _pattern = re.compile(r"\b" + _escaped)
-    _ABBREVIATION_PATTERNS.append((_pattern, _expansion, _can_end))
+    Returns:
+        List of (pattern, expansion, can_end_sentence) tuples.
+    """
+    patterns: list[tuple[re.Pattern[str], str, bool]] = []
+    for abbr, expansion in _ABBREVIATIONS.items():
+        # Escape the abbreviation for regex (dots become literal dots)
+        escaped = re.escape(abbr)
+        can_end = abbr in _SENTENCE_ENDING_ABBREVS
+        # Use a pattern that matches the abbreviation with appropriate boundaries.
+        # For multi-dot abbreviations like "e.g." and "i.e.", we match them as-is
+        # since the dots act as natural delimiters.
+        # For single-dot abbreviations, we use word boundary before.
+        if abbr in ("e.g.", "i.e."):
+            # These are typically preceded by a space or opening paren
+            pattern = re.compile(escaped)
+        else:
+            # Word boundary before, literal match of abbreviation
+            pattern = re.compile(r"\b" + escaped)
+        patterns.append((pattern, expansion, can_end))
+    return patterns
+
+
+_ABBREVIATION_PATTERNS = _build_abbreviation_patterns()
+
+
+def _make_replacer(expansion: str, text: str):
+    """Create a regex replacement function that preserves sentence-ending periods.
+
+    When an abbreviation that can end a sentence (e.g. "etc.") appears at end of
+    string or before a newline, the period is restored after expansion.
+
+    Args:
+        expansion: The expanded form to replace the abbreviation with.
+        text: The full text being processed (for lookahead).
+
+    Returns:
+        A replacement function compatible with re.sub().
+    """
+
+    def _replacer(m: re.Match[str]) -> str:
+        end_pos = m.end()
+        if end_pos >= len(text):
+            # End of string — period was sentence-ending
+            return expansion + "."
+        next_char = text[end_pos]
+        if next_char == "\n":
+            # Followed by newline — period was sentence-ending
+            return expansion + "."
+        return expansion
+
+    return _replacer
 
 
 def expand_abbreviations(text: str) -> str:
@@ -92,24 +130,6 @@ def expand_abbreviations(text: str) -> str:
     result = text
     for pattern, expansion, can_end_sentence in _ABBREVIATION_PATTERNS:
         if can_end_sentence:
-            # Use a replacement function to check if the period is also a
-            # sentence-ending period. The period serves double duty when the
-            # abbreviation is at the very end of the string or followed by
-            # a newline. In those cases, we restore the period after expansion.
-            def _make_replacer(exp: str, txt: str):  # noqa: E301
-                def _replacer(m: re.Match[str]) -> str:
-                    end_pos = m.end()
-                    if end_pos >= len(txt):
-                        # End of string — period was sentence-ending
-                        return exp + "."
-                    next_char = txt[end_pos]
-                    if next_char == "\n":
-                        # Followed by newline — period was sentence-ending
-                        return exp + "."
-                    return exp
-
-                return _replacer
-
             result = pattern.sub(_make_replacer(expansion, result), result)
         else:
             result = pattern.sub(expansion, result)
