@@ -403,3 +403,67 @@ class TestCreateCommand:
         assert call_kwargs["tts_provider"] == mock_tts.return_value
         assert call_kwargs["image_provider"] == mock_image.return_value
         assert call_kwargs["caption_provider"] == mock_whisper.return_value
+
+
+class TestResumeCommand:
+    """Tests for the resume CLI command — load existing project and continue pipeline."""
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_resume_with_project_id(
+        self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
+    ):
+        """Loads specified project and calls run_pipeline."""
+        from story_video.models import AppConfig, InputMode
+        from story_video.state import ProjectState
+
+        ProjectState.create(
+            project_id="test-project",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        result = runner.invoke(app, ["resume", "test-project", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_resume_without_id_uses_most_recent(
+        self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
+    ):
+        """No project ID → resumes most recent project."""
+        from story_video.models import AppConfig, InputMode
+        from story_video.state import ProjectState
+
+        ProjectState.create(
+            project_id="my-latest",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        result = runner.invoke(app, ["resume", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        loaded_state = mock_run.call_args[0][0]
+        assert loaded_state.metadata.project_id == "my-latest"
+
+    def test_resume_no_projects_found(self, tmp_path):
+        """Empty output dir → error."""
+        result = runner.invoke(app, ["resume", "--output-dir", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "no project" in result.output.lower()
+
+    def test_resume_invalid_project_id(self, tmp_path):
+        """Non-existent project ID → error."""
+        result = runner.invoke(
+            app, ["resume", "nonexistent-project", "--output-dir", str(tmp_path)]
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()

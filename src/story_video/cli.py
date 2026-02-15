@@ -176,7 +176,7 @@ def _display_outcome(state: ProjectState) -> None:
 
 
 # ---------------------------------------------------------------------------
-# CLI commands (stubs — will be replaced in later tasks)
+# CLI commands
 # ---------------------------------------------------------------------------
 
 
@@ -281,9 +281,65 @@ def create(
 
 
 @app.command()
-def resume(project_id: str | None = typer.Argument(None)) -> None:
+def resume(
+    project_id: str | None = typer.Argument(
+        None, help="Project ID to resume (default: most recent)"
+    ),
+    output_dir: Path = typer.Option(Path("./output"), help="Output directory"),
+) -> None:
     """Resume a paused or failed project."""
-    typer.echo("Not yet implemented.")
+    # --- Resolve project directory ---
+    if project_id is not None:
+        project_dir = output_dir / project_id
+        if not (project_dir / "project.json").exists():
+            console.print(
+                Panel(
+                    f"Project '{project_id}' not found in {output_dir}",
+                    title="Error",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
+    else:
+        project_dir = _find_most_recent_project(output_dir)
+        if project_dir is None:
+            console.print(
+                Panel(
+                    f"No projects found in {output_dir}",
+                    title="Error",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
+
+    # --- Load project state ---
+    try:
+        state = ProjectState.load(project_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(Panel(str(exc), title="Load Error", border_style="red"))
+        raise typer.Exit(1)
+
+    console.print(f"Resuming project {state.metadata.project_id}")
+
+    # --- Instantiate providers and run pipeline ---
+    try:
+        claude_client = ClaudeClient()
+        tts_provider = OpenAITTSProvider()
+        image_provider = OpenAIImageProvider()
+        caption_provider = OpenAIWhisperProvider()
+
+        run_pipeline(
+            state,
+            claude_client=claude_client,
+            tts_provider=tts_provider,
+            image_provider=image_provider,
+            caption_provider=caption_provider,
+        )
+    except Exception as exc:
+        console.print(Panel(str(exc), title="Pipeline Error", border_style="red"))
+        raise typer.Exit(1)
+
+    _display_outcome(state)
 
 
 @app.command()
