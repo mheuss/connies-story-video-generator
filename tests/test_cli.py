@@ -516,3 +516,102 @@ class TestEstimateCommand:
             result = runner.invoke(app, ["estimate", "--mode", "adapt"])
             assert result.exit_code == 0
             mock_state.create.assert_not_called()
+
+
+class TestStatusCommand:
+    """Tests for the status CLI command — project state display."""
+
+    def test_status_with_project_id(self, tmp_path):
+        """Displays project metadata and scene status."""
+        from story_video.models import AppConfig, AssetType, InputMode, SceneStatus
+        from story_video.state import ProjectState
+
+        state = ProjectState.create(
+            project_id="status-test",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        state.add_scene(1, "Opening", "The story begins.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.save()
+
+        result = runner.invoke(app, ["status", "status-test", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "status-test" in result.output
+        assert "adapt" in result.output.lower()
+
+    def test_status_no_id_uses_most_recent(self, tmp_path):
+        """No project ID → shows most recent."""
+        from story_video.models import AppConfig, InputMode
+        from story_video.state import ProjectState
+
+        ProjectState.create(
+            project_id="latest-project",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+
+        result = runner.invoke(app, ["status", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "latest-project" in result.output
+
+    def test_status_no_projects(self, tmp_path):
+        """Empty output dir → error."""
+        result = runner.invoke(app, ["status", "--output-dir", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "no project" in result.output.lower()
+
+
+class TestListCommand:
+    """Tests for the list CLI command — project listing display."""
+
+    def test_list_shows_projects(self, tmp_path):
+        """Lists all projects with metadata."""
+        from story_video.models import AppConfig, InputMode
+        from story_video.state import ProjectState
+
+        ProjectState.create(
+            project_id="project-a",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        ProjectState.create(
+            project_id="project-b",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+
+        result = runner.invoke(app, ["list", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "project-a" in result.output
+        assert "project-b" in result.output
+
+    def test_list_empty(self, tmp_path):
+        """No projects → clean message."""
+        result = runner.invoke(app, ["list", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "no project" in result.output.lower()
+
+    def test_list_skips_corrupted(self, tmp_path):
+        """Corrupted project.json skipped."""
+        from story_video.models import AppConfig, InputMode
+        from story_video.state import ProjectState
+
+        ProjectState.create(
+            project_id="good-project",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        bad = tmp_path / "bad-project"
+        bad.mkdir()
+        (bad / "project.json").write_text("{broken", encoding="utf-8")
+
+        result = runner.invoke(app, ["list", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "good-project" in result.output

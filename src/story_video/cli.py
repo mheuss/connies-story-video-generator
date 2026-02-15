@@ -9,10 +9,11 @@ from typing import Any
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 from story_video.config import load_config
 from story_video.cost import estimate_cost, format_cost_estimate
-from story_video.models import InputMode, PhaseStatus
+from story_video.models import InputMode, PhaseStatus, SceneStatus
 from story_video.pipeline.caption_generator import OpenAIWhisperProvider
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import OpenAIImageProvider
@@ -174,6 +175,24 @@ def _display_outcome(state: ProjectState) -> None:
                 border_style="red",
             )
         )
+
+
+def _status_icon(status: SceneStatus) -> str:
+    """Map scene status to a colored icon for Rich table display.
+
+    Args:
+        status: The scene asset status to display.
+
+    Returns:
+        A Rich-markup string with color-coded status text.
+    """
+    icons = {
+        SceneStatus.COMPLETED: "[green]done[/green]",
+        SceneStatus.IN_PROGRESS: "[yellow]...[/yellow]",
+        SceneStatus.FAILED: "[red]FAIL[/red]",
+        SceneStatus.PENDING: "[dim]--[/dim]",
+    }
+    return icons.get(status, str(status.value))
 
 
 # ---------------------------------------------------------------------------
@@ -386,15 +405,138 @@ def estimate(
 
 
 @app.command()
-def status(project_id: str | None = typer.Argument(None)) -> None:
+def status(
+    project_id: str | None = typer.Argument(None, help="Project ID (default: most recent)"),
+    output_dir: Path = typer.Option(Path("./output"), help="Output directory"),
+) -> None:
     """Show current state of a project."""
-    typer.echo("Not yet implemented.")
+    # --- Resolve project directory ---
+    if project_id is not None:
+        project_dir = output_dir / project_id
+    else:
+        project_dir = _find_most_recent_project(output_dir)
+
+    if project_dir is None or not (project_dir / "project.json").exists():
+        console.print(
+            Panel(
+                "No project found.",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    # --- Load project state ---
+    try:
+        state = ProjectState.load(project_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(Panel(str(exc), title="Load Error", border_style="red"))
+        raise typer.Exit(1)
+
+    meta = state.metadata
+    phase_name = meta.current_phase.value if meta.current_phase else "none"
+    created_str = meta.created_at.isoformat()[:10]
+    scene_count = len(meta.scenes)
+
+    # --- Project info panel ---
+    info_lines = (
+        f"[bold]Project:[/bold] {meta.project_id}\n"
+        f"[bold]Mode:[/bold] {meta.mode.value}\n"
+        f"[bold]Phase:[/bold] {phase_name}\n"
+        f"[bold]Status:[/bold] {meta.status.value}\n"
+        f"[bold]Created:[/bold] {created_str}\n"
+        f"[bold]Scenes:[/bold] {scene_count}"
+    )
+    console.print(Panel(info_lines, title="Project Status", border_style="cyan"))
+
+    # --- Scene asset status table ---
+    if meta.scenes:
+        table = Table(title="Scene Asset Status")
+        table.add_column("Scene", style="bold")
+        table.add_column("Text")
+        table.add_column("Narration")
+        table.add_column("Img Prompt")
+        table.add_column("Audio")
+        table.add_column("Image")
+        table.add_column("Captions")
+        table.add_column("Video")
+
+        for scene in meta.scenes:
+            s = scene.asset_status
+            table.add_row(
+                f"{scene.scene_number}. {scene.title}",
+                _status_icon(s.text),
+                _status_icon(s.narration_text),
+                _status_icon(s.image_prompt),
+                _status_icon(s.audio),
+                _status_icon(s.image),
+                _status_icon(s.captions),
+                _status_icon(s.video_segment),
+            )
+
+        console.print(table)
 
 
-@app.command()
-def list_projects() -> None:
+@app.command(name="list")
+def list_projects(
+    output_dir: Path = typer.Option(Path("./output"), help="Output directory"),
+) -> None:
     """List all projects."""
-    typer.echo("Not yet implemented.")
+    if not output_dir.is_dir():
+        console.print("No projects found.")
+        return
+
+    # --- Scan for projects with lightweight JSON parse ---
+    projects: list[dict[str, str]] = []
+
+    for child in output_dir.iterdir():
+        if not child.is_dir():
+            continue
+
+        json_path = child / "project.json"
+        if not json_path.exists():
+            continue
+
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            projects.append(
+                {
+                    "project_id": data.get("project_id", child.name),
+                    "mode": data.get("mode", "unknown"),
+                    "current_phase": data.get("current_phase") or "none",
+                    "status": data.get("status", "unknown"),
+                    "created_at": data.get("created_at", "")[:10],
+                }
+            )
+        except (json.JSONDecodeError, KeyError, OSError):
+            logger.debug("Skipping %s: invalid or unreadable project.json", child)
+            continue
+
+    if not projects:
+        console.print("No projects found.")
+        return
+
+    # --- Sort by created_at descending (newest first) ---
+    projects.sort(key=lambda p: p["created_at"], reverse=True)
+
+    # --- Display Rich table ---
+    table = Table(title="Projects")
+    table.add_column("Project ID", style="bold")
+    table.add_column("Mode")
+    table.add_column("Phase")
+    table.add_column("Status")
+    table.add_column("Created")
+
+    for proj in projects:
+        table.add_row(
+            proj["project_id"],
+            proj["mode"],
+            proj["current_phase"],
+            proj["status"],
+            proj["created_at"],
+        )
+
+    console.print(table)
 
 
 if __name__ == "__main__":
