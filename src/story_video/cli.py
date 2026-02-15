@@ -140,6 +140,7 @@ def _display_outcome(state: ProjectState) -> None:
       name and resume instructions.
     - **FAILED** -- red "Error" panel with the phase name and retry
       instructions.
+    - Any other status -- dim "Info" panel with the raw status value.
 
     Args:
         state: The project state to display.
@@ -173,6 +174,14 @@ def _display_outcome(state: ProjectState) -> None:
                 f"Failed at phase: {phase_name}\nRun [bold]story-video resume[/bold] to retry.",
                 title="Error",
                 border_style="red",
+            )
+        )
+    else:
+        console.print(
+            Panel(
+                f"Pipeline status: {status.value}",
+                title="Info",
+                border_style="dim",
             )
         )
 
@@ -505,7 +514,7 @@ def list_projects(
                     "mode": data.get("mode", "unknown"),
                     "current_phase": data.get("current_phase") or "none",
                     "status": data.get("status", "unknown"),
-                    "created_at": data.get("created_at", "")[:10],
+                    "created_at": data.get("created_at", ""),
                 }
             )
         except (json.JSONDecodeError, KeyError, OSError):
@@ -533,7 +542,7 @@ def list_projects(
             proj["mode"],
             proj["current_phase"],
             proj["status"],
-            proj["created_at"],
+            proj["created_at"][:10],
         )
 
     console.print(table)
