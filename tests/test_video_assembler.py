@@ -293,3 +293,21 @@ class TestAssembleVideoHappyPath:
         cmd_str = " ".join(cmd)
         assert "scene_01.mp4" in cmd_str
         assert "scene_02.mp4" not in cmd_str
+
+
+# ---------------------------------------------------------------------------
+# TestAssembleVideoSegmentValidation — missing segment file check
+# ---------------------------------------------------------------------------
+
+
+class TestAssembleVideoSegmentValidation:
+    """assemble_video() validates segment files exist before probing."""
+
+    def test_raises_when_segment_file_missing(self, project_state):
+        """FileNotFoundError when segment is marked complete but file doesn't exist."""
+        # Mark video_segment as completed but don't create the file
+        project_state.update_scene_asset(1, AssetType.VIDEO_SEGMENT, SceneStatus.COMPLETED)
+        project_state.save()
+
+        with pytest.raises(FileNotFoundError, match="Segment file"):
+            assemble_video(project_state)

@@ -753,3 +753,26 @@ class TestFlagNarrationMultipleFlagsSameScene:
         # Originals replaced
         assert "as noted in [1]" not in scene1.narration_text
         assert "the wind howled" not in scene1.narration_text
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — NARRATION_TEXT asset status updates
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationUpdatesNarrationTextStatus:
+    """flag_narration() updates NARRATION_TEXT asset status."""
+
+    def test_autonomous_marks_narration_text_completed(self, autonomous_state, flagging_client):
+        """In autonomous mode, NARRATION_TEXT status is COMPLETED for flagged scenes."""
+        flag_narration(autonomous_state, flagging_client)
+
+        for scene in autonomous_state.metadata.scenes:
+            assert scene.asset_status.narration_text == SceneStatus.COMPLETED
+
+    def test_semi_auto_marks_narration_text_completed(self, state_with_scenes, flagging_client):
+        """In semi-auto mode, NARRATION_TEXT status is also COMPLETED."""
+        flag_narration(state_with_scenes, flagging_client)
+
+        for scene in state_with_scenes.metadata.scenes:
+            assert scene.asset_status.narration_text == SceneStatus.COMPLETED

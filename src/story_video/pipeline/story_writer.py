@@ -289,7 +289,16 @@ def flag_narration(state: ProjectState, client: ClaudeClient) -> None:
 
     # 7. Semi-auto mode: flags file only — no narration_text changes
 
-    # 8. Persist state
+    # 8. Update NARRATION_TEXT status for all scenes
+    for scene in scenes:
+        state.update_scene_asset(
+            scene.scene_number, AssetType.NARRATION_TEXT, SceneStatus.IN_PROGRESS
+        )
+        state.update_scene_asset(
+            scene.scene_number, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED
+        )
+
+    # 9. Persist state
     state.save()
 
 

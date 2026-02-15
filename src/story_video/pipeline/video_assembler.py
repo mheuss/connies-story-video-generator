@@ -125,6 +125,12 @@ def assemble_video(state: ProjectState) -> Path:
         segment_path = state.project_dir / "segments" / f"scene_{nn}.mp4"
         segment_paths.append(segment_path)
 
+    # Validate segment files exist
+    for path in segment_paths:
+        if not path.exists():
+            msg = f"Segment file not found: {path}"
+            raise FileNotFoundError(msg)
+
     # Probe durations
     segment_durations: list[float] = []
     for path in segment_paths:
