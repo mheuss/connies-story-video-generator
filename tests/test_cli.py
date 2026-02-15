@@ -467,3 +467,52 @@ class TestResumeCommand:
         )
         assert result.exit_code != 0
         assert "not found" in result.output.lower()
+
+
+class TestEstimateCommand:
+    """Tests for the estimate CLI command — projected cost display."""
+
+    def test_estimate_adapt(self):
+        """Adapt mode estimate displays cost breakdown."""
+        result = runner.invoke(app, ["estimate", "--mode", "adapt"])
+        assert result.exit_code == 0
+        assert "cost estimate" in result.output.lower()
+        assert "claude" in result.output.lower()
+        assert "$" in result.output
+
+    def test_estimate_original(self):
+        """Original mode works for estimate (all modes supported)."""
+        result = runner.invoke(app, ["estimate", "--mode", "original"])
+        assert result.exit_code == 0
+        assert "cost estimate" in result.output.lower()
+
+    def test_estimate_inspired_by(self):
+        """Inspired_by mode works for estimate."""
+        result = runner.invoke(app, ["estimate", "--mode", "inspired_by"])
+        assert result.exit_code == 0
+        assert "cost estimate" in result.output.lower()
+
+    def test_estimate_with_duration_override(self):
+        """--duration affects the estimate."""
+        result = runner.invoke(app, ["estimate", "--mode", "adapt", "--duration", "60"])
+        assert result.exit_code == 0
+        assert "60 minutes" in result.output
+
+    def test_estimate_with_voice_override(self):
+        """--voice affects the estimate (changes TTS model cost)."""
+        result = runner.invoke(app, ["estimate", "--mode", "adapt", "--voice", "nova"])
+        assert result.exit_code == 0
+        assert "cost estimate" in result.output.lower()
+
+    def test_estimate_invalid_mode(self):
+        """Unknown mode shows an error."""
+        result = runner.invoke(app, ["estimate", "--mode", "nonexistent"])
+        assert result.exit_code != 0
+        assert "unknown mode" in result.output.lower()
+
+    def test_estimate_does_not_create_project(self):
+        """Estimate doesn't call ProjectState.create."""
+        with patch("story_video.cli.ProjectState") as mock_state:
+            result = runner.invoke(app, ["estimate", "--mode", "adapt"])
+            assert result.exit_code == 0
+            mock_state.create.assert_not_called()

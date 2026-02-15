@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from story_video.config import load_config
+from story_video.cost import estimate_cost, format_cost_estimate
 from story_video.models import InputMode, PhaseStatus
 from story_video.pipeline.caption_generator import OpenAIWhisperProvider
 from story_video.pipeline.claude_client import ClaudeClient
@@ -343,9 +344,45 @@ def resume(
 
 
 @app.command()
-def estimate() -> None:
+def estimate(
+    mode: str = typer.Option(..., help="Input mode: original, inspired_by, or adapt"),
+    duration: int | None = typer.Option(None, help="Target duration in minutes"),
+    voice: str | None = typer.Option(None, help="TTS voice name (affects cost)"),
+    config: Path | None = typer.Option(None, help="Path to config.yaml"),
+) -> None:
     """Show cost estimate without starting generation."""
-    typer.echo("Not yet implemented.")
+    # --- Validate mode ---
+    try:
+        input_mode = InputMode(mode)
+    except ValueError:
+        console.print(
+            Panel(
+                f"Unknown mode: '{mode}'. Valid modes: adapt, original, inspired_by",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+    # --- Build config overrides ---
+    cli_overrides: dict[str, Any] = {}
+    if duration is not None:
+        cli_overrides["story.target_duration_minutes"] = duration
+    if voice is not None:
+        cli_overrides["tts.voice"] = voice
+
+    # --- Load config ---
+    try:
+        app_config = load_config(config_path=config, cli_overrides=cli_overrides)
+    except Exception as exc:
+        console.print(Panel(str(exc), title="Configuration Error", border_style="red"))
+        raise typer.Exit(1)
+
+    # --- Calculate and display cost estimate ---
+    cost = estimate_cost(input_mode, app_config)
+    formatted = format_cost_estimate(cost)
+
+    console.print(Panel(formatted, title="Cost Estimate", border_style="cyan"))
 
 
 @app.command()
