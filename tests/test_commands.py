@@ -132,6 +132,11 @@ class TestBuildConcatCommand:
         result = build_concat_command(segments, durations, output, video_config)
         assert str(output) in result
 
+    def test_empty_segments_raises(self, video_config):
+        """Empty segment list raises ValueError."""
+        with pytest.raises(ValueError, match="at least one segment"):
+            build_concat_command([], [], Path("/tmp/final.mp4"), video_config)
+
     def test_single_segment_no_xfade(self, tmp_path, video_config):
         """Single segment produces no xfade, just fade in/out."""
         segments = [tmp_path / "s1.mp4"]

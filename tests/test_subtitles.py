@@ -258,7 +258,7 @@ class TestFormatASSTime:
         assert _format_ass_time(1.234) == "0:00:01.23"
 
     def test_centisecond_rounding(self):
-        """Time with >2 decimal digits is truncated to centiseconds."""
+        """Time with >2 decimal digits is rounded to centiseconds."""
         assert _format_ass_time(1.999) == "0:00:02.00"
 
 
@@ -308,6 +308,15 @@ class TestLineWrapping:
         dialogue_lines = [ln for ln in result.split("\n") if ln.startswith("Dialogue:")]
         has_multiline = any("\\N" in ln for ln in dialogue_lines)
         assert has_multiline, "Expected multi-line subtitles with small max_chars_per_line"
+
+    def test_max_lines_one_creates_single_line_events(self):
+        """With max_lines=1, each subtitle line becomes its own event (no \\N)."""
+        config = SubtitleConfig(max_chars_per_line=20, max_lines=1)
+        result = generate_ass_content(_make_caption_result(), config, _default_video_config())
+        dialogue_lines = [ln for ln in result.split("\n") if ln.startswith("Dialogue:")]
+        for line in dialogue_lines:
+            text = line.split(",", 9)[-1]
+            assert "\\N" not in text, f"Expected single-line event, got: '{text}'"
 
     def test_default_config_fits_short_text(self):
         """With default config (42 chars), our 9-word test fits in few dialogue events."""

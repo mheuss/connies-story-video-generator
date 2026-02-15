@@ -114,7 +114,6 @@ def build_segment_command(
     # [0:v] -> ken burns -> [kb]
     # [bg][kb] -> overlay centered -> [comp]
     # [comp] -> subtitle overlay -> [out]
-    w, h = video_config.resolution.split("x")
     filtergraph = (
         f"[0:v]{bg_filter}[bg];"
         f"[0:v]{kb_filter}[kb];"
@@ -171,7 +170,14 @@ def build_concat_command(
 
     Returns:
         FFmpeg command as a list of strings.
+
+    Raises:
+        ValueError: If segment_paths is empty.
     """
+    if not segment_paths:
+        msg = "segment_paths must contain at least one segment"
+        raise ValueError(msg)
+
     n = len(segment_paths)
     transition_dur = video_config.transition_duration
     fade_in_dur = video_config.fade_in_duration
@@ -228,13 +234,8 @@ def build_concat_command(
         next_video = f"[{i + 1}:v]"
         next_audio = f"[{i + 1}:a]"
 
-        if i < n - 2:
-            out_video = f"[xf{i}]"
-            out_audio = f"[axf{i}]"
-        else:
-            # Last xfade — label for fade in/out
-            out_video = f"[xf{i}]"
-            out_audio = f"[axf{i}]"
+        out_video = f"[xf{i}]"
+        out_audio = f"[axf{i}]"
 
         video_parts.append(
             f"{prev_video_label}{next_video}"

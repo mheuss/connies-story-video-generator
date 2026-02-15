@@ -259,3 +259,33 @@ class TestAssembleVideoHappyPath:
         idx_2 = cmd_str.index("scene_02.mp4")
         idx_3 = cmd_str.index("scene_03.mp4")
         assert idx_1 < idx_2 < idx_3
+
+    @patch("story_video.pipeline.video_assembler.probe_duration", return_value=10.0)
+    @patch("story_video.pipeline.video_assembler.run_ffmpeg")
+    def test_skips_incomplete_scenes(self, mock_run, mock_probe, tmp_path):
+        """Only scenes with completed video_segment are included."""
+        config = AppConfig(tts=TTSConfig(output_format="mp3"))
+        state = ProjectState.create("skip-test", InputMode.ADAPT, config, tmp_path)
+
+        for i in [1, 2]:
+            state.add_scene(scene_number=i, title=f"Scene {i}", prose=f"Prose {i}.")
+            state.update_scene_asset(i, AssetType.TEXT, SceneStatus.COMPLETED)
+            state.update_scene_asset(i, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
+            state.update_scene_asset(i, AssetType.AUDIO, SceneStatus.COMPLETED)
+            state.update_scene_asset(i, AssetType.IMAGE, SceneStatus.COMPLETED)
+            state.update_scene_asset(i, AssetType.CAPTIONS, SceneStatus.COMPLETED)
+
+        # Only scene 1 has completed video_segment
+        state.update_scene_asset(1, AssetType.VIDEO_SEGMENT, SceneStatus.COMPLETED)
+        state.save()
+
+        segments_dir = state.project_dir / "segments"
+        segments_dir.mkdir(exist_ok=True)
+        (segments_dir / "scene_01.mp4").write_bytes(b"segment")
+
+        assemble_video(state)
+
+        cmd = mock_run.call_args[0][0]
+        cmd_str = " ".join(cmd)
+        assert "scene_01.mp4" in cmd_str
+        assert "scene_02.mp4" not in cmd_str

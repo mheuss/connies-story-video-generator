@@ -115,10 +115,12 @@ def assemble_video(state: ProjectState) -> Path:
     """
     video_config = state.metadata.config.video
 
-    # Collect segments in scene order
+    # Collect completed segments in scene order
     scenes_sorted = sorted(state.metadata.scenes, key=lambda s: s.scene_number)
     segment_paths: list[Path] = []
     for scene in scenes_sorted:
+        if scene.asset_status.video_segment != SceneStatus.COMPLETED:
+            continue
         nn = f"{scene.scene_number:02d}"
         segment_path = state.project_dir / "segments" / f"scene_{nn}.mp4"
         segment_paths.append(segment_path)
