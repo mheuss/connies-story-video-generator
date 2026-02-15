@@ -91,7 +91,7 @@ def generate_image(scene: Scene, state: ProjectState, provider: ImageProvider) -
         raise ValueError(msg)
 
     img_config = state.metadata.config.images
-    full_prompt = f"{img_config.style_prefix} {scene.image_prompt}"
+    full_prompt = f"{img_config.style_prefix} {scene.image_prompt}".strip()
 
     image_bytes = provider.generate(
         full_prompt,

@@ -315,6 +315,33 @@ class TestOpenAITTSProviderNoRetryOnPermanentErrors:
 
         assert mock_openai.audio.speech.create.call_count == 1
 
+    def test_synthesize_no_retry_on_permission_error(self, mock_openai):
+        """synthesize() does not retry on PermissionDeniedError."""
+        from openai import PermissionDeniedError
+
+        response_403 = MagicMock()
+        response_403.status_code = 403
+        response_403.json.return_value = {"error": {"message": "permission denied"}}
+
+        mock_openai.audio.speech.create.side_effect = PermissionDeniedError(
+            message="permission denied",
+            response=response_403,
+            body={"error": {"message": "permission denied"}},
+        )
+
+        provider = OpenAITTSProvider()
+
+        with pytest.raises(PermissionDeniedError):
+            provider.synthesize(
+                text="test",
+                voice="nova",
+                model="tts-1-hd",
+                speed=1.0,
+                output_format="mp3",
+            )
+
+        assert mock_openai.audio.speech.create.call_count == 1
+
 
 # ---------------------------------------------------------------------------
 # generate_audio — happy path

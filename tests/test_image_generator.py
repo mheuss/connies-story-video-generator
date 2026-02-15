@@ -311,6 +311,32 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
 
         assert mock_openai.images.generate.call_count == 1
 
+    def test_generate_no_retry_on_permission_error(self, mock_openai):
+        """generate() does not retry on PermissionDeniedError."""
+        from openai import PermissionDeniedError
+
+        response_403 = MagicMock()
+        response_403.status_code = 403
+        response_403.json.return_value = {"error": {"message": "permission denied"}}
+
+        mock_openai.images.generate.side_effect = PermissionDeniedError(
+            message="permission denied",
+            response=response_403,
+            body={"error": {"message": "permission denied"}},
+        )
+
+        provider = OpenAIImageProvider()
+
+        with pytest.raises(PermissionDeniedError):
+            provider.generate(
+                prompt="test",
+                size="1024x1024",
+                quality="standard",
+                style="vivid",
+            )
+
+        assert mock_openai.images.generate.call_count == 1
+
 
 # ---------------------------------------------------------------------------
 # generate_image — happy path
