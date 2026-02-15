@@ -188,7 +188,7 @@ def split_scenes(state: ProjectState, client: ClaudeClient) -> None:
     scenes_dir.mkdir(exist_ok=True)
     for i, scene in enumerate(scenes):
         scene_number = i + 1
-        filename = f"scene_{scene_number:02d}.md"
+        filename = f"scene_{scene_number:03d}.md"
         content = f"# Scene {scene_number}: {scene['title']}\n\n{scene['text']}\n"
         (scenes_dir / filename).write_text(content, encoding="utf-8")
 

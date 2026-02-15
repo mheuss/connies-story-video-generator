@@ -102,7 +102,7 @@ def generate_image(scene: Scene, state: ProjectState, provider: ImageProvider) -
 
     images_dir = state.project_dir / "images"
     images_dir.mkdir(exist_ok=True)
-    filename = f"scene_{scene.scene_number:02d}.png"
+    filename = f"scene_{scene.scene_number:03d}.png"
     image_path = images_dir / filename
     image_path.write_bytes(image_bytes)
 

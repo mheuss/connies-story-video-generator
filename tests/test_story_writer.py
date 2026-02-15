@@ -91,9 +91,9 @@ class TestSplitScenesHappyPath:
         assert len(sample_state.metadata.scenes) == 3
 
         scenes_dir = sample_state.project_dir / "scenes"
-        assert (scenes_dir / "scene_01.md").exists()
-        assert (scenes_dir / "scene_02.md").exists()
-        assert (scenes_dir / "scene_03.md").exists()
+        assert (scenes_dir / "scene_001.md").exists()
+        assert (scenes_dir / "scene_002.md").exists()
+        assert (scenes_dir / "scene_003.md").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -147,24 +147,24 @@ class TestSplitScenesMdFilesWritten:
     """split_scenes() writes correctly formatted .md files."""
 
     def test_split_scenes_md_files_written(self, sample_state, mock_client):
-        """Verify scene_01.md, scene_02.md content matches expected format."""
+        """Verify scene_001.md, scene_002.md content matches expected format."""
         split_scenes(sample_state, mock_client)
 
         scenes_dir = sample_state.project_dir / "scenes"
 
-        content_01 = (scenes_dir / "scene_01.md").read_text()
+        content_01 = (scenes_dir / "scene_001.md").read_text()
         expected_01 = (
             "# Scene 1: The Storm\n\nPart one of the story. It was a dark and stormy night.\n"
         )
         assert content_01 == expected_01
 
-        content_02 = (scenes_dir / "scene_02.md").read_text()
+        content_02 = (scenes_dir / "scene_002.md").read_text()
         expected_02 = (
             "# Scene 2: The Journey\n\nPart two of the story. The hero ventured forth bravely.\n"
         )
         assert content_02 == expected_02
 
-        content_03 = (scenes_dir / "scene_03.md").read_text()
+        content_03 = (scenes_dir / "scene_003.md").read_text()
         expected_03 = (
             "# Scene 3: The Ending\n\n"
             "Part three of the story. And they all lived happily ever after.\n"

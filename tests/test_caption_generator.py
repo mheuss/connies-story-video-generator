@@ -121,7 +121,7 @@ def project_state(tmp_path):
     # Create a fake audio file
     audio_dir = state.project_dir / "audio"
     audio_dir.mkdir(exist_ok=True)
-    audio_path = audio_dir / "scene_01.mp3"
+    audio_path = audio_dir / "scene_001.mp3"
     audio_path.write_bytes(b"fake audio content")
 
     return state
@@ -386,7 +386,7 @@ class TestGenerateCaptionsHappyPath:
         scene = project_state.metadata.scenes[0]
         generate_captions(scene, project_state, fake_caption_provider)
 
-        caption_path = project_state.project_dir / "captions" / "scene_01.json"
+        caption_path = project_state.project_dir / "captions" / "scene_001.json"
         assert caption_path.exists()
 
         content = json.loads(caption_path.read_text(encoding="utf-8"))
@@ -426,7 +426,7 @@ class TestGenerateCaptionsProviderCall:
         scene = project_state.metadata.scenes[0]
         generate_captions(scene, project_state, fake_caption_provider)
 
-        expected_path = project_state.project_dir / "audio" / "scene_01.mp3"
+        expected_path = project_state.project_dir / "audio" / "scene_001.mp3"
         fake_caption_provider.transcribe.assert_called_once_with(expected_path)
 
 
@@ -464,7 +464,7 @@ class TestGenerateCaptionsMultiDigitScene:
     """generate_captions() zero-pads scene numbers in filenames."""
 
     def test_scene_number_zero_padded(self, tmp_path, fake_caption_provider):
-        """Scene 12 reads scene_12.mp3 and writes scene_12.json."""
+        """Scene 12 reads scene_012.mp3 and writes scene_012.json."""
         config = AppConfig(tts=TTSConfig(output_format="mp3"))
         state = ProjectState.create("multi-digit-test", InputMode.ADAPT, config, tmp_path)
         state.add_scene(scene_number=12, title="Scene Twelve", prose="The twelfth scene.")
@@ -476,10 +476,10 @@ class TestGenerateCaptionsMultiDigitScene:
         # Create a fake audio file with the correct name
         audio_dir = state.project_dir / "audio"
         audio_dir.mkdir(exist_ok=True)
-        (audio_dir / "scene_12.mp3").write_bytes(b"fake audio")
+        (audio_dir / "scene_012.mp3").write_bytes(b"fake audio")
 
         scene = state.metadata.scenes[0]
         generate_captions(scene, state, fake_caption_provider)
 
-        caption_path = state.project_dir / "captions" / "scene_12.json"
+        caption_path = state.project_dir / "captions" / "scene_012.json"
         assert caption_path.exists()

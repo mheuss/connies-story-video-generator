@@ -357,7 +357,7 @@ class TestGenerateAudioHappyPath:
         generate_audio(scene, state_with_scene, mock_provider)
 
         # File written
-        audio_path = state_with_scene.project_dir / "audio" / "scene_01.mp3"
+        audio_path = state_with_scene.project_dir / "audio" / "scene_001.mp3"
         assert audio_path.exists()
         assert audio_path.read_bytes() == b"fake-audio-bytes"
 
@@ -446,7 +446,7 @@ class TestGenerateAudioConfigOutputFormat:
         scene = state.metadata.scenes[0]
         generate_audio(scene, state, mock_provider)
 
-        audio_path = state.project_dir / "audio" / "scene_01.opus"
+        audio_path = state.project_dir / "audio" / "scene_001.opus"
         assert audio_path.exists()
 
 
@@ -509,7 +509,7 @@ class TestGenerateAudioMultiDigitSceneNumber:
     """generate_audio() zero-pads scene numbers in filenames."""
 
     def test_generate_audio_zero_pads_scene_number(self, tmp_path, mock_provider):
-        """Scene 12 produces scene_12.mp3."""
+        """Scene 12 produces scene_012.mp3."""
         state = ProjectState.create(
             project_id="multi-digit-test",
             mode=InputMode.ADAPT,
@@ -523,5 +523,5 @@ class TestGenerateAudioMultiDigitSceneNumber:
         scene = state.metadata.scenes[0]
         generate_audio(scene, state, mock_provider)
 
-        audio_path = state.project_dir / "audio" / "scene_12.mp3"
+        audio_path = state.project_dir / "audio" / "scene_012.mp3"
         assert audio_path.exists()

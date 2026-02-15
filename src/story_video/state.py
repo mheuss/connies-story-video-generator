@@ -222,6 +222,8 @@ class ProjectState:
             tmp_path.write_text(content, encoding="utf-8")
             tmp_path.replace(json_path)
         except BaseException:
+            # BaseException (not Exception) ensures cleanup runs even on
+            # KeyboardInterrupt or SystemExit — important for atomic write safety.
             tmp_path.unlink(missing_ok=True)
             raise
 

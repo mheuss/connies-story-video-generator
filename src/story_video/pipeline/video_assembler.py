@@ -48,7 +48,7 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     tts_config = config.tts
     video_config = config.video
     subtitle_config = config.subtitles
-    nn = f"{scene.scene_number:02d}"
+    nn = f"{scene.scene_number:03d}"
 
     # Resolve prerequisite file paths
     audio_path = state.project_dir / "audio" / f"scene_{nn}.{tts_config.output_format}"
@@ -121,7 +121,7 @@ def assemble_video(state: ProjectState) -> Path:
     for scene in scenes_sorted:
         if scene.asset_status.video_segment != SceneStatus.COMPLETED:
             continue
-        nn = f"{scene.scene_number:02d}"
+        nn = f"{scene.scene_number:03d}"
         segment_path = state.project_dir / "segments" / f"scene_{nn}.mp4"
         segment_paths.append(segment_path)
 

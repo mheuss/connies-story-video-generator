@@ -44,15 +44,15 @@ def _setup_scene_prerequisites(state, scene_number=1):
     tts_config = state.metadata.config.tts
     audio_dir = state.project_dir / "audio"
     audio_dir.mkdir(exist_ok=True)
-    (audio_dir / f"scene_{scene_number:02d}.{tts_config.output_format}").write_bytes(b"audio")
+    (audio_dir / f"scene_{scene_number:03d}.{tts_config.output_format}").write_bytes(b"audio")
 
     images_dir = state.project_dir / "images"
     images_dir.mkdir(exist_ok=True)
-    (images_dir / f"scene_{scene_number:02d}.png").write_bytes(b"image")
+    (images_dir / f"scene_{scene_number:03d}.png").write_bytes(b"image")
 
     captions_dir = state.project_dir / "captions"
     captions_dir.mkdir(exist_ok=True)
-    (captions_dir / f"scene_{scene_number:02d}.json").write_text(
+    (captions_dir / f"scene_{scene_number:03d}.json").write_text(
         _make_caption_json(), encoding="utf-8"
     )
 
@@ -114,11 +114,11 @@ class TestAssembleSceneHappyPath:
 
     @patch("story_video.pipeline.video_assembler.run_ffmpeg")
     def test_writes_ass_file(self, mock_run, project_state):
-        """ASS subtitle file is written to captions/scene_01.ass."""
+        """ASS subtitle file is written to captions/scene_001.ass."""
         scene = project_state.metadata.scenes[0]
         assemble_scene(scene, project_state)
 
-        ass_path = project_state.project_dir / "captions" / "scene_01.ass"
+        ass_path = project_state.project_dir / "captions" / "scene_001.ass"
         assert ass_path.exists()
         content = ass_path.read_text(encoding="utf-8")
         assert "[Script Info]" in content
@@ -143,7 +143,7 @@ class TestAssembleSceneValidation:
 
     def test_raises_when_audio_missing(self, project_state):
         """FileNotFoundError raised when audio file does not exist."""
-        audio_path = project_state.project_dir / "audio" / "scene_01.mp3"
+        audio_path = project_state.project_dir / "audio" / "scene_001.mp3"
         audio_path.unlink()
 
         scene = project_state.metadata.scenes[0]
@@ -152,7 +152,7 @@ class TestAssembleSceneValidation:
 
     def test_raises_when_image_missing(self, project_state):
         """FileNotFoundError raised when image file does not exist."""
-        image_path = project_state.project_dir / "images" / "scene_01.png"
+        image_path = project_state.project_dir / "images" / "scene_001.png"
         image_path.unlink()
 
         scene = project_state.metadata.scenes[0]
@@ -161,7 +161,7 @@ class TestAssembleSceneValidation:
 
     def test_raises_when_caption_json_missing(self, project_state):
         """FileNotFoundError raised when caption JSON does not exist."""
-        caption_path = project_state.project_dir / "captions" / "scene_01.json"
+        caption_path = project_state.project_dir / "captions" / "scene_001.json"
         caption_path.unlink()
 
         scene = project_state.metadata.scenes[0]
@@ -204,7 +204,7 @@ class TestAssembleVideoHappyPath:
         # Create a fake segment file
         segments_dir = project_state.project_dir / "segments"
         segments_dir.mkdir(exist_ok=True)
-        (segments_dir / "scene_01.mp4").write_bytes(b"segment")
+        (segments_dir / "scene_001.mp4").write_bytes(b"segment")
 
         # Mark video_segment as completed
         project_state.update_scene_asset(1, AssetType.VIDEO_SEGMENT, SceneStatus.COMPLETED)
@@ -221,7 +221,7 @@ class TestAssembleVideoHappyPath:
         """run_ffmpeg is called exactly once for concatenation."""
         segments_dir = project_state.project_dir / "segments"
         segments_dir.mkdir(exist_ok=True)
-        (segments_dir / "scene_01.mp4").write_bytes(b"segment")
+        (segments_dir / "scene_001.mp4").write_bytes(b"segment")
 
         project_state.update_scene_asset(1, AssetType.VIDEO_SEGMENT, SceneStatus.COMPLETED)
         project_state.save()
@@ -252,16 +252,16 @@ class TestAssembleVideoHappyPath:
         segments_dir = state.project_dir / "segments"
         segments_dir.mkdir(exist_ok=True)
         for i in [1, 2, 3]:
-            (segments_dir / f"scene_{i:02d}.mp4").write_bytes(b"segment")
+            (segments_dir / f"scene_{i:03d}.mp4").write_bytes(b"segment")
 
         assemble_video(state)
 
         # Verify run_ffmpeg was called with a command containing segments in order
         cmd = mock_run.call_args[0][0]
         cmd_str = " ".join(cmd)
-        idx_1 = cmd_str.index("scene_01.mp4")
-        idx_2 = cmd_str.index("scene_02.mp4")
-        idx_3 = cmd_str.index("scene_03.mp4")
+        idx_1 = cmd_str.index("scene_001.mp4")
+        idx_2 = cmd_str.index("scene_002.mp4")
+        idx_3 = cmd_str.index("scene_003.mp4")
         assert idx_1 < idx_2 < idx_3
 
     @patch("story_video.pipeline.video_assembler.probe_duration", return_value=10.0)
@@ -285,14 +285,14 @@ class TestAssembleVideoHappyPath:
 
         segments_dir = state.project_dir / "segments"
         segments_dir.mkdir(exist_ok=True)
-        (segments_dir / "scene_01.mp4").write_bytes(b"segment")
+        (segments_dir / "scene_001.mp4").write_bytes(b"segment")
 
         assemble_video(state)
 
         cmd = mock_run.call_args[0][0]
         cmd_str = " ".join(cmd)
-        assert "scene_01.mp4" in cmd_str
-        assert "scene_02.mp4" not in cmd_str
+        assert "scene_001.mp4" in cmd_str
+        assert "scene_002.mp4" not in cmd_str
 
 
 # ---------------------------------------------------------------------------

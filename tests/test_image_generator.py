@@ -360,7 +360,7 @@ class TestGenerateImageHappyPath:
         generate_image(scene, project_state, fake_provider)
 
         # File written
-        image_path = project_state.project_dir / "images" / "scene_01.png"
+        image_path = project_state.project_dir / "images" / "scene_001.png"
         assert image_path.exists()
         assert image_path.read_bytes() == FAKE_PNG
 
@@ -451,7 +451,7 @@ class TestGenerateImageAlwaysWritesPng:
         scene = state.metadata.scenes[0]
         generate_image(scene, state, fake_provider)
 
-        image_path = state.project_dir / "images" / "scene_01.png"
+        image_path = state.project_dir / "images" / "scene_001.png"
         assert image_path.exists()
 
 
@@ -464,7 +464,7 @@ class TestGenerateImageMultiDigitSceneNumber:
     """generate_image() zero-pads scene numbers in filenames."""
 
     def test_generate_image_zero_pads_scene_number(self, tmp_path, fake_provider):
-        """Scene 12 produces scene_12.png."""
+        """Scene 12 produces scene_012.png."""
         config = AppConfig(
             images=ImageConfig(
                 style_prefix="Art:",
@@ -481,7 +481,7 @@ class TestGenerateImageMultiDigitSceneNumber:
         scene = state.metadata.scenes[0]
         generate_image(scene, state, fake_provider)
 
-        image_path = state.project_dir / "images" / "scene_12.png"
+        image_path = state.project_dir / "images" / "scene_012.png"
         assert image_path.exists()
 
 

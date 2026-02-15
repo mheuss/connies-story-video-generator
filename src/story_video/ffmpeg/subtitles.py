@@ -236,4 +236,6 @@ def subtitle_filter(ass_path: Path) -> str:
     Returns:
         Filter string in the form ``ass='/path/to/file.ass'``.
     """
+    # NOTE: Single quotes work on macOS/Linux. Windows FFmpeg may need
+    # escaped backslashes or forward slashes instead.
     return f"ass='{ass_path}'"

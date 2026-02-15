@@ -347,5 +347,4 @@ def _format_cost_value(low: float, high: float) -> str:
     if abs(low - high) < 0.005:
         # Exact cost (low and high are effectively equal)
         return f"${low:.2f}"
-    else:
-        return f"${low:.2f} - ${high:.2f}"
+    return f"${low:.2f} - ${high:.2f}"

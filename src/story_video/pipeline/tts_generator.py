@@ -112,7 +112,7 @@ def generate_audio(scene: Scene, state: ProjectState, provider: TTSProvider) -> 
 
     audio_dir = state.project_dir / "audio"
     audio_dir.mkdir(exist_ok=True)
-    filename = f"scene_{scene.scene_number:02d}.{tts_config.output_format}"
+    filename = f"scene_{scene.scene_number:03d}.{tts_config.output_format}"
     audio_path = audio_dir / filename
     audio_path.write_bytes(audio_bytes)
 
