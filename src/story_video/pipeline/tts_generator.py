@@ -4,6 +4,7 @@ Converts scene narration text to audio files using a pluggable TTS provider.
 Ships with OpenAI and ElevenLabs implementations.
 """
 
+import re
 from typing import Protocol
 
 import elevenlabs
@@ -21,6 +22,9 @@ __all__ = [
     "TTSProvider",
     "generate_audio",
 ]
+
+# Pattern to detect voice/mood tags in text (for fail-fast validation).
+_TAG_CHECK_PATTERN = re.compile(r"\*\*(voice|mood):([^*]+)\*\*")
 
 
 class TTSProvider(Protocol):
@@ -197,7 +201,8 @@ def generate_audio(
         story_header: Optional parsed story header with voice mappings.
 
     Raises:
-        ValueError: If the scene has no text content.
+        ValueError: If the scene has no text content, or if voice/mood
+            tags are present but no story header was provided.
     """
     text = scene.narration_text if scene.narration_text is not None else scene.prose
     if not text.strip():
@@ -205,6 +210,15 @@ def generate_audio(
         raise ValueError(msg)
 
     tts_config = state.metadata.config.tts
+
+    # Fail fast if tags are present but no header defines the voice mappings.
+    # Without this check, tags would be spoken aloud as literal text.
+    if story_header is None and _TAG_CHECK_PATTERN.search(text):
+        msg = (
+            f"Voice/mood tag found in scene {scene.scene_number} text but no "
+            "voices header defined. Add a YAML header with voice mappings."
+        )
+        raise ValueError(msg)
 
     if story_header is not None:
         # Multi-segment path
