@@ -27,7 +27,9 @@ IMAGE_PROMPT_SYSTEM = (
     "between images)\n"
     "- Cinematic: frame it like a movie still or painting\n"
     "- 1-3 sentences long\n\n"
-    "Do NOT include text overlays, watermarks, or UI elements in prompts."
+    "Do NOT include text overlays, watermarks, or UI elements in prompts.\n\n"
+    "IMPORTANT: Generate exactly one prompt per scene provided. Do not create"
+    " prompts for scene numbers that are not in the input."
 )
 
 IMAGE_PROMPT_SCHEMA = {

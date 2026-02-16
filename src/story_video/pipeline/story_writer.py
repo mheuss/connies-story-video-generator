@@ -26,6 +26,8 @@ SCENE_SPLIT_SYSTEM = (
     "- Never split mid-paragraph\n"
     "- Never split mid-dialogue (keep complete dialogue exchanges together)\n"
     "- Target 1500-2000 words per scene, but prioritize natural boundaries\n"
+    "- For stories under 1000 words, create at least 2 scenes at the"
+    " strongest narrative shift\n"
     "- Each scene should have a clear beginning, middle, or end\n"
     "- Preserve every word exactly — do not add, remove, or rephrase anything\n"
     "- Assign each scene a short, descriptive title (3-6 words)"

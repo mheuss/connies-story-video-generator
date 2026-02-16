@@ -96,6 +96,83 @@ class OpenAIWhisperProvider:
 
 
 # ---------------------------------------------------------------------------
+# Punctuation reconciliation
+# ---------------------------------------------------------------------------
+
+
+def _reconcile_punctuation(result: CaptionResult) -> CaptionResult:
+    """Restore punctuation from segment text to word timestamps.
+
+    Whisper word-level timestamps strip punctuation, but segment text
+    preserves it. This function walks each segment's text with a cursor,
+    matching words by position, and appends any trailing non-alphanumeric
+    characters to the word.
+
+    Fails gracefully — unmatched words are left unchanged.
+
+    Args:
+        result: CaptionResult with segments (punctuated) and words (bare).
+
+    Returns:
+        A new CaptionResult with punctuation restored on words.
+    """
+    if not result.words:
+        return result
+
+    new_words = list(result.words)
+
+    for segment in result.segments:
+        seg_text = segment.text.strip()
+        cursor = 0
+
+        for i, word in enumerate(new_words):
+            # Only process words within this segment's time range
+            if word.start < segment.start - 0.01 or word.start > segment.end + 0.01:
+                continue
+
+            # Strip any existing punctuation from the word for matching
+            bare_word = word.word.rstrip(".,!?;:\u2014\"'\u201c\u201d\u2018\u2019\u2026-")
+            if not bare_word:
+                continue
+
+            # Find the word in segment text starting from cursor
+            pos = seg_text.find(bare_word, cursor)
+            if pos == -1:
+                # Try case-insensitive match
+                pos = seg_text.lower().find(bare_word.lower(), cursor)
+            if pos == -1:
+                continue
+
+            # Advance past the word
+            end_of_word = pos + len(bare_word)
+
+            # Grab trailing non-alphanumeric, non-space characters
+            trailing = ""
+            j = end_of_word
+            while j < len(seg_text) and not seg_text[j].isalnum() and seg_text[j] != " ":
+                trailing += seg_text[j]
+                j += 1
+
+            # Update word with punctuation if it doesn't already have it
+            if trailing and not word.word.endswith(trailing):
+                new_words[i] = CaptionWord(
+                    word=bare_word + trailing,
+                    start=word.start,
+                    end=word.end,
+                )
+
+            # Advance cursor past matched content
+            cursor = j
+
+    return CaptionResult(
+        segments=result.segments,
+        words=new_words,
+        language=result.language,
+        duration=result.duration,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public function
 # ---------------------------------------------------------------------------
 
@@ -123,6 +200,7 @@ def generate_captions(scene: Scene, state: ProjectState, provider: CaptionProvid
         raise FileNotFoundError(msg)
 
     result = provider.transcribe(audio_path)
+    result = _reconcile_punctuation(result)
 
     captions_dir = state.project_dir / "captions"
     captions_dir.mkdir(exist_ok=True)

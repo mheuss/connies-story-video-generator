@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `ken_burns_enabled` video config toggle — set to `false` to use still images instead of Ken Burns zoom/pan effect
 - Text utilities for TTS narration prep — expands abbreviations, converts numbers to words, inserts dramatic pauses, and smooths punctuation
 - Retry decorators with exponential backoff for API calls (configurable retries, delays, exception filtering)
 - Cost estimation for story video projects — calculates per-service costs (Claude, TTS, DALL-E, Whisper) with projected and actual modes
@@ -27,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 ### Fixed
+- Ken Burns zoom/pan motion smoothed with sine ease-in-out curve (was jerky linear interpolation)
+- Caption subtitles now include punctuation (periods, commas, question marks) reconciled from Whisper segment text
+- Short stories (under 1000 words) now produce at least 2 scenes instead of 1
+- Success message now correctly points to `final.mp4` instead of empty `video/` directory
 
 ### Security
 

@@ -257,6 +257,7 @@ class VideoConfig(BaseModel):
         background_blur_radius: Gaussian blur radius for blurred background.
         background_image: Optional path to a custom background image.
         ken_burns_zoom: Maximum zoom factor for Ken Burns effect.
+        ken_burns_enabled: Whether to apply Ken Burns zoom/pan effect (False uses still image).
         transition_duration: Crossfade duration between scenes in seconds.
         fade_in_duration: Fade-from-black duration at video start in seconds.
         fade_out_duration: Fade-to-black duration at video end in seconds.
@@ -272,6 +273,7 @@ class VideoConfig(BaseModel):
     background_blur_radius: int = Field(default=40, ge=0)
     background_image: Path | None = Field(default=None)
     ken_burns_zoom: float = Field(default=1.08, gt=0)
+    ken_burns_enabled: bool = Field(default=True)
     transition_duration: float = Field(default=1.5, ge=0)
     fade_in_duration: float = Field(default=2.0, ge=0)
     fade_out_duration: float = Field(default=3.0, ge=0)

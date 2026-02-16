@@ -272,3 +272,60 @@ class TestBlurBackgroundRadius:
         """Blur radius 50 appears in the filter expression."""
         result = blur_background_filter(blur_radius=50, resolution="1920x1080")
         assert "sigma=50" in result
+
+
+# ---------------------------------------------------------------------------
+# Ken Burns — sine easing instead of linear interpolation
+# ---------------------------------------------------------------------------
+
+
+class TestKenBurnsEasing:
+    """Ken Burns uses sine-based easing instead of linear interpolation."""
+
+    def test_zoom_in_uses_cosine_easing(self):
+        """Direction 0 zoom expression contains cos() for easing."""
+        result = ken_burns_filter(duration=5.0, zoom=1.3, direction=0, resolution="1920x1080")
+        assert "cos(" in result
+
+    def test_pan_left_position_uses_cosine_easing(self):
+        """Direction 2 x expression contains cos() for eased drift."""
+        result = ken_burns_filter(duration=5.0, zoom=1.3, direction=2, resolution="1920x1080")
+        assert "cos(" in result
+
+    def test_pan_right_position_uses_cosine_easing(self):
+        """Direction 3 x expression contains cos() for eased drift."""
+        result = ken_burns_filter(duration=5.0, zoom=1.3, direction=3, resolution="1920x1080")
+        assert "cos(" in result
+
+    def test_diagonal_both_axes_use_cosine_easing(self):
+        """Direction 4 both x and y expressions contain cos() for easing."""
+        result = ken_burns_filter(duration=5.0, zoom=1.3, direction=4, resolution="1920x1080")
+        assert result.count("cos(") >= 2
+
+    def test_zoom_out_uses_cosine_easing(self):
+        """Direction 1 zoom expression contains cos() for easing."""
+        result = ken_burns_filter(duration=5.0, zoom=1.3, direction=1, resolution="1920x1080")
+        assert "cos(" in result
+
+
+# ---------------------------------------------------------------------------
+# Ken Burns — config toggle
+# ---------------------------------------------------------------------------
+
+
+class TestKenBurnsConfigToggle:
+    """VideoConfig.ken_burns_enabled controls whether Ken Burns is applied."""
+
+    def test_ken_burns_enabled_default_true(self):
+        """ken_burns_enabled defaults to True."""
+        from story_video.models import VideoConfig
+
+        config = VideoConfig()
+        assert config.ken_burns_enabled is True
+
+    def test_ken_burns_disabled(self):
+        """ken_burns_enabled can be set to False."""
+        from story_video.models import VideoConfig
+
+        config = VideoConfig(ken_burns_enabled=False)
+        assert config.ken_burns_enabled is False

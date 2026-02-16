@@ -238,3 +238,42 @@ class TestProbeDuration:
         )
         with pytest.raises(FFmpegError):
             probe_duration(Path("/tmp/nonexistent.mp4"))
+
+
+# ---------------------------------------------------------------------------
+# TestBuildSegmentCommandKenBurnsToggle — ken_burns_enabled toggle
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSegmentCommandKenBurnsToggle:
+    """build_segment_command respects ken_burns_enabled toggle."""
+
+    def test_ken_burns_disabled_no_zoompan(self):
+        """When ken_burns_enabled=False, filtergraph has no zoompan."""
+        config = VideoConfig(ken_burns_enabled=False)
+        cmd = build_segment_command(
+            image_path=Path("/tmp/img.png"),
+            audio_path=Path("/tmp/audio.mp3"),
+            ass_path=Path("/tmp/sub.ass"),
+            output_path=Path("/tmp/out.mp4"),
+            duration=5.0,
+            scene_number=1,
+            video_config=config,
+        )
+        filtergraph = cmd[cmd.index("-filter_complex") + 1]
+        assert "zoompan" not in filtergraph
+
+    def test_ken_burns_enabled_has_zoompan(self):
+        """When ken_burns_enabled=True (default), filtergraph has zoompan."""
+        config = VideoConfig()
+        cmd = build_segment_command(
+            image_path=Path("/tmp/img.png"),
+            audio_path=Path("/tmp/audio.mp3"),
+            ass_path=Path("/tmp/sub.ass"),
+            output_path=Path("/tmp/out.mp4"),
+            duration=5.0,
+            scene_number=1,
+            video_config=config,
+        )
+        filtergraph = cmd[cmd.index("-filter_complex") + 1]
+        assert "zoompan" in filtergraph

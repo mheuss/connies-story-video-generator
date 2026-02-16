@@ -37,39 +37,38 @@ def ken_burns_filter(duration: float, zoom: float, direction: int, resolution: s
 
     frames = int(duration * _ZOOMPAN_FPS)
 
-    # Build zoom and position expressions per direction.
-    # In zoompan, 'on' is the current frame index (0-based).
-    # 'iw' and 'ih' are the input width/height.
-    # x and y define the top-left corner of the visible region.
-    # zoom defines the current zoom level (1.0 = no zoom).
+    # Eased progress: sine ease-in-out maps linear 0→1 to smooth 0→1.
+    # Uses (1-cos(t*PI))/2 where t = on/{frames}.
+    ease = f"(1-cos(on/{frames}*PI))/2"
+
     if direction == 0:
-        # Zoom in from center: zoom ramps from 1.0 to target zoom
-        z_expr = f"1.0+({zoom}-1.0)*on/{frames}"
+        # Zoom in from center: zoom eases from 1.0 to target zoom
+        z_expr = f"1.0+({zoom}-1.0)*{ease}"
         x_expr = "iw/2-(iw/zoom/2)"
         y_expr = "ih/2-(ih/zoom/2)"
     elif direction == 1:
-        # Zoom out from center: zoom ramps from target zoom to 1.0
-        z_expr = f"{zoom}-({zoom}-1.0)*on/{frames}"
+        # Zoom out from center: zoom eases from target zoom to 1.0
+        z_expr = f"{zoom}-({zoom}-1.0)*{ease}"
         x_expr = "iw/2-(iw/zoom/2)"
         y_expr = "ih/2-(ih/zoom/2)"
     elif direction == 2:
-        # Pan left (right-to-left): slight zoom, x decreases over time
+        # Pan left (right-to-left): slight zoom, x eases right-to-left
         slight_zoom = 1.0 + (zoom - 1.0) * 0.3
         z_expr = f"{slight_zoom}"
-        x_expr = f"(iw-iw/zoom)*(1-on/{frames})"
+        x_expr = f"(iw-iw/zoom)*(1-{ease})"
         y_expr = "ih/2-(ih/zoom/2)"
     elif direction == 3:
-        # Pan right (left-to-right): slight zoom, x increases over time
+        # Pan right (left-to-right): slight zoom, x eases left-to-right
         slight_zoom = 1.0 + (zoom - 1.0) * 0.3
         z_expr = f"{slight_zoom}"
-        x_expr = f"(iw-iw/zoom)*on/{frames}"
+        x_expr = f"(iw-iw/zoom)*{ease}"
         y_expr = "ih/2-(ih/zoom/2)"
     else:
-        # Diagonal drift: slight zoom, both axes drift
+        # Diagonal drift: slight zoom, both axes ease
         slight_zoom = 1.0 + (zoom - 1.0) * 0.3
         z_expr = f"{slight_zoom}"
-        x_expr = f"(iw-iw/zoom)*on/{frames}"
-        y_expr = f"(ih-ih/zoom)*on/{frames}"
+        x_expr = f"(iw-iw/zoom)*{ease}"
+        y_expr = f"(ih-ih/zoom)*{ease}"
 
     return (
         f"zoompan=z='{z_expr}'"

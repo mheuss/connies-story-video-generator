@@ -135,7 +135,7 @@ def _display_outcome(state: ProjectState) -> None:
 
     Panel style depends on the project's current status:
 
-    - **COMPLETED** -- green "Success" panel with the video directory path.
+    - **COMPLETED** -- green "Success" panel with the final video file path.
     - **AWAITING_REVIEW** -- yellow "Paused for Review" panel with the phase
       name and resume instructions.
     - **FAILED** -- red "Error" panel with the phase name and retry
@@ -149,10 +149,10 @@ def _display_outcome(state: ProjectState) -> None:
     phase = state.metadata.current_phase
 
     if status == PhaseStatus.COMPLETED:
-        video_dir = state.project_dir / "video"
+        video_path = state.project_dir / "final.mp4"
         console.print(
             Panel(
-                f"Project complete! Video files are in:\n{video_dir}",
+                f"Project complete! Video is at:\n{video_path}",
                 title="Success",
                 border_style="green",
             )

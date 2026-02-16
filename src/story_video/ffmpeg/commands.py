@@ -77,7 +77,8 @@ def build_segment_command(
 
     Produces a single-pass filtergraph that combines:
     - Blurred background layer from the scene image
-    - Ken Burns zoom/pan effect on the foreground image
+    - Ken Burns zoom/pan effect on the foreground (or still-image scale+pad
+      when ``video_config.ken_burns_enabled`` is False)
     - Centered overlay of foreground on background
     - Subtitle burn-in from an ASS file
 
@@ -101,25 +102,33 @@ def build_segment_command(
         blur_radius=video_config.background_blur_radius,
         resolution=video_config.resolution,
     )
-    kb_filter = ken_burns_filter(
-        duration=duration,
-        zoom=video_config.ken_burns_zoom,
-        direction=direction,
-        resolution=video_config.resolution,
-    )
     sub_filter = subtitle_filter(ass_path)
 
-    # Build the filtergraph:
-    # [0:v] -> blur background -> [bg]
-    # [0:v] -> ken burns -> [kb]
-    # [bg][kb] -> overlay centered -> [comp]
-    # [comp] -> subtitle overlay -> [out]
-    filtergraph = (
-        f"[0:v]{bg_filter}[bg];"
-        f"[0:v]{kb_filter}[kb];"
-        f"[bg][kb]overlay=(W-w)/2:(H-h)/2[comp];"
-        f"[comp]{sub_filter}[out]"
-    )
+    if video_config.ken_burns_enabled:
+        kb_filter = ken_burns_filter(
+            duration=duration,
+            zoom=video_config.ken_burns_zoom,
+            direction=direction,
+            resolution=video_config.resolution,
+        )
+        filtergraph = (
+            f"[0:v]{bg_filter}[bg];"
+            f"[0:v]{kb_filter}[kb];"
+            f"[bg][kb]overlay=(W-w)/2:(H-h)/2[comp];"
+            f"[comp]{sub_filter}[out]"
+        )
+    else:
+        # Still image: scale to fit within resolution, pad to exact size
+        w, h = video_config.resolution.split("x")
+        still_filter = (
+            f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
+        )
+        filtergraph = (
+            f"[0:v]{bg_filter}[bg];"
+            f"[0:v]{still_filter}[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[comp];"
+            f"[comp]{sub_filter}[out]"
+        )
 
     return [
         "ffmpeg",

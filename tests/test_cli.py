@@ -615,3 +615,22 @@ class TestListCommand:
         result = runner.invoke(app, ["list", "--output-dir", str(tmp_path)])
         assert result.exit_code == 0
         assert "good-project" in result.output
+
+
+class TestDisplayOutcomeSuccessPath:
+    """_display_outcome success message points to final.mp4."""
+
+    def test_success_message_contains_final_mp4(self, tmp_path, capsys):
+        """Success panel mentions 'final.mp4' not 'video' directory."""
+        from story_video.models import AppConfig, InputMode, PhaseStatus
+        from story_video.state import ProjectState
+
+        state = ProjectState.create("test-proj", InputMode.ADAPT, AppConfig(), tmp_path)
+        state.metadata.status = PhaseStatus.COMPLETED
+        state.save()
+
+        _display_outcome(state)
+
+        captured = capsys.readouterr().out
+        assert "final.mp4" in captured
+        assert "video" not in captured.lower() or "video is at" in captured.lower()

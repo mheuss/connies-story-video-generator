@@ -16,6 +16,7 @@ from story_video.pipeline.caption_generator import (
     CaptionSegment,
     CaptionWord,
     OpenAIWhisperProvider,
+    _reconcile_punctuation,
     generate_captions,
 )
 from story_video.state import ProjectState
@@ -483,3 +484,132 @@ class TestGenerateCaptionsMultiDigitScene:
 
         caption_path = state.project_dir / "captions" / "scene_012.json"
         assert caption_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# _reconcile_punctuation — restores punctuation from segments to words
+# ---------------------------------------------------------------------------
+
+
+class TestReconcilePunctuation:
+    """_reconcile_punctuation restores punctuation from segments to words."""
+
+    def test_appends_period_to_final_word(self):
+        """Period from segment text is appended to matching word."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="The storm raged on.", start=0.0, end=2.5)],
+            words=[
+                CaptionWord(word="The", start=0.0, end=0.3),
+                CaptionWord(word="storm", start=0.4, end=0.8),
+                CaptionWord(word="raged", start=0.9, end=1.4),
+                CaptionWord(word="on", start=1.5, end=2.5),
+            ],
+            language="en",
+            duration=2.5,
+        )
+        reconciled = _reconcile_punctuation(result)
+        assert reconciled.words[3].word == "on."
+
+    def test_appends_comma(self):
+        """Comma from segment text is appended to matching word."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="Hello, world.", start=0.0, end=1.5)],
+            words=[
+                CaptionWord(word="Hello", start=0.0, end=0.5),
+                CaptionWord(word="world", start=0.6, end=1.5),
+            ],
+            language="en",
+            duration=1.5,
+        )
+        reconciled = _reconcile_punctuation(result)
+        assert reconciled.words[0].word == "Hello,"
+        assert reconciled.words[1].word == "world."
+
+    def test_preserves_existing_punctuation(self):
+        """Words that already have punctuation are left unchanged."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="The storm raged on.", start=0.0, end=2.5)],
+            words=[
+                CaptionWord(word="The", start=0.0, end=0.3),
+                CaptionWord(word="storm", start=0.4, end=0.8),
+                CaptionWord(word="raged", start=0.9, end=1.4),
+                CaptionWord(word="on.", start=1.5, end=2.5),
+            ],
+            language="en",
+            duration=2.5,
+        )
+        reconciled = _reconcile_punctuation(result)
+        assert reconciled.words[3].word == "on."
+
+    def test_multiple_segments(self):
+        """Punctuation reconciliation works across multiple segments."""
+        result = CaptionResult(
+            segments=[
+                CaptionSegment(text="Hello, world.", start=0.0, end=1.5),
+                CaptionSegment(text="How are you?", start=2.0, end=3.5),
+            ],
+            words=[
+                CaptionWord(word="Hello", start=0.0, end=0.5),
+                CaptionWord(word="world", start=0.6, end=1.5),
+                CaptionWord(word="How", start=2.0, end=2.3),
+                CaptionWord(word="are", start=2.4, end=2.7),
+                CaptionWord(word="you", start=2.8, end=3.5),
+            ],
+            language="en",
+            duration=3.5,
+        )
+        reconciled = _reconcile_punctuation(result)
+        assert reconciled.words[0].word == "Hello,"
+        assert reconciled.words[1].word == "world."
+        assert reconciled.words[4].word == "you?"
+
+    def test_unmatched_word_left_unchanged(self):
+        """Words that can't be found in segment text stay unchanged."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="The storm.", start=0.0, end=1.5)],
+            words=[
+                CaptionWord(word="Da", start=0.0, end=0.5),
+                CaptionWord(word="storm", start=0.6, end=1.5),
+            ],
+            language="en",
+            duration=1.5,
+        )
+        reconciled = _reconcile_punctuation(result)
+        assert reconciled.words[0].word == "Da"
+
+    def test_empty_words_returns_unchanged(self):
+        """Empty word list returns the result unchanged."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="Hello.", start=0.0, end=1.0)],
+            words=[],
+            language="en",
+            duration=1.0,
+        )
+        reconciled = _reconcile_punctuation(result)
+        assert reconciled.words == []
+
+    def test_exclamation_mark(self):
+        """Exclamation mark from segment is appended."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="Run!", start=0.0, end=0.5)],
+            words=[CaptionWord(word="Run", start=0.0, end=0.5)],
+            language="en",
+            duration=0.5,
+        )
+        reconciled = _reconcile_punctuation(result)
+        assert reconciled.words[0].word == "Run!"
+
+    def test_em_dash_and_quotes(self):
+        """Trailing punctuation like comma after 'said' is appended."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text='She said, "hello" \u2014', start=0.0, end=2.0)],
+            words=[
+                CaptionWord(word="She", start=0.0, end=0.3),
+                CaptionWord(word="said", start=0.4, end=0.7),
+                CaptionWord(word="hello", start=0.8, end=1.2),
+            ],
+            language="en",
+            duration=2.0,
+        )
+        reconciled = _reconcile_punctuation(result)
+        assert reconciled.words[1].word == "said,"
