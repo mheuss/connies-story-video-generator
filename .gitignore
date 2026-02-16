@@ -48,6 +48,9 @@ coverage.xml
 # Claude Code local config
 .claude/
 
+# Git worktrees
+.worktrees/
+
 # Local workflow and tracking files (agent-specific)
 BUGS_AND_TODOS.md
 CHANGELOG.md
