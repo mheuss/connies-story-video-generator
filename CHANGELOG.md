@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Multi-voice narration with inline `**voice:X**` tags and per-story voice mapping via YAML front matter
+- Emotion direction with `**mood:X**` tags — maps to OpenAI `instructions` parameter and ElevenLabs audio tags
+- ElevenLabs TTS provider with audio tag translation for emotion control
 - Text utilities for TTS narration prep — expands abbreviations, converts numbers to words, inserts dramatic pauses, and smooths punctuation
 - Retry decorators with exponential backoff for API calls (configurable retries, delays, exception filtering)
 - Cost estimation for story video projects — calculates per-service costs (Claude, TTS, Images, Whisper) with projected and actual modes
@@ -20,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CLI commands — create (adapt mode), resume, estimate, status, and list with Rich terminal output
 
 ### Changed
+- Default TTS model changed from `tts-1-hd` to `gpt-4o-mini-tts` for emotion instruction support
+- `TTSProvider.synthesize()` accepts optional `instructions` parameter — BREAKING for custom providers
 - Default image model changed from DALL-E 3 to GPT Image 1.5 — better quality, supports `output_format` parameter
 - Image generation now requires IMAGE_PROMPT asset (was TEXT) — BREAKING for existing projects
 

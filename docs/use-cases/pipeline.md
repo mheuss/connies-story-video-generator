@@ -24,7 +24,7 @@
 - "testing pipeline functions without real API calls"
 - "Protocol vs ABC for provider interfaces"
 
-**Location:** `src/story_video/pipeline/tts_generator.py:TTSProvider` (pattern repeated in `image_generator.py:ImageProvider`, `caption_generator.py:CaptionProvider`)
+**Location:** `src/story_video/pipeline/tts_generator.py:TTSProvider` (pattern repeated in `image_generator.py:ImageProvider`, `caption_generator.py:CaptionProvider`). Concrete providers: `OpenAITTSProvider`, `ElevenLabsTTSProvider`.
 
 **Notes:** Uses `typing.Protocol` (structural subtyping) instead of ABC — no registration, no inheritance required. The `@with_retry` decorator lives on the provider's API method, not the public function, so retry logic travels with the provider. The public function takes `(scene, state, provider)` and handles file I/O + state updates. This separation means tests mock at the provider level (returning canned bytes/data), not the SDK level. The orchestrator instantiates the concrete provider and passes it in — no factory, no DI container.
 
@@ -41,6 +41,21 @@
 **Location:** `src/story_video/pipeline/caption_generator.py:_reconcile_punctuation`
 
 **Notes:** Walks each segment's text with a cursor, matching words by time range and position. After matching a word, grabs trailing non-alphanumeric, non-space characters as punctuation. Fails gracefully — unmatched words (e.g. Whisper hallucination, different capitalization) are left unchanged. Case-insensitive fallback for matching. Returns a new CaptionResult (immutable). Called automatically inside `generate_captions()` before JSON serialization — no caller action required.
+
+## Multi-Voice Narration with Inline Tags
+
+**Problem:** Need to split narration text into segments by voice and mood, so each segment can be synthesized with its own TTS voice and emotion instructions.
+
+**Problem indicators:**
+- "how to use multiple voices in one scene"
+- "inline voice switching for TTS"
+- "emotion direction for narration"
+- "YAML front matter for voice mappings"
+- "parse voice/mood tags from story text"
+
+**Location:** `src/story_video/utils/narration_tags.py:parse_story_header`, `src/story_video/utils/narration_tags.py:parse_narration_segments`
+
+**Notes:** Story text can have YAML front matter (`---` delimiters) mapping voice labels to provider voice IDs (e.g., `narrator: nova`). Inline tags use markdown bold format: `**voice:jane**` switches voice, `**mood:sad**` sets emotion. `parse_story_header()` extracts the YAML block into a `StoryHeader` model (voices dict + default_voice). `parse_narration_segments()` walks the text tracking current voice/mood state, producing `NarrationSegment` objects. Voice tags reset mood. `**mood:neutral**` clears mood. The orchestrator parses the header once at pipeline start and passes it through to `generate_audio()`, which calls `provider.synthesize()` once per segment and concatenates the audio bytes. Without a header, the backward-compatible single-call path is used.
 
 ## Sequential Phase Orchestration with Resume
 
