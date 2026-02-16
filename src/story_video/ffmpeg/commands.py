@@ -164,6 +164,7 @@ def build_concat_command(
 
     n = len(segment_paths)
     transition_dur = video_config.transition_duration
+    audio_transition_dur = video_config.audio_transition_duration
     fade_in_dur = video_config.fade_in_duration
     fade_out_dur = video_config.fade_out_duration
 
@@ -227,7 +228,7 @@ def build_concat_command(
             f"{out_video}"
         )
         audio_parts.append(
-            f"{prev_audio_label}{next_audio}acrossfade=d={transition_dur}{out_audio}"
+            f"{prev_audio_label}{next_audio}acrossfade=d={audio_transition_dur}{out_audio}"
         )
 
         prev_video_label = out_video

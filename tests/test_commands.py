@@ -145,6 +145,27 @@ class TestBuildConcatCommand:
         assert "xfade" not in filter_str
         assert "fade" in filter_str
 
+    def test_acrossfade_uses_audio_transition_duration(self, tmp_path):
+        """acrossfade duration uses audio_transition_duration, not transition_duration."""
+        config = VideoConfig()  # defaults: transition_duration=1.5, audio_transition_duration=0.05
+        segments = [tmp_path / "s1.mp4", tmp_path / "s2.mp4"]
+        durations = [10.0, 10.0]
+        output = tmp_path / "final.mp4"
+        result = build_concat_command(segments, durations, output, config)
+        filter_str = result[result.index("-filter_complex") + 1]
+        assert "acrossfade=d=0.05" in filter_str
+        assert "acrossfade=d=1.5" not in filter_str
+
+    def test_custom_audio_transition_duration_propagates(self, tmp_path):
+        """Custom audio_transition_duration value appears in acrossfade filter."""
+        config = VideoConfig(audio_transition_duration=0.1)
+        segments = [tmp_path / "s1.mp4", tmp_path / "s2.mp4"]
+        durations = [10.0, 10.0]
+        output = tmp_path / "final.mp4"
+        result = build_concat_command(segments, durations, output, config)
+        filter_str = result[result.index("-filter_complex") + 1]
+        assert "acrossfade=d=0.1" in filter_str
+
 
 # ---------------------------------------------------------------------------
 # TestRunFfmpeg — subprocess execution wrapper

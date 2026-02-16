@@ -30,6 +30,7 @@ video:
   background_blur_radius: 40
   background_image: null
   transition_duration: 1.5
+  audio_transition_duration: 0.05
   fade_in_duration: 2.0
   fade_out_duration: 3.0
 

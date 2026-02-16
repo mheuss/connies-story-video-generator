@@ -256,7 +256,8 @@ class VideoConfig(BaseModel):
         background_mode: Background treatment mode ("blur" or "custom").
         background_blur_radius: Gaussian blur radius for blurred background.
         background_image: Optional path to a custom background image.
-        transition_duration: Crossfade duration between scenes in seconds.
+        transition_duration: Video crossfade duration between scenes in seconds.
+        audio_transition_duration: Audio crossfade duration between scenes in seconds.
         fade_in_duration: Fade-from-black duration at video start in seconds.
         fade_out_duration: Fade-to-black duration at video end in seconds.
     """
@@ -271,6 +272,7 @@ class VideoConfig(BaseModel):
     background_blur_radius: int = Field(default=40, ge=0)
     background_image: Path | None = Field(default=None)
     transition_duration: float = Field(default=1.5, ge=0)
+    audio_transition_duration: float = Field(default=0.05, ge=0)
     fade_in_duration: float = Field(default=2.0, ge=0)
     fade_out_duration: float = Field(default=3.0, ge=0)
 

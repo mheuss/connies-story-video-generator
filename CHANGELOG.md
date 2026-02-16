@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Caption subtitles now include punctuation (periods, commas, question marks) reconciled from Whisper segment text
 - Short stories (under 1000 words) now produce at least 2 scenes instead of 1
 - Success message now correctly points to `final.mp4` instead of empty `video/` directory
+- Audio overlap at scene transitions — narration no longer bleeds across scenes during crossfade. Video crossfade (1.5s) and audio crossfade (0.05s) are now independently configurable via `audio_transition_duration`
 
 ### Security
 
