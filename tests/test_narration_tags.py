@@ -2,7 +2,7 @@
 
 import pytest
 
-from story_video.utils.narration_tags import parse_story_header
+from story_video.utils.narration_tags import parse_narration_segments, parse_story_header
 
 
 class TestParseStoryHeader:
@@ -50,3 +50,82 @@ class TestParseStoryHeader:
         header, body = parse_story_header(text)
         assert header is None
         assert body == text
+
+
+class TestParseNarrationSegments:
+    """parse_narration_segments splits tagged text into segments."""
+
+    VOICE_MAP = {"narrator": "nova", "jane": "shimmer", "bob": "echo"}
+
+    def test_no_tags_single_segment(self):
+        segments = parse_narration_segments(
+            "Plain text.", self.VOICE_MAP, "narrator", scene_number=1
+        )
+        assert len(segments) == 1
+        assert segments[0].text == "Plain text."
+        assert segments[0].voice == "nova"
+        assert segments[0].voice_label == "narrator"
+        assert segments[0].mood is None
+
+    def test_voice_tag_splits_into_two_segments(self):
+        text = 'The narrator spoke. **voice:jane** "Hello!" she said.'
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert len(segments) == 2
+        assert segments[0].voice_label == "narrator"
+        assert segments[0].text == "The narrator spoke."
+        assert segments[1].voice_label == "jane"
+        assert segments[1].voice == "shimmer"
+
+    def test_mood_tag_sets_instructions(self):
+        text = '**mood:sad** "My mother died today."'
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert len(segments) == 1
+        assert segments[0].mood == "sad"
+
+    def test_voice_tag_resets_mood(self):
+        text = "**mood:sad** Sad text. **voice:jane** Happy text."
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert segments[0].mood == "sad"
+        assert segments[1].mood is None
+
+    def test_consecutive_tags_merge(self):
+        text = '**voice:jane** **mood:happy** "Hooray!"'
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert len(segments) == 1
+        assert segments[0].voice_label == "jane"
+        assert segments[0].mood == "happy"
+
+    def test_whitespace_only_segments_dropped(self):
+        text = '   **voice:jane** "Hello!"'
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert len(segments) == 1
+        assert segments[0].voice_label == "jane"
+
+    def test_unknown_voice_raises(self):
+        text = '**voice:unknown** "Hello!"'
+        with pytest.raises(ValueError, match="Unknown voice label"):
+            parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+
+    def test_segment_indices_sequential(self):
+        text = "A. **voice:jane** B. **voice:bob** C."
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert [s.segment_index for s in segments] == [0, 1, 2]
+
+    def test_scene_number_propagated(self):
+        segments = parse_narration_segments("Text.", self.VOICE_MAP, "narrator", scene_number=5)
+        assert segments[0].scene_number == 5
+
+    def test_mood_neutral_clears_mood(self):
+        text = "**mood:sad** Sad text. **mood:neutral** Neutral text."
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert segments[0].mood == "sad"
+        assert segments[1].mood is None
+
+    def test_multiple_voice_switches(self):
+        text = (
+            'Narration. **voice:jane** "Hi." **voice:bob** "Yo." **voice:narrator** More narration.'
+        )
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert len(segments) == 4
+        labels = [s.voice_label for s in segments]
+        assert labels == ["narrator", "jane", "bob", "narrator"]
