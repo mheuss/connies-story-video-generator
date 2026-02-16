@@ -18,7 +18,7 @@ from story_video.pipeline.caption_generator import OpenAIWhisperProvider
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import OpenAIImageProvider
 from story_video.pipeline.orchestrator import run_pipeline
-from story_video.pipeline.tts_generator import OpenAITTSProvider
+from story_video.pipeline.tts_generator import ElevenLabsTTSProvider, OpenAITTSProvider
 from story_video.state import ProjectState
 
 logger = logging.getLogger(__name__)
@@ -291,7 +291,11 @@ def create(
     # --- Instantiate providers and run pipeline ---
     try:
         claude_client = ClaudeClient()
-        tts_provider = OpenAITTSProvider()
+        tts_config = app_config.tts
+        if tts_config.provider == "elevenlabs":
+            tts_provider = ElevenLabsTTSProvider()
+        else:
+            tts_provider = OpenAITTSProvider()
         image_provider = OpenAIImageProvider()
         caption_provider = OpenAIWhisperProvider()
 
@@ -353,7 +357,11 @@ def resume(
     # --- Instantiate providers and run pipeline ---
     try:
         claude_client = ClaudeClient()
-        tts_provider = OpenAITTSProvider()
+        tts_config = state.metadata.config.tts
+        if tts_config.provider == "elevenlabs":
+            tts_provider = ElevenLabsTTSProvider()
+        else:
+            tts_provider = OpenAITTSProvider()
         image_provider = OpenAIImageProvider()
         caption_provider = OpenAIWhisperProvider()
 

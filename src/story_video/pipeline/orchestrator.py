@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from story_video.models import PhaseStatus, PipelinePhase, Scene
+from story_video.models import PhaseStatus, PipelinePhase, Scene, StoryHeader
 from story_video.pipeline.caption_generator import CaptionProvider, generate_captions
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import ImageProvider, generate_image
@@ -26,6 +26,7 @@ from story_video.pipeline.story_writer import flag_narration, split_scenes
 from story_video.pipeline.tts_generator import TTSProvider, generate_audio
 from story_video.pipeline.video_assembler import assemble_scene, assemble_video
 from story_video.state import ProjectState
+from story_video.utils.narration_tags import parse_story_header
 from story_video.utils.text import prepare_narration
 
 __all__ = ["run_pipeline"]
@@ -78,6 +79,11 @@ def run_pipeline(
     start_idx = phases.index(start)
     autonomous = state.metadata.config.pipeline.autonomous
 
+    # Parse story header from source file (if present) for multi-voice TTS.
+    # Done once at pipeline start so the header is available when the TTS
+    # phase is reached.
+    story_header = _parse_source_header(state)
+
     # State is saved at three points: checkpoint pause, phase failure, and
     # end of full run. Intermediate phase completions accumulate in memory
     # and are persisted together. On failure, the exception handler saves
@@ -93,6 +99,7 @@ def run_pipeline(
                 tts_provider=tts_provider,
                 image_provider=image_provider,
                 caption_provider=caption_provider,
+                story_header=story_header,
             )
         except Exception:
             state.fail_phase()
@@ -144,6 +151,27 @@ def _determine_start_phase(
     return state.get_next_phase()
 
 
+def _parse_source_header(state: ProjectState) -> StoryHeader | None:
+    """Parse the YAML story header from source_story.txt.
+
+    Returns the parsed header if the source file exists and contains
+    valid YAML front matter, or None otherwise.
+
+    Args:
+        state: Project state with project_dir.
+
+    Returns:
+        Parsed StoryHeader, or None if no header is present.
+    """
+    source_path = state.project_dir / "source_story.txt"
+    if not source_path.exists():
+        return None
+
+    source_text = source_path.read_text(encoding="utf-8")
+    header, _ = parse_story_header(source_text)
+    return header
+
+
 def _dispatch_phase(
     phase: PipelinePhase,
     state: ProjectState,
@@ -152,6 +180,7 @@ def _dispatch_phase(
     tts_provider: TTSProvider | None,
     image_provider: ImageProvider | None,
     caption_provider: CaptionProvider | None,
+    story_header: StoryHeader | None = None,
 ) -> None:
     """Route a phase to the appropriate pipeline module.
 
@@ -162,6 +191,7 @@ def _dispatch_phase(
         tts_provider: TTS provider.
         image_provider: Image provider.
         caption_provider: Caption provider.
+        story_header: Parsed story header for multi-voice TTS, or None.
 
     Raises:
         ValueError: If the phase is unknown.
@@ -179,7 +209,10 @@ def _dispatch_phase(
         _run_narration_prep(state)
 
     elif phase == PipelinePhase.TTS_GENERATION:
-        _run_per_scene(state, lambda scene: generate_audio(scene, state, tts_provider))
+        _run_per_scene(
+            state,
+            lambda scene: generate_audio(scene, state, tts_provider, story_header=story_header),
+        )
 
     elif phase == PipelinePhase.IMAGE_GENERATION:
         _run_per_scene(state, lambda scene: generate_image(scene, state, image_provider))

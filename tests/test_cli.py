@@ -617,6 +617,125 @@ class TestListCommand:
         assert "good-project" in result.output
 
 
+class TestProviderSelection:
+    """CLI selects TTS provider based on tts.provider config."""
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.ElevenLabsTTSProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_default_openai_provider(
+        self,
+        mock_claude,
+        mock_openai_tts,
+        mock_eleven_tts,
+        mock_image,
+        mock_whisper,
+        mock_run,
+        tmp_path,
+    ):
+        """Default config creates OpenAITTSProvider."""
+        source_file = tmp_path / "story.txt"
+        source_file.write_text("Story text.", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--source-material",
+                str(source_file),
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code == 0
+        mock_openai_tts.assert_called_once()
+        mock_eleven_tts.assert_not_called()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["tts_provider"] == mock_openai_tts.return_value
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.ElevenLabsTTSProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_elevenlabs_provider_when_configured(
+        self,
+        mock_claude,
+        mock_openai_tts,
+        mock_eleven_tts,
+        mock_image,
+        mock_whisper,
+        mock_run,
+        tmp_path,
+    ):
+        """provider='elevenlabs' in config creates ElevenLabsTTSProvider."""
+        # Write a config file that sets tts.provider to elevenlabs
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("tts:\n  provider: elevenlabs\n", encoding="utf-8")
+
+        source_file = tmp_path / "story.txt"
+        source_file.write_text("Story text.", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--source-material",
+                str(source_file),
+                "--output-dir",
+                str(tmp_path / "output"),
+                "--config",
+                str(config_file),
+            ],
+        )
+        assert result.exit_code == 0
+        mock_eleven_tts.assert_called_once()
+        mock_openai_tts.assert_not_called()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["tts_provider"] == mock_eleven_tts.return_value
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.ElevenLabsTTSProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_resume_elevenlabs_provider_when_configured(
+        self,
+        mock_claude,
+        mock_openai_tts,
+        mock_eleven_tts,
+        mock_image,
+        mock_whisper,
+        mock_run,
+        tmp_path,
+    ):
+        """Resume with provider='elevenlabs' in stored config creates ElevenLabsTTSProvider."""
+        from story_video.models import AppConfig, InputMode, TTSConfig
+        from story_video.state import ProjectState
+
+        config = AppConfig(tts=TTSConfig(provider="elevenlabs"))
+        ProjectState.create(
+            project_id="eleven-project",
+            mode=InputMode.ADAPT,
+            config=config,
+            output_dir=tmp_path,
+        )
+
+        result = runner.invoke(app, ["resume", "eleven-project", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+        mock_eleven_tts.assert_called_once()
+        mock_openai_tts.assert_not_called()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["tts_provider"] == mock_eleven_tts.return_value
+
+
 class TestDisplayOutcomeSuccessPath:
     """_display_outcome success message points to final.mp4."""
 

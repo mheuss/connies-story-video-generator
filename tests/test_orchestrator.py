@@ -17,6 +17,7 @@ from story_video.models import (
     PipelineConfig,
     PipelinePhase,
     SceneStatus,
+    StoryHeader,
 )
 from story_video.pipeline.orchestrator import (
     _CHECKPOINT_PHASES,
@@ -767,3 +768,146 @@ class TestDispatchPhaseUnknown:
                 image_provider=None,
                 caption_provider=None,
             )
+
+
+# ---------------------------------------------------------------------------
+# TestStoryHeaderParsing — orchestrator parses story header before TTS phase
+# ---------------------------------------------------------------------------
+
+
+class TestStoryHeaderParsing:
+    """Orchestrator parses story header before TTS phase."""
+
+    @patch("story_video.pipeline.orchestrator.assemble_video")
+    @patch("story_video.pipeline.orchestrator.assemble_scene")
+    @patch("story_video.pipeline.orchestrator.generate_captions")
+    @patch("story_video.pipeline.orchestrator.generate_image")
+    @patch("story_video.pipeline.orchestrator.generate_audio")
+    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped")
+    def test_header_parsed_and_passed_to_generate_audio(
+        self,
+        mock_prep,
+        mock_audio,
+        mock_img,
+        mock_captions,
+        mock_assemble_scene,
+        mock_assemble_video,
+        tmp_path,
+    ):
+        """When source_story.txt has a YAML header, story_header is passed to generate_audio."""
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.IMAGE_PROMPT)
+
+        # Set narration_text so narration prep has something to transform
+        scene = state.metadata.scenes[0]
+        scene.narration_text = "Some narration text."
+
+        # Write source_story.txt with YAML header
+        source_path = state.project_dir / "source_story.txt"
+        header_yaml = (
+            "---\n"
+            "voices:\n"
+            "  narrator: alloy\n"
+            "  villain: echo\n"
+            "default_voice: narrator\n"
+            "---\n"
+            "The story body."
+        )
+        source_path.write_text(header_yaml, encoding="utf-8")
+
+        _set_phase_state(state, PipelinePhase.NARRATION_PREP, PhaseStatus.COMPLETED)
+
+        run_pipeline(
+            state,
+            claude_client=MagicMock(),
+            tts_provider=MagicMock(),
+            image_provider=MagicMock(),
+            caption_provider=MagicMock(),
+        )
+
+        # generate_audio should have been called with the parsed StoryHeader
+        assert mock_audio.call_count == 1
+        # story_header passed as keyword arg in the lambda
+        story_header_arg = mock_audio.call_args.kwargs.get("story_header")
+        assert story_header_arg is not None
+        assert isinstance(story_header_arg, StoryHeader)
+        assert story_header_arg.voices == {"narrator": "alloy", "villain": "echo"}
+        assert story_header_arg.default_voice == "narrator"
+
+    @patch("story_video.pipeline.orchestrator.assemble_video")
+    @patch("story_video.pipeline.orchestrator.assemble_scene")
+    @patch("story_video.pipeline.orchestrator.generate_captions")
+    @patch("story_video.pipeline.orchestrator.generate_image")
+    @patch("story_video.pipeline.orchestrator.generate_audio")
+    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped")
+    def test_no_header_passes_none(
+        self,
+        mock_prep,
+        mock_audio,
+        mock_img,
+        mock_captions,
+        mock_assemble_scene,
+        mock_assemble_video,
+        tmp_path,
+    ):
+        """When source_story.txt has no header, story_header=None is passed."""
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.IMAGE_PROMPT)
+
+        scene = state.metadata.scenes[0]
+        scene.narration_text = "Some narration text."
+
+        # Write source_story.txt without YAML header
+        source_path = state.project_dir / "source_story.txt"
+        source_path.write_text("Just a plain story without a header.", encoding="utf-8")
+
+        _set_phase_state(state, PipelinePhase.NARRATION_PREP, PhaseStatus.COMPLETED)
+
+        run_pipeline(
+            state,
+            claude_client=MagicMock(),
+            tts_provider=MagicMock(),
+            image_provider=MagicMock(),
+            caption_provider=MagicMock(),
+        )
+
+        assert mock_audio.call_count == 1
+        assert mock_audio.call_args.kwargs.get("story_header") is None
+
+    @patch("story_video.pipeline.orchestrator.assemble_video")
+    @patch("story_video.pipeline.orchestrator.assemble_scene")
+    @patch("story_video.pipeline.orchestrator.generate_captions")
+    @patch("story_video.pipeline.orchestrator.generate_image")
+    @patch("story_video.pipeline.orchestrator.generate_audio")
+    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped")
+    def test_no_source_file_passes_none(
+        self,
+        mock_prep,
+        mock_audio,
+        mock_img,
+        mock_captions,
+        mock_assemble_scene,
+        mock_assemble_video,
+        tmp_path,
+    ):
+        """When source_story.txt doesn't exist, story_header=None is passed."""
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.IMAGE_PROMPT)
+
+        scene = state.metadata.scenes[0]
+        scene.narration_text = "Some narration text."
+
+        # Don't write source_story.txt at all
+
+        _set_phase_state(state, PipelinePhase.NARRATION_PREP, PhaseStatus.COMPLETED)
+
+        run_pipeline(
+            state,
+            claude_client=MagicMock(),
+            tts_provider=MagicMock(),
+            image_provider=MagicMock(),
+            caption_provider=MagicMock(),
+        )
+
+        assert mock_audio.call_count == 1
+        assert mock_audio.call_args.kwargs.get("story_header") is None
