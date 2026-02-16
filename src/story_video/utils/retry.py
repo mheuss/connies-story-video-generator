@@ -1,7 +1,7 @@
 """Retry decorators with exponential backoff using tenacity.
 
 Provides thin wrappers around tenacity for retrying API calls (Claude, OpenAI TTS,
-DALL-E, Whisper) with configurable exponential backoff. On failure, retries with
+image generation, Whisper) with configurable exponential backoff. On failure, retries with
 increasing delays capped at 60 seconds.
 
 Usage:

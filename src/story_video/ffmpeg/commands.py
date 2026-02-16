@@ -15,7 +15,7 @@ Public items:
 import subprocess
 from pathlib import Path
 
-from story_video.ffmpeg.filters import blur_background_filter, ken_burns_filter
+from story_video.ffmpeg.filters import blur_background_filter, still_image_filter
 from story_video.ffmpeg.subtitles import subtitle_filter
 from story_video.models import VideoConfig
 
@@ -69,66 +69,41 @@ def build_segment_command(
     audio_path: Path,
     ass_path: Path,
     output_path: Path,
-    duration: float,
-    scene_number: int,
     video_config: VideoConfig,
 ) -> list[str]:
     """Build an FFmpeg command for rendering a single scene segment.
 
     Produces a single-pass filtergraph that combines:
     - Blurred background layer from the scene image
-    - Ken Burns zoom/pan effect on the foreground (or still-image scale+pad
-      when ``video_config.ken_burns_enabled`` is False)
-    - Centered overlay of foreground on background
+    - Still image scaled and centered on the background
     - Subtitle burn-in from an ASS file
 
-    Audio is muxed directly from the audio file.
+    Audio is muxed directly from the audio file. The ``-shortest`` flag
+    ensures the segment length matches the audio duration.
 
     Args:
         image_path: Path to the scene image file.
         audio_path: Path to the scene audio file.
         ass_path: Path to the ASS subtitle file.
         output_path: Path for the output segment video.
-        duration: Scene duration in seconds.
-        scene_number: 1-based scene index (used for Ken Burns direction).
         video_config: Video configuration parameters.
 
     Returns:
         FFmpeg command as a list of strings.
     """
-    direction = scene_number % 5
-
     bg_filter = blur_background_filter(
         blur_radius=video_config.background_blur_radius,
         resolution=video_config.resolution,
     )
     sub_filter = subtitle_filter(ass_path)
+    fg_filter = still_image_filter(video_config.resolution)
 
-    if video_config.ken_burns_enabled:
-        kb_filter = ken_burns_filter(
-            duration=duration,
-            zoom=video_config.ken_burns_zoom,
-            direction=direction,
-            resolution=video_config.resolution,
-        )
-        filtergraph = (
-            f"[0:v]{bg_filter}[bg];"
-            f"[0:v]{kb_filter}[kb];"
-            f"[bg][kb]overlay=(W-w)/2:(H-h)/2[comp];"
-            f"[comp]{sub_filter}[out]"
-        )
-    else:
-        # Still image: scale to fit within resolution, pad to exact size
-        w, h = video_config.resolution.split("x")
-        still_filter = (
-            f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
-        )
-        filtergraph = (
-            f"[0:v]{bg_filter}[bg];"
-            f"[0:v]{still_filter}[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[comp];"
-            f"[comp]{sub_filter}[out]"
-        )
+    filtergraph = (
+        f"[0:v]{bg_filter}[bg];"
+        f"[0:v]{fg_filter}[fg];"
+        f"[bg][fg]overlay=(W-w)/2:(H-h)/2[comp];"
+        f"[comp]{sub_filter}[out]"
+    )
 
     return [
         "ffmpeg",

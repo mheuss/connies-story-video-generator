@@ -58,9 +58,8 @@ def project_state(tmp_path):
     config = AppConfig(
         images=ImageConfig(
             style_prefix="Cinematic:",
-            size="1024x1024",
-            quality="standard",
-            style="vivid",
+            size="1536x1024",
+            quality="medium",
         )
     )
     state = ProjectState.create("test-project", InputMode.ADAPT, config, tmp_path)
@@ -91,10 +90,9 @@ class TestOpenAIImageProviderReturnsDecodedBytes:
         provider = OpenAIImageProvider()
         result = provider.generate(
             prompt="A forest",
-            model="dall-e-3",
-            size="1024x1024",
-            quality="standard",
-            style="vivid",
+            model="gpt-image-1.5",
+            size="1536x1024",
+            quality="medium",
         )
 
         assert result == FAKE_PNG
@@ -108,8 +106,8 @@ class TestOpenAIImageProviderReturnsDecodedBytes:
 class TestOpenAIImageProviderPassesParams:
     """OpenAIImageProvider.generate() passes correct parameters to the SDK."""
 
-    def test_generate_passes_params_to_sdk(self, mock_openai):
-        """generate() forwards all parameters to images.generate with correct defaults."""
+    def test_dalle_uses_response_format(self, mock_openai):
+        """DALL-E models use response_format=b64_json."""
         image_data = MagicMock()
         image_data.b64_json = FAKE_B64
         response = MagicMock()
@@ -120,7 +118,7 @@ class TestOpenAIImageProviderPassesParams:
         provider.generate(
             prompt="A castle on a hill",
             model="dall-e-3",
-            size="1792x1024",
+            size="1536x1024",
             quality="hd",
             style="natural",
         )
@@ -128,11 +126,35 @@ class TestOpenAIImageProviderPassesParams:
         call_kwargs = mock_openai.images.generate.call_args.kwargs
         assert call_kwargs["model"] == "dall-e-3"
         assert call_kwargs["prompt"] == "A castle on a hill"
-        assert call_kwargs["size"] == "1792x1024"
+        assert call_kwargs["size"] == "1536x1024"
         assert call_kwargs["quality"] == "hd"
         assert call_kwargs["style"] == "natural"
         assert call_kwargs["response_format"] == "b64_json"
+        assert "output_format" not in call_kwargs
         assert call_kwargs["n"] == 1
+
+    def test_gpt_image_uses_output_format(self, mock_openai):
+        """GPT Image models use output_format=png (no response_format, no style)."""
+        image_data = MagicMock()
+        image_data.b64_json = FAKE_B64
+        response = MagicMock()
+        response.data = [image_data]
+        mock_openai.images.generate.return_value = response
+
+        provider = OpenAIImageProvider()
+        provider.generate(
+            prompt="A castle on a hill",
+            model="gpt-image-1.5",
+            size="1536x1024",
+            quality="medium",
+        )
+
+        call_kwargs = mock_openai.images.generate.call_args.kwargs
+        assert call_kwargs["output_format"] == "png"
+        assert "response_format" not in call_kwargs
+        assert "style" not in call_kwargs
+        assert call_kwargs["model"] == "gpt-image-1.5"
+        assert call_kwargs["quality"] == "medium"
 
 
 # ---------------------------------------------------------------------------
@@ -187,10 +209,9 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
         provider = OpenAIImageProvider()
         result = provider.generate(
             prompt="test",
-            model="dall-e-3",
-            size="1024x1024",
-            quality="standard",
-            style="vivid",
+            model="gpt-image-1.5",
+            size="1536x1024",
+            quality="medium",
         )
 
         assert result == FAKE_PNG
@@ -213,10 +234,9 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
         provider = OpenAIImageProvider()
         result = provider.generate(
             prompt="test",
-            model="dall-e-3",
-            size="1024x1024",
-            quality="standard",
-            style="vivid",
+            model="gpt-image-1.5",
+            size="1536x1024",
+            quality="medium",
         )
 
         assert result == FAKE_PNG
@@ -247,10 +267,9 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
         provider = OpenAIImageProvider()
         result = provider.generate(
             prompt="test",
-            model="dall-e-3",
-            size="1024x1024",
-            quality="standard",
-            style="vivid",
+            model="gpt-image-1.5",
+            size="1536x1024",
+            quality="medium",
         )
 
         assert result == FAKE_PNG
@@ -284,10 +303,9 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
         with pytest.raises(BadRequestError):
             provider.generate(
                 prompt="test",
-                model="dall-e-3",
-                size="1024x1024",
-                quality="standard",
-                style="vivid",
+                model="gpt-image-1.5",
+                size="1536x1024",
+                quality="medium",
             )
 
         assert mock_openai.images.generate.call_count == 1
@@ -311,10 +329,9 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
         with pytest.raises(AuthenticationError):
             provider.generate(
                 prompt="test",
-                model="dall-e-3",
-                size="1024x1024",
-                quality="standard",
-                style="vivid",
+                model="gpt-image-1.5",
+                size="1536x1024",
+                quality="medium",
             )
 
         assert mock_openai.images.generate.call_count == 1
@@ -338,10 +355,9 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
         with pytest.raises(PermissionDeniedError):
             provider.generate(
                 prompt="test",
-                model="dall-e-3",
-                size="1024x1024",
-                quality="standard",
-                style="vivid",
+                model="gpt-image-1.5",
+                size="1536x1024",
+                quality="medium",
             )
 
         assert mock_openai.images.generate.call_count == 1
@@ -404,9 +420,9 @@ class TestGenerateImageConfigParamsPassedToProvider:
         generate_image(scene, project_state, fake_provider)
 
         call_kwargs = fake_provider.generate.call_args.kwargs
-        assert call_kwargs["size"] == "1024x1024"
-        assert call_kwargs["quality"] == "standard"
-        assert call_kwargs["style"] == "vivid"
+        assert call_kwargs["size"] == "1536x1024"
+        assert call_kwargs["quality"] == "medium"
+        assert call_kwargs["style"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -439,9 +455,8 @@ class TestGenerateImageAlwaysWritesPng:
         config = AppConfig(
             images=ImageConfig(
                 style_prefix="Art:",
-                size="1024x1024",
-                quality="hd",
-                style="natural",
+                size="1536x1024",
+                quality="high",
             )
         )
         state = ProjectState.create("png-test", InputMode.ADAPT, config, tmp_path)
@@ -470,9 +485,8 @@ class TestGenerateImageMultiDigitSceneNumber:
         config = AppConfig(
             images=ImageConfig(
                 style_prefix="Art:",
-                size="1024x1024",
-                quality="standard",
-                style="vivid",
+                size="1536x1024",
+                quality="medium",
             )
         )
         state = ProjectState.create("multi-digit-test", InputMode.ADAPT, config, tmp_path)
@@ -519,4 +533,4 @@ class TestGenerateImagePassesModelFromConfig:
         generate_image(scene, project_state, fake_provider)
 
         call_kwargs = fake_provider.generate.call_args.kwargs
-        assert call_kwargs["model"] == "dall-e-3"  # default from ImageConfig
+        assert call_kwargs["model"] == "gpt-image-1.5"  # default from ImageConfig

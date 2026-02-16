@@ -1,6 +1,6 @@
 """Image prompt generation via Claude structured output.
 
-Generates DALL-E image prompts for all scenes in a single Claude call.
+Generates image prompts for all scenes in a single Claude call.
 Each prompt describes the key visual moment of its scene for illustration.
 """
 
@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 IMAGE_PROMPT_SYSTEM = (
-    "You are a visual director creating DALL-E image prompts for story scenes.\n\n"
+    "You are a visual director creating image prompts for story scenes.\n\n"
     "For each scene, write a single detailed image prompt that captures the key "
     "visual moment. The prompt should be:\n"
     "- Visually specific: describe setting, lighting, composition, mood\n"
-    "- Self-contained: include all character descriptions (DALL-E has no memory "
+    "- Self-contained: include all character descriptions (image models have no memory "
     "between images)\n"
     "- Cinematic: frame it like a movie still or painting\n"
     "- 1-3 sentences long\n\n"
@@ -41,7 +41,7 @@ IMAGE_PROMPT_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "scene_number": {"type": "integer", "description": "1-based scene number"},
-                    "image_prompt": {"type": "string", "description": "DALL-E image prompt"},
+                    "image_prompt": {"type": "string", "description": "Image generation prompt"},
                 },
                 "required": ["scene_number", "image_prompt"],
             },
@@ -61,7 +61,7 @@ def generate_image_prompts(state: ProjectState, client: ClaudeClient) -> None:
     """Generate image prompts for all scenes via a single Claude call.
 
     Sends all scene prose to Claude in a single structured output call.
-    Claude returns a DALL-E prompt per scene. Updates scene.image_prompt
+    Claude returns an image prompt per scene. Updates scene.image_prompt
     and marks IMAGE_PROMPT asset as COMPLETED for each scene.
 
     Args:

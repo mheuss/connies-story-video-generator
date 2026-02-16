@@ -3,7 +3,7 @@
 Calculates projected costs for all API services used in video generation:
 - Claude API (story generation)
 - OpenAI TTS (text-to-speech)
-- DALL-E 3 (image generation)
+- OpenAI Image generation (GPT Image / DALL-E)
 - Whisper (caption generation)
 
 Can operate in two modes:
@@ -51,8 +51,14 @@ TTS_COST_PER_MILLION_CHARS: dict[str, float] = {
     "tts-1-hd": 30.00,
 }
 
-# DALL-E 3 cost per image at 1024x1024 by quality tier
-DALLE_COST_PER_IMAGE: dict[str, float] = {
+# Image generation cost per image by quality tier.
+# Covers GPT Image 1.5 (low/medium/high) and DALL-E 3 (standard/hd).
+IMAGE_COST_PER_IMAGE: dict[str, float] = {
+    # GPT Image 1.5
+    "low": 0.020,
+    "medium": 0.050,
+    "high": 0.200,
+    # DALL-E 3
     "standard": 0.040,
     "hd": 0.080,
 }
@@ -180,31 +186,31 @@ def _calculate_tts_cost(tts_model: str, character_count: int) -> ServiceCost:
     return ServiceCost(service="OpenAI TTS", description=tts_model, low=cost, high=cost)
 
 
-def _calculate_dalle_cost(quality: str, scene_count: int) -> ServiceCost:
-    """Calculate DALL-E 3 image generation cost.
+def _calculate_image_cost(quality: str, scene_count: int) -> ServiceCost:
+    """Calculate image generation cost.
 
     Formula: scene_count * per_image_rate (one image per scene)
 
     Args:
-        quality: Image quality tier ("standard" or "hd").
+        quality: Image quality tier (e.g. "medium", "high", "standard", "hd").
         scene_count: Number of images to generate.
 
     Returns:
-        ServiceCost with the exact DALL-E cost.
+        ServiceCost with the exact image generation cost.
 
     Raises:
         ValueError: If quality is not in the known rate table.
     """
-    if quality not in DALLE_COST_PER_IMAGE:
+    if quality not in IMAGE_COST_PER_IMAGE:
         raise ValueError(
             f"Unknown image quality: {quality!r}. "
-            f"Known qualities: {', '.join(sorted(DALLE_COST_PER_IMAGE))}"
+            f"Known qualities: {', '.join(sorted(IMAGE_COST_PER_IMAGE))}"
         )
 
-    rate = DALLE_COST_PER_IMAGE[quality]
+    rate = IMAGE_COST_PER_IMAGE[quality]
     cost = scene_count * rate
 
-    return ServiceCost(service="DALL-E 3", description=quality, low=cost, high=cost)
+    return ServiceCost(service="Images", description=quality, low=cost, high=cost)
 
 
 def _calculate_whisper_cost(duration_minutes: int) -> ServiceCost:
@@ -280,7 +286,7 @@ def estimate_cost(
     services = [
         _calculate_claude_cost(mode, scene_count),
         _calculate_tts_cost(config.tts.model, character_count),
-        _calculate_dalle_cost(config.images.quality, scene_count),
+        _calculate_image_cost(config.images.quality, scene_count),
         _calculate_whisper_cost(duration),
     ]
 

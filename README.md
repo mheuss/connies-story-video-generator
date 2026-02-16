@@ -23,7 +23,7 @@ Each mode feeds into a multi-phase pipeline:
 1. **Story writing** -- Claude generates (or structures) the narrative
 2. **Narration prep** -- Text is optimized for spoken delivery
 3. **TTS generation** -- OpenAI converts text to audio
-4. **Image generation** -- DALL-E 3 creates a scene illustration per chapter
+4. **Image generation** -- GPT Image 1.5 creates a scene illustration per chapter
 5. **Caption generation** -- Whisper produces word-level timestamps
 6. **Video assembly** -- FFmpeg composites everything into the final video
 
@@ -31,7 +31,7 @@ The pipeline saves state between phases. If something fails, you resume from whe
 
 ## Tech Stack
 
-Python 3.11+, Claude API (writing), OpenAI TTS / DALL-E 3 / Whisper (media), FFmpeg (video). See `pyproject.toml` for the full dependency list.
+Python 3.11+, Claude API (writing), OpenAI TTS / GPT Image 1.5 / Whisper (media), FFmpeg (video). See `pyproject.toml` for the full dependency list.
 
 ## Development Roadmap
 
@@ -48,14 +48,14 @@ The project is being built bottom-up: data layer first, then pipeline components
 - Claude API client -- text generation, structured output, transient error retry
 - Story writer (adapt flow) -- scene splitting with text preservation, narration flagging
 - TTS generator -- OpenAI provider with retry and provider abstraction
-- Image generator -- DALL-E 3 provider with provider abstraction
+- Image generator -- GPT Image 1.5 provider with provider abstraction
 - Caption generator -- Whisper provider with word and segment timestamps
 - Test suite -- 483 tests covering all completed modules
 
 ### Up Next
 
 - Story writer (creative flow) -- analysis, story bible, outline, prose, critique/revision
-- FFmpeg module -- command building, Ken Burns effect, blur backgrounds, crossfade transitions, subtitle rendering
+- FFmpeg module -- command building, blur backgrounds, crossfade transitions, subtitle rendering
 - Video assembler -- per-scene segment rendering and final concatenation
 - Pipeline orchestrator -- phase sequencing, state management, checkpoint pausing
 - CLI -- all commands fully functional (create, resume, estimate, status, list)

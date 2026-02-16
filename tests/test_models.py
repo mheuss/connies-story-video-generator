@@ -279,11 +279,11 @@ class TestImageConfig:
     def test_defaults(self):
         config = ImageConfig()
         assert config.provider == "openai"
-        assert config.model == "dall-e-3"
-        assert config.size == "1024x1024"
-        assert config.quality == "standard"
-        assert config.style == "vivid"
-        assert config.style_prefix == "Cinematic digital painting, dramatic lighting:"
+        assert config.model == "gpt-image-1.5"
+        assert config.size == "1536x1024"
+        assert config.quality == "medium"
+        assert config.style is None
+        assert config.style_prefix == "Cinematic, dramatic lighting:"
 
     def test_custom_values(self):
         config = ImageConfig(quality="hd", style="natural")
@@ -309,7 +309,6 @@ class TestVideoConfig:
         assert config.background_mode == "blur"
         assert config.background_blur_radius == 40
         assert config.background_image is None
-        assert config.ken_burns_zoom == 1.08
         assert config.transition_duration == 1.5
         assert config.fade_in_duration == 2.0
         assert config.fade_out_duration == 3.0
@@ -327,7 +326,7 @@ class TestVideoConfig:
             VideoConfig(crf=-1)
 
     def test_serialization_roundtrip(self):
-        config = VideoConfig(fps=60, ken_burns_zoom=1.12)
+        config = VideoConfig(fps=60, crf=23)
         data = config.model_dump()
         restored = VideoConfig(**data)
         assert restored == config
@@ -427,7 +426,7 @@ class TestAppConfig:
         config = AppConfig()
         assert config.story.target_duration_minutes == 30
         assert config.tts.voice == "nova"
-        assert config.images.model == "dall-e-3"
+        assert config.images.model == "gpt-image-1.5"
         assert config.video.fps == 30
         assert config.subtitles.font == "Montserrat"
         assert config.pipeline.autonomous is False

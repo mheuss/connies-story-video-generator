@@ -16,11 +16,10 @@ tts:
 
 images:
   provider: openai
-  model: dall-e-3
-  size: 1024x1024
-  quality: standard
-  style: vivid
-  style_prefix: "Cinematic digital painting, dramatic lighting:"
+  model: gpt-image-1.5
+  size: 1536x1024
+  quality: medium
+  style_prefix: "Cinematic, dramatic lighting:"
 
 video:
   resolution: 1920x1080
@@ -30,7 +29,6 @@ video:
   background_mode: blur
   background_blur_radius: 40
   background_image: null
-  ken_burns_zoom: 1.08
   transition_duration: 1.5
   fade_in_duration: 2.0
   fade_out_duration: 3.0

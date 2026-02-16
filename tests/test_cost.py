@@ -398,15 +398,15 @@ class TestTTSCost:
 
 
 # ---------------------------------------------------------------------------
-# DALL-E cost
+# Image cost
 # ---------------------------------------------------------------------------
 
 
-class TestDALLECost:
-    """DALL-E cost = scene_count * per_image_rate."""
+class TestImageCost:
+    """Image cost = scene_count * per_image_rate."""
 
-    def test_standard_quality_25_scenes(self):
-        """standard 1024x1024: 25 * $0.040 = $1.00."""
+    def test_medium_quality_25_scenes(self):
+        """medium (GPT Image 1.5): 25 * $0.050 = $1.25."""
         config = _config()
         est = estimate_cost(
             mode=InputMode.ORIGINAL,
@@ -414,12 +414,12 @@ class TestDALLECost:
             scene_count=25,
             character_count=247500,
         )
-        dalle = next(s for s in est.services if s.service == "DALL-E 3")
-        assert dalle.low == pytest.approx(25 * 0.040)
-        assert dalle.high == pytest.approx(25 * 0.040)
+        images = next(s for s in est.services if s.service == "Images")
+        assert images.low == pytest.approx(25 * 0.050)
+        assert images.high == pytest.approx(25 * 0.050)
 
     def test_hd_quality_25_scenes(self):
-        """hd 1024x1024: 25 * $0.080 = $2.00."""
+        """hd (DALL-E 3): 25 * $0.080 = $2.00."""
         config = _config(images=ImageConfig(quality="hd"))
         est = estimate_cost(
             mode=InputMode.ORIGINAL,
@@ -427,12 +427,12 @@ class TestDALLECost:
             scene_count=25,
             character_count=247500,
         )
-        dalle = next(s for s in est.services if s.service == "DALL-E 3")
-        assert dalle.low == pytest.approx(25 * 0.080)
-        assert dalle.high == pytest.approx(25 * 0.080)
+        images = next(s for s in est.services if s.service == "Images")
+        assert images.low == pytest.approx(25 * 0.080)
+        assert images.high == pytest.approx(25 * 0.080)
 
-    def test_1_scene_standard(self):
-        """1 scene standard: 1 * $0.040 = $0.04."""
+    def test_1_scene_medium(self):
+        """1 scene medium: 1 * $0.050 = $0.05."""
         config = _config()
         est = estimate_cost(
             mode=InputMode.ORIGINAL,
@@ -440,10 +440,10 @@ class TestDALLECost:
             scene_count=1,
             character_count=9900,
         )
-        dalle = next(s for s in est.services if s.service == "DALL-E 3")
-        assert dalle.low == pytest.approx(0.040)
+        images = next(s for s in est.services if s.service == "Images")
+        assert images.low == pytest.approx(0.050)
 
-    def test_dalle_description_includes_quality(self):
+    def test_image_description_includes_quality(self):
         config = _config(images=ImageConfig(quality="hd"))
         est = estimate_cost(
             mode=InputMode.ORIGINAL,
@@ -451,8 +451,8 @@ class TestDALLECost:
             scene_count=25,
             character_count=247500,
         )
-        dalle = next(s for s in est.services if s.service == "DALL-E 3")
-        assert "hd" in dalle.description.lower()
+        images = next(s for s in est.services if s.service == "Images")
+        assert "hd" in images.description.lower()
 
     def test_unknown_quality_raises(self):
         """Unknown image quality should raise ValueError."""
@@ -533,12 +533,12 @@ class TestTotalCost:
         assert est.total_high == pytest.approx(sum(s.high for s in est.services))
 
     def test_has_four_services(self):
-        """Estimate should contain exactly 4 services: Claude, TTS, DALL-E, Whisper."""
+        """Estimate should contain exactly 4 services: Claude, TTS, Images, Whisper."""
         config = _config()
         est = estimate_cost(mode=InputMode.ORIGINAL, config=config)
         assert len(est.services) == 4
         service_names = {s.service for s in est.services}
-        assert service_names == {"Claude", "OpenAI TTS", "DALL-E 3", "Whisper"}
+        assert service_names == {"Claude", "OpenAI TTS", "Images", "Whisper"}
 
     def test_default_original_mode_total_range(self):
         """Sanity check: default original mode total should be reasonable.
@@ -546,7 +546,7 @@ class TestTotalCost:
         With default config (30 min, 3 scenes calculated):
         - Claude: $0.24 - $0.60 (3/25 * 2.00, 3/25 * 5.00)
         - TTS (tts-1-hd): 29700/1e6 * 30 = $0.891
-        - DALL-E (standard): 3 * 0.04 = $0.12
+        - Images (medium): 3 * 0.05 = $0.15
         - Whisper: 30 * 0.006 = $0.18
         Total low:  ~$1.43
         Total high: ~$1.79
@@ -567,11 +567,11 @@ class TestServiceOrder:
     """Services appear in a consistent order in the estimate."""
 
     def test_services_in_expected_order(self):
-        """Claude, then TTS, then DALL-E, then Whisper."""
+        """Claude, then TTS, then Images, then Whisper."""
         config = _config()
         est = estimate_cost(mode=InputMode.ORIGINAL, config=config)
         names = [s.service for s in est.services]
-        assert names == ["Claude", "OpenAI TTS", "DALL-E 3", "Whisper"]
+        assert names == ["Claude", "OpenAI TTS", "Images", "Whisper"]
 
 
 # ---------------------------------------------------------------------------
@@ -623,7 +623,7 @@ class TestFormatCostEstimate:
         output = format_cost_estimate(est)
         assert "Claude" in output
         assert "OpenAI TTS" in output
-        assert "DALL-E 3" in output
+        assert "Images" in output
         assert "Whisper" in output
 
     def test_contains_estimated_total(self):

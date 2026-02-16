@@ -39,8 +39,6 @@ def segment_args(tmp_path):
         "audio_path": tmp_path / "scene.mp3",
         "ass_path": tmp_path / "scene.ass",
         "output_path": tmp_path / "segment_01.mp4",
-        "duration": 10.0,
-        "scene_number": 1,
     }
 
 
@@ -241,39 +239,36 @@ class TestProbeDuration:
 
 
 # ---------------------------------------------------------------------------
-# TestBuildSegmentCommandKenBurnsToggle — ken_burns_enabled toggle
+# TestBuildSegmentCommandStillImage — uses still image filter
 # ---------------------------------------------------------------------------
 
 
-class TestBuildSegmentCommandKenBurnsToggle:
-    """build_segment_command respects ken_burns_enabled toggle."""
+class TestBuildSegmentCommandStillImage:
+    """build_segment_command uses still image filter (no zoompan)."""
 
-    def test_ken_burns_disabled_no_zoompan(self):
-        """When ken_burns_enabled=False, filtergraph has no zoompan."""
-        config = VideoConfig(ken_burns_enabled=False)
-        cmd = build_segment_command(
-            image_path=Path("/tmp/img.png"),
-            audio_path=Path("/tmp/audio.mp3"),
-            ass_path=Path("/tmp/sub.ass"),
-            output_path=Path("/tmp/out.mp4"),
-            duration=5.0,
-            scene_number=1,
-            video_config=config,
-        )
-        filtergraph = cmd[cmd.index("-filter_complex") + 1]
-        assert "zoompan" not in filtergraph
-
-    def test_ken_burns_enabled_has_zoompan(self):
-        """When ken_burns_enabled=True (default), filtergraph has zoompan."""
+    def test_no_zoompan_in_filtergraph(self):
+        """Filtergraph does not contain zoompan."""
         config = VideoConfig()
         cmd = build_segment_command(
             image_path=Path("/tmp/img.png"),
             audio_path=Path("/tmp/audio.mp3"),
             ass_path=Path("/tmp/sub.ass"),
             output_path=Path("/tmp/out.mp4"),
-            duration=5.0,
-            scene_number=1,
             video_config=config,
         )
         filtergraph = cmd[cmd.index("-filter_complex") + 1]
-        assert "zoompan" in filtergraph
+        assert "zoompan" not in filtergraph
+
+    def test_filtergraph_has_scale_and_pad(self):
+        """Filtergraph contains scale and pad for still image."""
+        config = VideoConfig()
+        cmd = build_segment_command(
+            image_path=Path("/tmp/img.png"),
+            audio_path=Path("/tmp/audio.mp3"),
+            ass_path=Path("/tmp/sub.ass"),
+            output_path=Path("/tmp/out.mp4"),
+            video_config=config,
+        )
+        filtergraph = cmd[cmd.index("-filter_complex") + 1]
+        assert "force_original_aspect_ratio=decrease" in filtergraph
+        assert "pad=" in filtergraph

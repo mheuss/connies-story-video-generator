@@ -85,8 +85,6 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
         audio_path=audio_path,
         ass_path=ass_path,
         output_path=output_path,
-        duration=caption_result.duration,
-        scene_number=scene.scene_number,
         video_config=video_config,
     )
     run_ffmpeg(cmd)

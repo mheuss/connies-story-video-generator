@@ -16,7 +16,7 @@
 
 ## Provider Abstraction for External API Calls
 
-**Problem:** Need to call external APIs (OpenAI TTS, DALL-E, Whisper) with retry logic while keeping the public pipeline function testable and provider-swappable.
+**Problem:** Need to call external APIs (OpenAI TTS, GPT Image, Whisper) with retry logic while keeping the public pipeline function testable and provider-swappable.
 
 **Problem indicators:**
 - "how to abstract an external API provider"

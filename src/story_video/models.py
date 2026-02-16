@@ -221,32 +221,32 @@ class ImageConfig(BaseModel):
     """Image generation parameters.
 
     Controls the image provider, model, dimensions, quality, and style prefix
-    prepended to each DALL-E prompt.
+    prepended to each image prompt.
 
     Fields:
         provider: Image generation service provider name.
         model: Specific image model identifier.
         size: Image dimensions as "WIDTHxHEIGHT".
-        quality: Image quality tier.
-        style: DALL-E style parameter.
+        quality: Image quality tier (model-dependent).
+        style: DALL-E style parameter (None for GPT Image models).
         style_prefix: Text prepended to every image prompt.
     """
 
     model_config = ConfigDict(frozen=True)
 
     provider: str = Field(default="openai")
-    model: str = Field(default="dall-e-3")
-    size: str = Field(default="1024x1024")
-    quality: str = Field(default="standard")
-    style: str = Field(default="vivid")
-    style_prefix: str = Field(default="Cinematic digital painting, dramatic lighting:")
+    model: str = Field(default="gpt-image-1.5")
+    size: str = Field(default="1536x1024")
+    quality: str = Field(default="medium")
+    style: str | None = Field(default=None)
+    style_prefix: str = Field(default="Cinematic, dramatic lighting:")
 
 
 class VideoConfig(BaseModel):
     """Video assembly parameters.
 
-    Controls resolution, encoding, Ken Burns effect, background treatment,
-    and transition timing for FFmpeg video assembly.
+    Controls resolution, encoding, background treatment, and transition
+    timing for FFmpeg video assembly.
 
     Fields:
         resolution: Video dimensions as "WIDTHxHEIGHT".
@@ -256,8 +256,6 @@ class VideoConfig(BaseModel):
         background_mode: Background treatment mode ("blur" or "custom").
         background_blur_radius: Gaussian blur radius for blurred background.
         background_image: Optional path to a custom background image.
-        ken_burns_zoom: Maximum zoom factor for Ken Burns effect.
-        ken_burns_enabled: Whether to apply Ken Burns zoom/pan effect (False uses still image).
         transition_duration: Crossfade duration between scenes in seconds.
         fade_in_duration: Fade-from-black duration at video start in seconds.
         fade_out_duration: Fade-to-black duration at video end in seconds.
@@ -272,8 +270,6 @@ class VideoConfig(BaseModel):
     background_mode: str = Field(default="blur")
     background_blur_radius: int = Field(default=40, ge=0)
     background_image: Path | None = Field(default=None)
-    ken_burns_zoom: float = Field(default=1.08, gt=0)
-    ken_burns_enabled: bool = Field(default=True)
     transition_duration: float = Field(default=1.5, ge=0)
     fade_in_duration: float = Field(default=2.0, ge=0)
     fade_out_duration: float = Field(default=3.0, ge=0)
@@ -452,7 +448,8 @@ class Scene(BaseModel):
         title: Scene title or beat description.
         prose: The actual story text for this scene.
         narration_text: TTS-optimized version of the prose (set during narration prep).
-        image_prompt: DALL-E prompt for scene illustration (set during image prompt generation).
+        image_prompt: Image generation prompt for scene illustration
+            (set during image prompt generation).
         asset_status: Per-asset production status tracking.
     """
 
