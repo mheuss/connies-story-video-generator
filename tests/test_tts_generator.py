@@ -10,6 +10,8 @@ import pytest
 
 from story_video.models import AppConfig, AssetType, InputMode, SceneStatus, TTSConfig
 from story_video.pipeline.tts_generator import (
+    MOOD_TO_ELEVENLABS_TAG,
+    ElevenLabsTTSProvider,
     OpenAITTSProvider,
     TTSProvider,
     generate_audio,
@@ -568,3 +570,85 @@ class TestGenerateAudioMultiDigitSceneNumber:
 
         audio_path = state.project_dir / "audio" / "scene_012.mp3"
         assert audio_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# ElevenLabsTTSProvider — mood prepended as audio tag
+# ---------------------------------------------------------------------------
+
+
+class TestElevenLabsTTSProvider:
+    """ElevenLabs provider translates mood to audio tags."""
+
+    @pytest.fixture()
+    def mock_elevenlabs(self, monkeypatch):
+        """Patch elevenlabs.ElevenLabs to return a mock client."""
+        mock_client = MagicMock()
+        mock_class = MagicMock(return_value=mock_client)
+        monkeypatch.setattr("story_video.pipeline.tts_generator.elevenlabs.ElevenLabs", mock_class)
+        return mock_client
+
+    def test_mood_prepended_as_audio_tag(self, mock_elevenlabs):
+        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
+
+        provider = ElevenLabsTTSProvider()
+        provider.synthesize(
+            "Hello",
+            "voice-id",
+            "eleven_v3",
+            1.0,
+            "mp3_44100_128",
+            instructions="Speak in a sad tone",
+        )
+
+        call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
+        text_sent = call_kwargs["text"]
+        assert text_sent.startswith("[sorrowful]")
+        assert "Hello" in text_sent
+
+    def test_no_mood_sends_plain_text(self, mock_elevenlabs):
+        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
+
+        provider = ElevenLabsTTSProvider()
+        provider.synthesize(
+            "Hello", "voice-id", "eleven_v3", 1.0, "mp3_44100_128", instructions=None
+        )
+
+        call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
+        text_sent = call_kwargs["text"]
+        assert text_sent == "Hello"
+
+    def test_unknown_mood_passed_through(self, mock_elevenlabs):
+        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
+
+        provider = ElevenLabsTTSProvider()
+        provider.synthesize(
+            "Hello",
+            "voice-id",
+            "eleven_v3",
+            1.0,
+            "mp3_44100_128",
+            instructions="Speak in a mysterious tone",
+        )
+
+        call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
+        text_sent = call_kwargs["text"]
+        assert text_sent.startswith("[mysterious]")
+
+
+# ---------------------------------------------------------------------------
+# MOOD_TO_ELEVENLABS_TAG — mapping verification
+# ---------------------------------------------------------------------------
+
+
+class TestMoodToElevenLabsTag:
+    """MOOD_TO_ELEVENLABS_TAG maps mood keywords to audio tags."""
+
+    def test_sad_maps_to_sorrowful(self):
+        assert MOOD_TO_ELEVENLABS_TAG["sad"] == "sorrowful"
+
+    def test_angry_maps_to_frustrated(self):
+        assert MOOD_TO_ELEVENLABS_TAG["angry"] == "frustrated"
+
+    def test_happy_maps_to_excited(self):
+        assert MOOD_TO_ELEVENLABS_TAG["happy"] == "excited"

@@ -1,19 +1,25 @@
 """TTS audio generation with provider abstraction.
 
 Converts scene narration text to audio files using a pluggable TTS provider.
-Ships with an OpenAI implementation; designed for easy addition of ElevenLabs
-or other providers.
+Ships with OpenAI and ElevenLabs implementations.
 """
 
 from typing import Protocol
 
+import elevenlabs
 import openai
 
 from story_video.models import AssetType, Scene, SceneStatus
 from story_video.state import ProjectState
 from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS, with_retry
 
-__all__ = ["OpenAITTSProvider", "TTSProvider", "generate_audio"]
+__all__ = [
+    "ElevenLabsTTSProvider",
+    "MOOD_TO_ELEVENLABS_TAG",
+    "OpenAITTSProvider",
+    "TTSProvider",
+    "generate_audio",
+]
 
 
 class TTSProvider(Protocol):
@@ -87,6 +93,78 @@ class OpenAITTSProvider:
             kwargs["instructions"] = instructions
         response = self._client.audio.speech.create(**kwargs)
         return response.content
+
+
+MOOD_TO_ELEVENLABS_TAG: dict[str, str] = {
+    "sad": "sorrowful",
+    "happy": "excited",
+    "angry": "frustrated",
+    "tired": "weary",
+    "scared": "nervous",
+    "calm": "calm",
+    "excited": "excited",
+    "whisper": "whispers",
+    "crying": "sorrowful",
+    "seductive": "playfully",
+}
+
+
+def _mood_to_elevenlabs_text(text: str, instructions: str | None) -> str:
+    """Prepend an ElevenLabs audio tag for the mood instruction."""
+    if instructions is None:
+        return text
+    # Extract mood keyword from "Speak in a X tone" format
+    mood = (
+        instructions.removeprefix("Speak in a ")
+        .removeprefix("Speak in an ")
+        .removesuffix(" tone")
+        .strip()
+        .lower()
+    )
+    tag = MOOD_TO_ELEVENLABS_TAG.get(mood, mood)
+    return f"[{tag}] {text}"
+
+
+class ElevenLabsTTSProvider:
+    """ElevenLabs TTS provider using the standard text-to-speech API.
+
+    Reads ELEVEN_API_KEY from the environment.
+    """
+
+    def __init__(self) -> None:
+        self._client = elevenlabs.ElevenLabs()
+
+    @with_retry(max_retries=3, base_delay=2.0, retry_on=(Exception,))
+    def synthesize(
+        self,
+        text: str,
+        voice: str,
+        model: str,
+        speed: float,
+        output_format: str,
+        instructions: str | None = None,
+    ) -> bytes:
+        """Convert text to audio bytes via ElevenLabs TTS.
+
+        Args:
+            text: The text to convert to speech.
+            voice: ElevenLabs voice ID (hash string).
+            model: ElevenLabs model ID.
+            speed: Playback speed (currently unused by ElevenLabs API).
+            output_format: ElevenLabs output format (mp3_44100_128, etc.).
+            instructions: Optional mood instruction, translated to audio tag.
+
+        Returns:
+            Raw audio bytes from the streaming response.
+        """
+        tagged_text = _mood_to_elevenlabs_text(text, instructions)
+        audio_iter = self._client.text_to_speech.convert(
+            voice_id=voice,
+            model_id=model,
+            text=tagged_text,
+            output_format=output_format,
+        )
+        return b"".join(audio_iter)
 
 
 def generate_audio(scene: Scene, state: ProjectState, provider: TTSProvider) -> None:
