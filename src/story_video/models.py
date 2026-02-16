@@ -25,6 +25,7 @@ __all__ = [
     "CaptionWord",
     "ImageConfig",
     "InputMode",
+    "NarrationSegment",
     "OutputConfig",
     "PhaseStatus",
     "PipelineConfig",
@@ -34,6 +35,7 @@ __all__ = [
     "SceneAssetStatus",
     "SceneStatus",
     "StoryConfig",
+    "StoryHeader",
     "SubtitleConfig",
     "TTSConfig",
     "VideoConfig",
@@ -215,6 +217,42 @@ class TTSConfig(BaseModel):
     voice: str = Field(default="nova")
     speed: float = Field(default=1.0, gt=0)
     output_format: str = Field(default="mp3")
+
+
+class StoryHeader(BaseModel):
+    """Parsed front matter from a story file.
+
+    Fields:
+        voices: Mapping from character labels to provider-specific voice IDs.
+        default_voice: Label used for text without an explicit voice tag.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    voices: dict[str, str] = Field(min_length=1)
+    default_voice: str = Field(default="narrator")
+
+
+class NarrationSegment(BaseModel):
+    """A chunk of narration text with voice and mood metadata.
+
+    Fields:
+        text: Actual text to speak (tags stripped).
+        voice: Resolved voice ID (e.g., "nova").
+        voice_label: Original label from the tag (e.g., "jane").
+        mood: Emotion instruction or None.
+        scene_number: Which scene this segment belongs to.
+        segment_index: Order within the scene.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    text: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+    voice_label: str = Field(min_length=1)
+    mood: str | None = Field(default=None)
+    scene_number: int = Field(ge=1)
+    segment_index: int = Field(ge=0)
 
 
 class ImageConfig(BaseModel):

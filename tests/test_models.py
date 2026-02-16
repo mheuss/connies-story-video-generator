@@ -17,6 +17,7 @@ from story_video.models import (
     AssetType,
     ImageConfig,
     InputMode,
+    NarrationSegment,
     OutputConfig,
     PhaseStatus,
     PipelineConfig,
@@ -26,6 +27,7 @@ from story_video.models import (
     SceneAssetStatus,
     SceneStatus,
     StoryConfig,
+    StoryHeader,
     SubtitleConfig,
     TTSConfig,
     VideoConfig,
@@ -751,3 +753,104 @@ class TestCaptionModels:
         result = CaptionResult(segments=[], words=[], language="en", duration=1.0)
         assert result.language == "en"
         assert result.duration == 1.0
+
+
+# ---------------------------------------------------------------------------
+# StoryHeader tests
+# ---------------------------------------------------------------------------
+
+
+class TestStoryHeader:
+    """StoryHeader model for parsed front matter."""
+
+    def test_defaults(self):
+        header = StoryHeader(voices={"narrator": "nova"})
+        assert header.default_voice == "narrator"
+
+    def test_custom_default_voice(self):
+        header = StoryHeader(voices={"narrator": "nova"}, default_voice="bob")
+        assert header.default_voice == "bob"
+
+    def test_voices_required(self):
+        with pytest.raises(ValidationError):
+            StoryHeader()
+
+    def test_rejects_empty_voices(self):
+        with pytest.raises(ValidationError):
+            StoryHeader(voices={})
+
+    def test_frozen(self):
+        header = StoryHeader(voices={"narrator": "nova"})
+        with pytest.raises(ValidationError):
+            header.default_voice = "other"
+
+    def test_serialization_roundtrip(self):
+        header = StoryHeader(voices={"jane": "nova", "bob": "alloy"}, default_voice="jane")
+        data = header.model_dump()
+        restored = StoryHeader(**data)
+        assert restored == header
+
+
+# ---------------------------------------------------------------------------
+# NarrationSegment tests
+# ---------------------------------------------------------------------------
+
+
+class TestNarrationSegment:
+    """NarrationSegment model for parsed text chunks."""
+
+    def test_required_fields(self):
+        seg = NarrationSegment(
+            text="Hello",
+            voice="nova",
+            voice_label="narrator",
+            scene_number=1,
+            segment_index=0,
+        )
+        assert seg.text == "Hello"
+        assert seg.mood is None
+
+    def test_with_mood(self):
+        seg = NarrationSegment(
+            text="Goodbye",
+            voice="nova",
+            voice_label="narrator",
+            mood="sad",
+            scene_number=1,
+            segment_index=0,
+        )
+        assert seg.mood == "sad"
+
+    def test_rejects_empty_text(self):
+        with pytest.raises(ValidationError):
+            NarrationSegment(
+                text="",
+                voice="nova",
+                voice_label="narrator",
+                scene_number=1,
+                segment_index=0,
+            )
+
+    def test_frozen(self):
+        seg = NarrationSegment(
+            text="Hi",
+            voice="nova",
+            voice_label="narrator",
+            scene_number=1,
+            segment_index=0,
+        )
+        with pytest.raises(ValidationError):
+            seg.text = "other"
+
+    def test_serialization_roundtrip(self):
+        seg = NarrationSegment(
+            text="Hello world",
+            voice="nova",
+            voice_label="narrator",
+            mood="happy",
+            scene_number=2,
+            segment_index=3,
+        )
+        data = seg.model_dump()
+        restored = NarrationSegment(**data)
+        assert restored == seg
