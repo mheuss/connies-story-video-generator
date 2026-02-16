@@ -213,7 +213,7 @@ class TTSConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     provider: str = Field(default="openai")
-    model: str = Field(default="tts-1-hd")
+    model: str = Field(default="gpt-4o-mini-tts")
     voice: str = Field(default="nova")
     speed: float = Field(default=1.0, gt=0)
     output_format: str = Field(default="mp3")

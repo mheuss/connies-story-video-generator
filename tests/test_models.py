@@ -255,7 +255,7 @@ class TestTTSConfig:
     def test_defaults(self):
         config = TTSConfig()
         assert config.provider == "openai"
-        assert config.model == "tts-1-hd"
+        assert config.model == "gpt-4o-mini-tts"
         assert config.voice == "nova"
         assert config.speed == 1.0
         assert config.output_format == "mp3"

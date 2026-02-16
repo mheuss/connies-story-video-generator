@@ -72,7 +72,7 @@ class TestLoadConfigFromYaml:
         config = load_config(config_path=yaml_file)
         # voice is overridden, but other TTS fields get defaults
         assert config.tts.provider == "openai"
-        assert config.tts.model == "tts-1-hd"
+        assert config.tts.model == "gpt-4o-mini-tts"
         # Other sections are entirely defaults
         assert config.story.target_duration_minutes == 30
         assert config.video.fps == 30

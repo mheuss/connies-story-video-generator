@@ -26,6 +26,7 @@ class TTSProvider(Protocol):
         model: str,
         speed: float,
         output_format: str,
+        instructions: str | None = None,
     ) -> bytes:
         """Convert text to audio bytes.
 
@@ -35,6 +36,7 @@ class TTSProvider(Protocol):
             model: TTS model identifier.
             speed: Playback speed multiplier.
             output_format: Audio format (mp3, wav, etc.).
+            instructions: Optional style/mood instruction for the TTS engine.
 
         Returns:
             Raw audio bytes.
@@ -59,26 +61,31 @@ class OpenAITTSProvider:
         model: str,
         speed: float,
         output_format: str,
+        instructions: str | None = None,
     ) -> bytes:
         """Convert text to audio bytes via OpenAI TTS.
 
         Args:
             text: The text to convert to speech.
             voice: OpenAI voice name (alloy, echo, fable, onyx, nova, shimmer).
-            model: OpenAI TTS model (tts-1, tts-1-hd).
+            model: OpenAI TTS model (tts-1, tts-1-hd, gpt-4o-mini-tts).
             speed: Playback speed multiplier (0.25 to 4.0).
             output_format: Audio format (mp3, opus, aac, flac).
+            instructions: Optional style/mood instruction for the TTS engine.
 
         Returns:
             Raw audio bytes from the full API response.
         """
-        response = self._client.audio.speech.create(
-            model=model,
-            voice=voice,
-            input=text,
-            speed=speed,
-            response_format=output_format,
-        )
+        kwargs = {
+            "model": model,
+            "voice": voice,
+            "input": text,
+            "speed": speed,
+            "response_format": output_format,
+        }
+        if instructions is not None:
+            kwargs["instructions"] = instructions
+        response = self._client.audio.speech.create(**kwargs)
         return response.content
 
 

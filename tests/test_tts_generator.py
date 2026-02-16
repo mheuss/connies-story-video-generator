@@ -348,6 +348,49 @@ class TestOpenAITTSProviderNoRetryOnPermanentErrors:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# OpenAITTSProvider — instructions parameter
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAITTSProviderInstructions:
+    """OpenAI provider forwards instructions to the API."""
+
+    def test_instructions_passed_to_api(self, mock_openai):
+        mock_response = MagicMock()
+        mock_response.content = b"audio-bytes"
+        mock_openai.audio.speech.create.return_value = mock_response
+
+        provider = OpenAITTSProvider()
+        provider.synthesize(
+            "Hello",
+            "nova",
+            "gpt-4o-mini-tts",
+            1.0,
+            "mp3",
+            instructions="Speak sadly",
+        )
+
+        call_kwargs = mock_openai.audio.speech.create.call_args.kwargs
+        assert call_kwargs["instructions"] == "Speak sadly"
+
+    def test_instructions_omitted_when_none(self, mock_openai):
+        mock_response = MagicMock()
+        mock_response.content = b"audio-bytes"
+        mock_openai.audio.speech.create.return_value = mock_response
+
+        provider = OpenAITTSProvider()
+        provider.synthesize("Hello", "nova", "gpt-4o-mini-tts", 1.0, "mp3", instructions=None)
+
+        call_kwargs = mock_openai.audio.speech.create.call_args.kwargs
+        assert "instructions" not in call_kwargs
+
+
+# ---------------------------------------------------------------------------
+# generate_audio — happy path
+# ---------------------------------------------------------------------------
+
+
 class TestGenerateAudioHappyPath:
     """generate_audio() writes audio file and updates state."""
 

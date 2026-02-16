@@ -9,7 +9,7 @@ story:
 
 tts:
   provider: openai
-  model: tts-1-hd
+  model: gpt-4o-mini-tts
   voice: nova
   speed: 1.0
   output_format: mp3

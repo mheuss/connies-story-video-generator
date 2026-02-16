@@ -334,8 +334,8 @@ class TestClaudeCost:
 class TestTTSCost:
     """TTS cost = character_count / 1_000_000 * rate_per_million_chars."""
 
-    def test_tts_1_hd_default(self):
-        """tts-1-hd at 247500 chars: 247500 / 1e6 * 30.00 = $7.425."""
+    def test_gpt_4o_mini_tts_default(self):
+        """gpt-4o-mini-tts (default) at 247500 chars: 247500 / 1e6 * 0.60 = $0.1485."""
         config = _config()
         est = estimate_cost(
             mode=InputMode.ORIGINAL,
@@ -344,7 +344,7 @@ class TestTTSCost:
             character_count=247500,
         )
         tts = next(s for s in est.services if s.service == "OpenAI TTS")
-        expected = 247500 / 1_000_000 * 30.00
+        expected = 247500 / 1_000_000 * 0.60
         assert tts.low == pytest.approx(expected)
         assert tts.high == pytest.approx(expected)  # Exact cost, low == high
 
