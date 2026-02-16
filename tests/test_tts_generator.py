@@ -8,12 +8,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from story_video.models import AppConfig, AssetType, InputMode, SceneStatus, TTSConfig
+from story_video.models import AppConfig, AssetType, InputMode, SceneStatus, StoryHeader, TTSConfig
 from story_video.pipeline.tts_generator import (
     MOOD_TO_ELEVENLABS_TAG,
     ElevenLabsTTSProvider,
     OpenAITTSProvider,
     TTSProvider,
+    _mood_to_instructions,
     generate_audio,
 )
 from story_video.state import ProjectState
@@ -652,3 +653,90 @@ class TestMoodToElevenLabsTag:
 
     def test_happy_maps_to_excited(self):
         assert MOOD_TO_ELEVENLABS_TAG["happy"] == "excited"
+
+
+# ---------------------------------------------------------------------------
+# _mood_to_instructions — helper function
+# ---------------------------------------------------------------------------
+
+
+class TestMoodToInstructions:
+    """_mood_to_instructions converts mood tags to TTS instructions."""
+
+    def test_returns_none_for_none(self):
+        """None mood produces None instructions."""
+        assert _mood_to_instructions(None) is None
+
+    def test_converts_mood_to_instruction_string(self):
+        """A mood string becomes 'Speak in a X tone'."""
+        assert _mood_to_instructions("sad") == "Speak in a sad tone"
+
+    def test_converts_arbitrary_mood(self):
+        """Any mood string is wrapped in the instruction format."""
+        assert _mood_to_instructions("mysterious") == "Speak in a mysterious tone"
+
+
+# ---------------------------------------------------------------------------
+# generate_audio — multi-segment narration
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateAudioMultiSegment:
+    """generate_audio handles multi-segment narration."""
+
+    @pytest.fixture()
+    def state_with_header(self, tmp_path, mock_provider):
+        """Create project state for multi-segment testing."""
+        state = ProjectState.create(
+            project_id="multi-seg-test",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        state.add_scene(1, "The Storm", "The storm raged on.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
+        return state
+
+    def test_single_segment_backward_compat(self, state_with_header, mock_provider):
+        """Scene without story_header produces one synthesize call."""
+        scene = state_with_header.metadata.scenes[0]
+        generate_audio(scene, state_with_header, mock_provider)
+        assert mock_provider.synthesize.call_count == 1
+
+    def test_multi_segment_multiple_calls(self, state_with_header, mock_provider):
+        """Scene with voice tags produces one synthesize call per segment."""
+        scene = state_with_header.metadata.scenes[0]
+        scene.narration_text = 'Hello. **voice:jane** "Hi!" she said.'
+        header = StoryHeader(voices={"narrator": "nova", "jane": "shimmer"})
+        generate_audio(scene, state_with_header, mock_provider, story_header=header)
+        assert mock_provider.synthesize.call_count == 2
+
+    def test_multi_segment_concatenates_bytes(self, state_with_header, mock_provider):
+        """Multiple segments produce concatenated audio file."""
+        mock_provider.synthesize.side_effect = [b"chunk1", b"chunk2"]
+        scene = state_with_header.metadata.scenes[0]
+        scene.narration_text = "Hello. **voice:jane** Bye."
+        header = StoryHeader(voices={"narrator": "nova", "jane": "shimmer"})
+        generate_audio(scene, state_with_header, mock_provider, story_header=header)
+
+        audio_path = state_with_header.project_dir / "audio" / "scene_001.mp3"
+        assert audio_path.read_bytes() == b"chunk1chunk2"
+
+    def test_mood_passed_as_instructions(self, state_with_header, mock_provider):
+        """Mood tag is converted to instructions and passed to synthesize."""
+        scene = state_with_header.metadata.scenes[0]
+        scene.narration_text = "**mood:sad** Goodbye."
+        header = StoryHeader(voices={"narrator": "nova"})
+        generate_audio(scene, state_with_header, mock_provider, story_header=header)
+
+        call_kwargs = mock_provider.synthesize.call_args.kwargs
+        assert call_kwargs["instructions"] == "Speak in a sad tone"
+
+    def test_no_header_uses_config_voice(self, state_with_header, mock_provider):
+        """Scene without story header uses config default voice."""
+        scene = state_with_header.metadata.scenes[0]
+        generate_audio(scene, state_with_header, mock_provider, story_header=None)
+
+        call_kwargs = mock_provider.synthesize.call_args.kwargs
+        assert call_kwargs["voice"] == "nova"  # AppConfig default

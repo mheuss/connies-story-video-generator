@@ -9,8 +9,9 @@ from typing import Protocol
 import elevenlabs
 import openai
 
-from story_video.models import AssetType, Scene, SceneStatus
+from story_video.models import AssetType, Scene, SceneStatus, StoryHeader
 from story_video.state import ProjectState
+from story_video.utils.narration_tags import parse_narration_segments
 from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS, with_retry
 
 __all__ = [
@@ -167,16 +168,33 @@ class ElevenLabsTTSProvider:
         return b"".join(audio_iter)
 
 
-def generate_audio(scene: Scene, state: ProjectState, provider: TTSProvider) -> None:
+def _mood_to_instructions(mood: str | None) -> str | None:
+    """Convert a mood tag to a natural language TTS instruction."""
+    if mood is None:
+        return None
+    return f"Speak in a {mood} tone"
+
+
+def generate_audio(
+    scene: Scene,
+    state: ProjectState,
+    provider: TTSProvider,
+    story_header: StoryHeader | None = None,
+) -> None:
     """Generate audio for a single scene.
 
-    Reads narration text (falling back to prose), calls the TTS provider,
-    writes the audio file, and updates project state.
+    When a story_header is provided, parses the narration text into
+    segments by voice/mood tags and makes one TTS call per segment.
+    Audio bytes are concatenated into a single scene file.
+
+    When no story_header is provided, behaves identically to the
+    original single-call-per-scene path (backward compatible).
 
     Args:
         scene: The scene to generate audio for.
         state: Project state for config access and persistence.
         provider: TTS provider implementation.
+        story_header: Optional parsed story header with voice mappings.
 
     Raises:
         ValueError: If the scene has no text content.
@@ -187,13 +205,36 @@ def generate_audio(scene: Scene, state: ProjectState, provider: TTSProvider) -> 
         raise ValueError(msg)
 
     tts_config = state.metadata.config.tts
-    audio_bytes = provider.synthesize(
-        text,
-        voice=tts_config.voice,
-        model=tts_config.model,
-        speed=tts_config.speed,
-        output_format=tts_config.output_format,
-    )
+
+    if story_header is not None:
+        # Multi-segment path
+        segments = parse_narration_segments(
+            text,
+            voice_map=story_header.voices,
+            default_voice=story_header.default_voice,
+            scene_number=scene.scene_number,
+        )
+        audio_chunks: list[bytes] = []
+        for segment in segments:
+            chunk = provider.synthesize(
+                segment.text,
+                voice=segment.voice,
+                model=tts_config.model,
+                speed=tts_config.speed,
+                output_format=tts_config.output_format,
+                instructions=_mood_to_instructions(segment.mood),
+            )
+            audio_chunks.append(chunk)
+        audio_bytes = b"".join(audio_chunks)
+    else:
+        # Backward-compatible single-segment path
+        audio_bytes = provider.synthesize(
+            text,
+            voice=tts_config.voice,
+            model=tts_config.model,
+            speed=tts_config.speed,
+            output_format=tts_config.output_format,
+        )
 
     audio_dir = state.project_dir / "audio"
     audio_dir.mkdir(exist_ok=True)
