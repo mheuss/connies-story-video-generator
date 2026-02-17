@@ -196,6 +196,28 @@ class StoryConfig(BaseModel):
     scene_word_min: int = Field(default=500, gt=0)
     scene_word_max: int = Field(default=3000, gt=0)
 
+    @model_validator(mode="after")
+    def _validate_word_count_bounds(self) -> "StoryConfig":
+        if self.scene_word_min > self.scene_word_max:
+            msg = (
+                f"scene_word_min ({self.scene_word_min}) must not exceed "
+                f"scene_word_max ({self.scene_word_max})"
+            )
+            raise ValueError(msg)
+        if self.scene_word_target < self.scene_word_min:
+            msg = (
+                f"scene_word_target ({self.scene_word_target}) must not be below "
+                f"scene_word_min ({self.scene_word_min})"
+            )
+            raise ValueError(msg)
+        if self.scene_word_target > self.scene_word_max:
+            msg = (
+                f"scene_word_target ({self.scene_word_target}) must not exceed "
+                f"scene_word_max ({self.scene_word_max})"
+            )
+            raise ValueError(msg)
+        return self
+
 
 class TTSConfig(BaseModel):
     """Text-to-speech generation parameters.

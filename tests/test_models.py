@@ -249,6 +249,35 @@ class TestStoryConfig:
         assert restored == config
 
 
+class TestStoryConfigWordCountValidation:
+    """StoryConfig enforces min <= target <= max for scene word counts."""
+
+    def test_min_exceeds_max_raises(self):
+        """scene_word_min > scene_word_max is rejected."""
+        with pytest.raises(ValidationError):
+            StoryConfig(scene_word_min=3000, scene_word_max=500)
+
+    def test_target_exceeds_max_raises(self):
+        """scene_word_target > scene_word_max is rejected."""
+        with pytest.raises(ValidationError):
+            StoryConfig(scene_word_target=4000, scene_word_max=3000)
+
+    def test_target_below_min_raises(self):
+        """scene_word_target < scene_word_min is rejected."""
+        with pytest.raises(ValidationError):
+            StoryConfig(scene_word_target=100, scene_word_min=500)
+
+    def test_valid_bounds_accepted(self):
+        """Valid ordering passes validation."""
+        config = StoryConfig(scene_word_min=500, scene_word_target=1800, scene_word_max=3000)
+        assert config.scene_word_min == 500
+
+    def test_equal_bounds_accepted(self):
+        """All three values equal is valid."""
+        config = StoryConfig(scene_word_min=1000, scene_word_target=1000, scene_word_max=1000)
+        assert config.scene_word_target == 1000
+
+
 class TestTTSConfig:
     """TTSConfig — text-to-speech parameters."""
 
