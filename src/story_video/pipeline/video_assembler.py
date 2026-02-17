@@ -123,6 +123,10 @@ def assemble_video(state: ProjectState) -> Path:
         segment_path = state.project_dir / "segments" / f"scene_{nn}.mp4"
         segment_paths.append(segment_path)
 
+    if not segment_paths:
+        msg = "No completed video segments to assemble"
+        raise ValueError(msg)
+
     # Validate segment files exist
     for path in segment_paths:
         if not path.exists():

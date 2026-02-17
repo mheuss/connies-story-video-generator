@@ -314,3 +314,21 @@ class TestAssembleVideoSegmentValidation:
 
         with pytest.raises(FileNotFoundError, match="Segment file"):
             assemble_video(project_state)
+
+
+# ---------------------------------------------------------------------------
+# TestAssembleVideoEmptySegments — empty segment list guard
+# ---------------------------------------------------------------------------
+
+
+class TestAssembleVideoEmptySegments:
+    """assemble_video raises ValueError when no segments are completed."""
+
+    def test_raises_when_no_segments_completed(self, project_state):
+        """All scenes with non-completed video_segment raises ValueError."""
+        for scene in project_state.metadata.scenes:
+            scene.asset_status.video_segment = SceneStatus.PENDING
+        project_state.save()
+
+        with pytest.raises(ValueError, match="[Nn]o completed video segments"):
+            assemble_video(project_state)
