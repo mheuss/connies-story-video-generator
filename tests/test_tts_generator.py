@@ -33,12 +33,6 @@ def mock_openai(monkeypatch):
     return mock_client
 
 
-@pytest.fixture(autouse=True)
-def _patch_sleep(monkeypatch):
-    """Eliminate retry delays so tests run instantly."""
-    monkeypatch.setattr("time.sleep", lambda _: None)
-
-
 @pytest.fixture()
 def mock_provider():
     """Create a mock TTS provider that returns dummy audio bytes."""
