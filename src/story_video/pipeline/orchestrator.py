@@ -22,12 +22,12 @@ from story_video.pipeline.caption_generator import CaptionProvider, generate_cap
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import ImageProvider, generate_image
 from story_video.pipeline.image_prompt_writer import generate_image_prompts
+from story_video.pipeline.narration_prep import prepare_narration_llm, write_narration_changelog
 from story_video.pipeline.story_writer import flag_narration, split_scenes
 from story_video.pipeline.tts_generator import TTSProvider, generate_audio
 from story_video.pipeline.video_assembler import assemble_scene, assemble_video
 from story_video.state import ProjectState
 from story_video.utils.narration_tags import parse_story_header
-from story_video.utils.text import prepare_narration
 
 __all__ = ["run_pipeline"]
 
@@ -41,6 +41,7 @@ _CHECKPOINT_PHASES = frozenset(
         PipelinePhase.SCENE_SPLITTING,
         PipelinePhase.NARRATION_FLAGGING,
         PipelinePhase.IMAGE_PROMPTS,
+        PipelinePhase.NARRATION_PREP,
     }
 )
 
@@ -222,7 +223,10 @@ def _dispatch_phase(
         generate_image_prompts(state, claude_client)
 
     elif phase == PipelinePhase.NARRATION_PREP:
-        _run_narration_prep(state)
+        if claude_client is None:
+            msg = "claude_client is required for NARRATION_PREP phase"
+            raise ValueError(msg)
+        _run_narration_prep(state, claude_client)
 
     elif phase == PipelinePhase.TTS_GENERATION:
         if tts_provider is None:
@@ -254,27 +258,44 @@ def _dispatch_phase(
         raise ValueError(msg)
 
 
-def _run_narration_prep(state: ProjectState) -> None:
-    """Apply narration preparation transforms to all scenes.
+def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> None:
+    """Apply LLM-based narration preparation to all scenes.
 
-    Narration prep runs on ALL scenes (not just pending ones) because
-    flag_narration already marked NARRATION_TEXT as COMPLETED during the
-    flagging phase. Using ``get_scenes_for_processing()`` would return
-    an empty list since all assets are already completed.
+    Calls Claude once per scene to rewrite narration text for TTS. Accumulates
+    a pronunciation guide across scenes (scene 1's entries feed into scene 2's
+    prompt). Writes a changelog of all modifications to the project directory.
 
-    This phase transforms the narration text content (abbreviation
-    expansion, number-to-words, pause markers, punctuation smoothing)
-    without changing asset status -- the NARRATION_TEXT assets remain
-    COMPLETED from the flagging phase.
-
-    When ``narration_text`` is None (semi-auto mode where flag_narration
-    did not set it), falls back to ``prose`` as the text source.
+    Runs on ALL scenes (not just pending ones) because narration_text assets
+    are already COMPLETED from the flagging phase.
     """
+    pronunciation_guide: list[dict[str, str]] = []
+    changelog: list[dict] = []
+    total_scenes = len(state.metadata.scenes)
+
     for scene in state.metadata.scenes:
-        if scene.narration_text:
-            scene.narration_text = prepare_narration(scene.narration_text)
-        elif scene.prose:
-            scene.narration_text = prepare_narration(scene.prose)
+        text = scene.narration_text or scene.prose
+        if not text:
+            continue
+
+        result = prepare_narration_llm(
+            text,
+            claude_client,
+            pronunciation_guide=pronunciation_guide,
+            story_title=state.metadata.project_id,
+            scene_number=scene.scene_number,
+            total_scenes=total_scenes,
+        )
+
+        scene.narration_text = result["modified_text"]
+
+        for addition in result["pronunciation_guide_additions"]:
+            pronunciation_guide.append(addition)
+
+        for change in result["changes"]:
+            changelog.append({"scene": scene.scene_number, **change})
+
+    if changelog:
+        write_narration_changelog(changelog, state.project_dir)
 
 
 def _run_per_scene(state: ProjectState, process_fn: Callable[[Scene], None]) -> None:

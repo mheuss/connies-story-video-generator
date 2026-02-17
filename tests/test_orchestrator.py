@@ -234,8 +234,39 @@ class TestRunPipelineSemiAutoCheckpoints:
                 PipelinePhase.SCENE_SPLITTING,
                 PipelinePhase.NARRATION_FLAGGING,
                 PipelinePhase.IMAGE_PROMPTS,
+                PipelinePhase.NARRATION_PREP,
             }
         )
+
+    @patch(
+        "story_video.pipeline.orchestrator.prepare_narration_llm",
+        return_value={
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        },
+    )
+    def test_narration_prep_pauses_in_semi_auto(self, mock_prep, tmp_path):
+        """NARRATION_PREP pauses for review in semi-auto mode."""
+        state = _make_adapt_state(tmp_path, autonomous=False)
+        _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.TEXT)
+
+        # Set narration_text on the scene
+        scene = state.metadata.scenes[0]
+        scene.narration_text = scene.prose
+        state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
+
+        # Resume from IMAGE_PROMPTS AWAITING_REVIEW — next is NARRATION_PREP
+        _set_phase_state(state, PipelinePhase.IMAGE_PROMPTS, PhaseStatus.AWAITING_REVIEW)
+
+        run_pipeline(state, claude_client=MagicMock())
+
+        assert state.metadata.current_phase == PipelinePhase.NARRATION_PREP
+        assert state.metadata.status == PhaseStatus.AWAITING_REVIEW
+        mock_prep.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +282,14 @@ class TestRunPipelineAutonomous:
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped text")
+    @patch(
+        "story_video.pipeline.orchestrator.prepare_narration_llm",
+        return_value={
+            "modified_text": "prepped text",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        },
+    )
     @patch("story_video.pipeline.orchestrator.generate_image_prompts")
     @patch("story_video.pipeline.orchestrator.flag_narration")
     @patch("story_video.pipeline.orchestrator.split_scenes")
@@ -360,14 +398,14 @@ class TestRunPipelineResume:
 
 
 class TestRunPipelineNarrationPrep:
-    """NARRATION_PREP phase applies prepare_narration to all scenes."""
+    """NARRATION_PREP phase applies prepare_narration_llm to all scenes."""
 
     @patch("story_video.pipeline.orchestrator.assemble_video")
     @patch("story_video.pipeline.orchestrator.assemble_scene")
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration")
+    @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
     def test_narration_prep_transforms_all_scenes(
         self,
         mock_prep,
@@ -378,8 +416,12 @@ class TestRunPipelineNarrationPrep:
         mock_assemble_video,
         tmp_path,
     ):
-        """NARRATION_PREP applies prepare_narration to every scene's prose."""
-        mock_prep.return_value = "transformed text"
+        """NARRATION_PREP applies prepare_narration_llm to every scene's narration_text."""
+        mock_prep.return_value = {
+            "modified_text": "transformed text",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        }
 
         state = _make_adapt_state(tmp_path, autonomous=True)
         _add_scenes_with_assets(state, count=2, up_to_asset=AssetType.TEXT)
@@ -424,7 +466,7 @@ class TestRunPipelineNarrationPrep:
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration")
+    @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
     def test_narration_prep_uses_prose_when_no_narration_text(
         self,
         mock_prep,
@@ -435,8 +477,12 @@ class TestRunPipelineNarrationPrep:
         mock_assemble_video,
         tmp_path,
     ):
-        """When narration_text is None, prepare_narration uses prose instead."""
-        mock_prep.return_value = "from prose"
+        """When narration_text is None, prepare_narration_llm uses prose instead."""
+        mock_prep.return_value = {
+            "modified_text": "from prose",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        }
 
         state = _make_adapt_state(tmp_path, autonomous=True)
         _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.TEXT)
@@ -458,8 +504,8 @@ class TestRunPipelineNarrationPrep:
             caption_provider=MagicMock(),
         )
 
-        # prepare_narration called with the prose since narration_text was None
-        mock_prep.assert_called_with(scene.prose)
+        # prepare_narration_llm called with the prose since narration_text was None
+        assert mock_prep.call_args[0][0] == scene.prose
         assert scene.narration_text == "from prose"
 
     @patch("story_video.pipeline.orchestrator.assemble_video")
@@ -467,7 +513,7 @@ class TestRunPipelineNarrationPrep:
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration")
+    @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
     def test_narration_prep_does_not_change_asset_status(
         self,
         mock_prep,
@@ -479,7 +525,11 @@ class TestRunPipelineNarrationPrep:
         tmp_path,
     ):
         """NARRATION_PREP does not touch NARRATION_TEXT asset status."""
-        mock_prep.return_value = "prepped"
+        mock_prep.return_value = {
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        }
 
         state = _make_adapt_state(tmp_path, autonomous=True)
         _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.TEXT)
@@ -550,7 +600,14 @@ class TestRunPipelineDispatch:
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped")
+    @patch(
+        "story_video.pipeline.orchestrator.prepare_narration_llm",
+        return_value={
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        },
+    )
     def test_tts_generation_calls_generate_audio_per_scene(
         self,
         mock_prep,
@@ -636,7 +693,14 @@ class TestRunPipelinePerSceneSkip:
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped")
+    @patch(
+        "story_video.pipeline.orchestrator.prepare_narration_llm",
+        return_value={
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        },
+    )
     def test_tts_skips_completed_scenes(
         self,
         mock_prep,
@@ -714,7 +778,14 @@ class TestRunPipelineAutonomousCompleted:
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped")
+    @patch(
+        "story_video.pipeline.orchestrator.prepare_narration_llm",
+        return_value={
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        },
+    )
     @patch("story_video.pipeline.orchestrator.generate_image_prompts")
     @patch("story_video.pipeline.orchestrator.flag_narration")
     @patch("story_video.pipeline.orchestrator.split_scenes")
@@ -845,6 +916,17 @@ class TestDispatchPhaseProviderGuards:
                 caption_provider=None,
             )
 
+    def test_narration_prep_requires_claude_client(self, adapt_state):
+        with pytest.raises(ValueError, match="claude_client is required for NARRATION_PREP"):
+            _dispatch_phase(
+                PipelinePhase.NARRATION_PREP,
+                adapt_state,
+                claude_client=None,
+                tts_provider=MagicMock(),
+                image_provider=MagicMock(),
+                caption_provider=MagicMock(),
+            )
+
 
 # ---------------------------------------------------------------------------
 # TestStoryHeaderParsing — orchestrator parses story header before TTS phase
@@ -859,7 +941,14 @@ class TestStoryHeaderParsing:
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped")
+    @patch(
+        "story_video.pipeline.orchestrator.prepare_narration_llm",
+        return_value={
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        },
+    )
     def test_header_parsed_and_passed_to_generate_audio(
         self,
         mock_prep,
@@ -915,7 +1004,14 @@ class TestStoryHeaderParsing:
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped")
+    @patch(
+        "story_video.pipeline.orchestrator.prepare_narration_llm",
+        return_value={
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        },
+    )
     def test_no_header_passes_none(
         self,
         mock_prep,
@@ -955,7 +1051,14 @@ class TestStoryHeaderParsing:
     @patch("story_video.pipeline.orchestrator.generate_captions")
     @patch("story_video.pipeline.orchestrator.generate_image")
     @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch("story_video.pipeline.orchestrator.prepare_narration", return_value="prepped")
+    @patch(
+        "story_video.pipeline.orchestrator.prepare_narration_llm",
+        return_value={
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        },
+    )
     def test_no_source_file_passes_none(
         self,
         mock_prep,
@@ -1051,13 +1154,30 @@ class TestPipelineIntegration:
             },
         }
 
-        mock_claude = MagicMock()
-
-        def _claude_dispatch(**kwargs):
+        def _claude_dispatch_with_narration(**kwargs):
+            """Route mock Claude calls, echoing narration text back for tts_text_prep."""
             tool_name = kwargs.get("tool_name", "")
+            if tool_name == "tts_text_prep":
+                # Echo the input narration text back as modified_text (no changes)
+                user_msg = kwargs.get("user_message", "")
+                # The narration text is the last block after the blank line
+                lines = user_msg.split("\n")
+                # Find the text after "Narration text to prepare for TTS:" header
+                text_start = None
+                for i, line in enumerate(lines):
+                    if line.startswith("Narration text to prepare for TTS:"):
+                        text_start = i + 2  # skip header + blank line
+                        break
+                narration_text = "\n".join(lines[text_start:]) if text_start else ""
+                return {
+                    "modified_text": narration_text,
+                    "changes": [],
+                    "pronunciation_guide_additions": [],
+                }
             return claude_responses[tool_name]
 
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+        mock_claude = MagicMock()
+        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch_with_narration)
 
         # --- Mock TTS provider ---
         mock_tts = MagicMock()
@@ -1170,7 +1290,8 @@ class TestPipelineIntegration:
         assert (pd / "final.mp4").exists()
 
         # --- Verify external APIs were called ---
-        assert mock_claude.generate_structured.call_count == 3
+        # 3 original calls (split + flag + prompts) + 2 narration prep (one per scene)
+        assert mock_claude.generate_structured.call_count == 5
         assert mock_tts.synthesize.call_count == 2
         assert mock_image.generate.call_count == 2
         assert mock_caption.transcribe.call_count == 2
