@@ -301,4 +301,12 @@ def probe_duration(path: Path) -> float:
     result = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603
     if result.returncode != 0:
         raise FFmpegError(cmd=cmd, returncode=result.returncode, stderr=result.stderr)
-    return float(result.stdout.strip())
+    raw = result.stdout.strip()
+    try:
+        return float(raw)
+    except ValueError:
+        raise FFmpegError(
+            cmd=cmd,
+            returncode=0,
+            stderr=f"ffprobe returned non-numeric duration '{raw}' for {path}",
+        )

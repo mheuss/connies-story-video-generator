@@ -293,3 +293,30 @@ class TestBuildSegmentCommandStillImage:
         filtergraph = cmd[cmd.index("-filter_complex") + 1]
         assert "force_original_aspect_ratio=decrease" in filtergraph
         assert "pad=" in filtergraph
+
+
+# ---------------------------------------------------------------------------
+# TestProbeDurationNonNumeric — non-numeric ffprobe output handling
+# ---------------------------------------------------------------------------
+
+
+class TestProbeDurationNonNumeric:
+    """probe_duration handles non-numeric ffprobe output."""
+
+    def test_empty_stdout_raises_ffmpeg_error(self, monkeypatch):
+        """Empty stdout from ffprobe raises FFmpegError."""
+        fake_result = subprocess.CompletedProcess(
+            args=["ffprobe"], returncode=0, stdout="", stderr=""
+        )
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: fake_result)
+        with pytest.raises(FFmpegError, match="non-numeric duration"):
+            probe_duration(Path("/tmp/corrupt.mp4"))
+
+    def test_non_numeric_stdout_raises_ffmpeg_error(self, monkeypatch):
+        """Non-numeric stdout like 'N/A' from ffprobe raises FFmpegError."""
+        fake_result = subprocess.CompletedProcess(
+            args=["ffprobe"], returncode=0, stdout="N/A\n", stderr=""
+        )
+        monkeypatch.setattr("subprocess.run", lambda *a, **kw: fake_result)
+        with pytest.raises(FFmpegError, match="non-numeric duration"):
+            probe_duration(Path("/tmp/corrupt.mp4"))
