@@ -758,6 +758,33 @@ class TestProviderSelection:
         assert "unknown" in result.output.lower() or "unsupported" in result.output.lower()
 
 
+class TestRunWithProviders:
+    """_run_with_providers instantiates providers and calls run_pipeline."""
+
+    def test_calls_run_pipeline_with_all_providers(self, monkeypatch, tmp_path):
+        """Helper instantiates all 4 providers and passes them to run_pipeline."""
+        mock_run = MagicMock()
+        monkeypatch.setattr("story_video.cli.run_pipeline", mock_run)
+        monkeypatch.setattr("story_video.cli.ClaudeClient", MagicMock)
+        monkeypatch.setattr("story_video.cli.OpenAIImageProvider", MagicMock)
+        monkeypatch.setattr("story_video.cli.OpenAIWhisperProvider", MagicMock)
+        monkeypatch.setattr("story_video.cli._make_tts_provider", MagicMock())
+
+        state = MagicMock()
+        state.metadata.config.tts.provider = "openai"
+
+        from story_video.cli import _run_with_providers
+
+        _run_with_providers(state)
+
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args.kwargs
+        assert "claude_client" in call_kwargs
+        assert "tts_provider" in call_kwargs
+        assert "image_provider" in call_kwargs
+        assert "caption_provider" in call_kwargs
+
+
 class TestDisplayOutcomeSuccessPath:
     """_display_outcome success message points to final.mp4."""
 

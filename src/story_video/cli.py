@@ -230,6 +230,29 @@ def _make_tts_provider(provider_name: str) -> OpenAITTSProvider | ElevenLabsTTSP
     raise typer.Exit(1)
 
 
+def _run_with_providers(state: ProjectState) -> None:
+    """Instantiate all providers and run the pipeline.
+
+    Args:
+        state: Project state to pass to the pipeline.
+
+    Raises:
+        Exception: Any pipeline error is re-raised.
+    """
+    tts_provider = _make_tts_provider(state.metadata.config.tts.provider)
+    claude_client = ClaudeClient()
+    image_provider = OpenAIImageProvider()
+    caption_provider = OpenAIWhisperProvider()
+
+    run_pipeline(
+        state,
+        claude_client=claude_client,
+        tts_provider=tts_provider,
+        image_provider=image_provider,
+        caption_provider=caption_provider,
+    )
+
+
 # ---------------------------------------------------------------------------
 # CLI commands
 # ---------------------------------------------------------------------------
@@ -315,19 +338,8 @@ def create(
     console.print(f"Created project {project_id}")
 
     # --- Instantiate providers and run pipeline ---
-    tts_provider = _make_tts_provider(app_config.tts.provider)
     try:
-        claude_client = ClaudeClient()
-        image_provider = OpenAIImageProvider()
-        caption_provider = OpenAIWhisperProvider()
-
-        run_pipeline(
-            state,
-            claude_client=claude_client,
-            tts_provider=tts_provider,
-            image_provider=image_provider,
-            caption_provider=caption_provider,
-        )
+        _run_with_providers(state)
     except Exception as exc:
         console.print(Panel(str(exc), title="Pipeline Error", border_style="red"))
         raise typer.Exit(1)
@@ -377,19 +389,8 @@ def resume(
     console.print(f"Resuming project {state.metadata.project_id}")
 
     # --- Instantiate providers and run pipeline ---
-    tts_provider = _make_tts_provider(state.metadata.config.tts.provider)
     try:
-        claude_client = ClaudeClient()
-        image_provider = OpenAIImageProvider()
-        caption_provider = OpenAIWhisperProvider()
-
-        run_pipeline(
-            state,
-            claude_client=claude_client,
-            tts_provider=tts_provider,
-            image_provider=image_provider,
-            caption_provider=caption_provider,
-        )
+        _run_with_providers(state)
     except Exception as exc:
         console.print(Panel(str(exc), title="Pipeline Error", border_style="red"))
         raise typer.Exit(1)
