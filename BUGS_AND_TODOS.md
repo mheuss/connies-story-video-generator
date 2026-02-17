@@ -25,7 +25,7 @@ Acknowledged items not yet scheduled.
 - [x] [bug] `probe_duration` crashes on empty/non-numeric stdout — `float(result.stdout.strip())` raises bare `ValueError` for corrupt files. Wrap and re-raise as `FFmpegError` with file path context. (PR-8)
 - [x] [bug] `build_concat_command` does not validate `segment_paths` and `segment_durations` have same length — mismatch causes `IndexError` deep in xfade calculation. Add length guard. (PR-9)
 - [ ] [bug] Sentence-ending period lost after abbreviations — `"cats, dogs, etc. She left."` becomes `"...et cetera She left."` missing the period. `_make_replacer` only preserves trailing period at end-of-string or before `\n`. Known limitation — will be superseded by LLM-based TTS text prep feature. (PR-10)
-- [ ] [test] Orchestrator integration test gap — `test_runs_all_phases_without_pausing` mocks 9 internal functions, can't detect wiring mistakes. Add integration test that only mocks external APIs and exercises actual data flow between phases. (PR-11)
+- [x] [test] Orchestrator integration test gap — `test_runs_all_phases_without_pausing` mocks 9 internal functions, can't detect wiring mistakes. Add integration test that only mocks external APIs and exercises actual data flow between phases. (PR-11)
 - [x] [refactor] `_patch_sleep` fixture duplicated in three test files — move to `conftest.py`. (PR-12)
 
 **Low priority:**
@@ -124,6 +124,7 @@ Completed items awaiting migration to VERSION_HISTORY.md at next release.
 - [x] [bug] `probe_duration` crashes on empty/non-numeric stdout — wrap as `FFmpegError` (PR-8)
 - [x] [bug] `build_concat_command` does not validate list lengths — add length guard (PR-9)
 - [x] [refactor] `_patch_sleep` fixture duplicated in three test files — move to `conftest.py` (PR-12)
+- [x] [test] Orchestrator integration test — full pipeline data flow with only external APIs mocked (PR-11)
 
 ## Session Notes
 
