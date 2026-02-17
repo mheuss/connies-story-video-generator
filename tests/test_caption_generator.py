@@ -341,16 +341,44 @@ class TestTranscribeRetryBehavior:
 class TestCaptionResultModel:
     """CaptionResult Pydantic model serialization tests."""
 
-    def test_round_trip_serialization(self):
-        """CaptionResult survives serialize → deserialize round trip."""
+    def test_round_trip_preserves_equality(self):
+        """CaptionResult survives serialize → deserialize round trip with equality."""
         original = _make_caption_result()
         json_str = original.model_dump_json(indent=2)
         restored = CaptionResult.model_validate_json(json_str)
 
         assert restored == original
+
+    def test_round_trip_preserves_segment_text(self):
+        """Segment text survives serialize → deserialize round trip."""
+        original = _make_caption_result()
+        json_str = original.model_dump_json(indent=2)
+        restored = CaptionResult.model_validate_json(json_str)
+
         assert restored.segments[0].text == "The storm raged on."
+
+    def test_round_trip_preserves_word(self):
+        """Word text survives serialize → deserialize round trip."""
+        original = _make_caption_result()
+        json_str = original.model_dump_json(indent=2)
+        restored = CaptionResult.model_validate_json(json_str)
+
         assert restored.words[0].word == "The"
+
+    def test_round_trip_preserves_language(self):
+        """Language survives serialize → deserialize round trip."""
+        original = _make_caption_result()
+        json_str = original.model_dump_json(indent=2)
+        restored = CaptionResult.model_validate_json(json_str)
+
         assert restored.language == "en"
+
+    def test_round_trip_preserves_duration(self):
+        """Duration survives serialize → deserialize round trip."""
+        original = _make_caption_result()
+        json_str = original.model_dump_json(indent=2)
+        restored = CaptionResult.model_validate_json(json_str)
+
         assert restored.duration == 2.5
 
     def test_empty_segments_and_words(self):
@@ -376,19 +404,49 @@ class TestCaptionResultModel:
 class TestGenerateCaptionsHappyPath:
     """generate_captions() writes caption JSON and updates state."""
 
-    def test_writes_caption_json(self, project_state, fake_caption_provider):
-        """Caption JSON file written with correct content."""
+    def test_writes_caption_json_creates_file(self, project_state, fake_caption_provider):
+        """Caption JSON file is created on disk."""
         scene = project_state.metadata.scenes[0]
         generate_captions(scene, project_state, fake_caption_provider)
 
         caption_path = project_state.project_dir / "captions" / "scene_001.json"
         assert caption_path.exists()
 
+    def test_writes_caption_json_language(self, project_state, fake_caption_provider):
+        """Caption JSON contains correct language."""
+        scene = project_state.metadata.scenes[0]
+        generate_captions(scene, project_state, fake_caption_provider)
+
+        caption_path = project_state.project_dir / "captions" / "scene_001.json"
         content = json.loads(caption_path.read_text(encoding="utf-8"))
         assert content["language"] == "en"
+
+    def test_writes_caption_json_duration(self, project_state, fake_caption_provider):
+        """Caption JSON contains correct duration."""
+        scene = project_state.metadata.scenes[0]
+        generate_captions(scene, project_state, fake_caption_provider)
+
+        caption_path = project_state.project_dir / "captions" / "scene_001.json"
+        content = json.loads(caption_path.read_text(encoding="utf-8"))
         assert content["duration"] == 2.5
+
+    def test_writes_caption_json_segments(self, project_state, fake_caption_provider):
+        """Caption JSON contains correct segments."""
+        scene = project_state.metadata.scenes[0]
+        generate_captions(scene, project_state, fake_caption_provider)
+
+        caption_path = project_state.project_dir / "captions" / "scene_001.json"
+        content = json.loads(caption_path.read_text(encoding="utf-8"))
         assert len(content["segments"]) == 1
         assert content["segments"][0]["text"] == "The storm raged on."
+
+    def test_writes_caption_json_words(self, project_state, fake_caption_provider):
+        """Caption JSON contains correct words."""
+        scene = project_state.metadata.scenes[0]
+        generate_captions(scene, project_state, fake_caption_provider)
+
+        caption_path = project_state.project_dir / "captions" / "scene_001.json"
+        content = json.loads(caption_path.read_text(encoding="utf-8"))
         assert len(content["words"]) == 4
         assert content["words"][0]["word"] == "The"
 

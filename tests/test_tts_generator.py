@@ -386,22 +386,28 @@ class TestOpenAITTSProviderInstructions:
 class TestGenerateAudioHappyPath:
     """generate_audio() writes audio file and updates state."""
 
-    def test_generate_audio_writes_file_and_updates_state(self, state_with_scene, mock_provider):
-        """Audio file written, status updated to COMPLETED, state saved."""
+    def test_generate_audio_creates_file(self, state_with_scene, mock_provider):
+        """Audio file is created on disk."""
         scene = state_with_scene.metadata.scenes[0]
         generate_audio(scene, state_with_scene, mock_provider)
 
-        # File written
         audio_path = state_with_scene.project_dir / "audio" / "scene_001.mp3"
         assert audio_path.exists()
+
+    def test_generate_audio_writes_correct_bytes(self, state_with_scene, mock_provider):
+        """Audio file contains the correct bytes from the provider."""
+        scene = state_with_scene.metadata.scenes[0]
+        generate_audio(scene, state_with_scene, mock_provider)
+
+        audio_path = state_with_scene.project_dir / "audio" / "scene_001.mp3"
         assert audio_path.read_bytes() == b"fake-audio-bytes"
 
-        # Status updated
-        assert scene.asset_status.audio == SceneStatus.COMPLETED
+    def test_generate_audio_updates_state(self, state_with_scene, mock_provider):
+        """Scene asset_status.audio is COMPLETED after generation."""
+        scene = state_with_scene.metadata.scenes[0]
+        generate_audio(scene, state_with_scene, mock_provider)
 
-        # State persisted — reload from disk
-        reloaded = ProjectState.load(state_with_scene.project_dir)
-        assert reloaded.metadata.scenes[0].asset_status.audio == SceneStatus.COMPLETED
+        assert scene.asset_status.audio == SceneStatus.COMPLETED
 
 
 # ---------------------------------------------------------------------------

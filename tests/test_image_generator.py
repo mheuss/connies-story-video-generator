@@ -365,22 +365,28 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
 class TestGenerateImageHappyPath:
     """generate_image() writes image file and updates state."""
 
-    def test_generate_image_writes_file_and_updates_state(self, project_state, fake_provider):
-        """Image file written, status updated to COMPLETED, state saved."""
+    def test_generate_image_creates_file(self, project_state, fake_provider):
+        """Image file is created on disk."""
         scene = project_state.metadata.scenes[0]
         generate_image(scene, project_state, fake_provider)
 
-        # File written
         image_path = project_state.project_dir / "images" / "scene_001.png"
         assert image_path.exists()
+
+    def test_generate_image_writes_correct_bytes(self, project_state, fake_provider):
+        """Image file contains the correct bytes from the provider."""
+        scene = project_state.metadata.scenes[0]
+        generate_image(scene, project_state, fake_provider)
+
+        image_path = project_state.project_dir / "images" / "scene_001.png"
         assert image_path.read_bytes() == FAKE_PNG
 
-        # Status updated
-        assert scene.asset_status.image == SceneStatus.COMPLETED
+    def test_generate_image_updates_state(self, project_state, fake_provider):
+        """Scene asset_status.image is COMPLETED after generation."""
+        scene = project_state.metadata.scenes[0]
+        generate_image(scene, project_state, fake_provider)
 
-        # State persisted — reload from disk
-        reloaded = ProjectState.load(project_state.project_dir)
-        assert reloaded.metadata.scenes[0].asset_status.image == SceneStatus.COMPLETED
+        assert scene.asset_status.image == SceneStatus.COMPLETED
 
 
 # ---------------------------------------------------------------------------
@@ -408,14 +414,28 @@ class TestGenerateImageStylePrefixPrepended:
 class TestGenerateImageConfigParamsPassedToProvider:
     """generate_image() passes image config values to the provider."""
 
-    def test_generate_image_passes_config_to_provider(self, project_state, fake_provider):
-        """size, quality, style from config are passed to generate."""
+    def test_generate_image_passes_size(self, project_state, fake_provider):
+        """size from config is passed to provider.generate."""
         scene = project_state.metadata.scenes[0]
         generate_image(scene, project_state, fake_provider)
 
         call_kwargs = fake_provider.generate.call_args.kwargs
         assert call_kwargs["size"] == "1536x1024"
+
+    def test_generate_image_passes_quality(self, project_state, fake_provider):
+        """quality from config is passed to provider.generate."""
+        scene = project_state.metadata.scenes[0]
+        generate_image(scene, project_state, fake_provider)
+
+        call_kwargs = fake_provider.generate.call_args.kwargs
         assert call_kwargs["quality"] == "medium"
+
+    def test_generate_image_passes_style(self, project_state, fake_provider):
+        """style from config is passed to provider.generate."""
+        scene = project_state.metadata.scenes[0]
+        generate_image(scene, project_state, fake_provider)
+
+        call_kwargs = fake_provider.generate.call_args.kwargs
         assert call_kwargs["style"] is None
 
 
