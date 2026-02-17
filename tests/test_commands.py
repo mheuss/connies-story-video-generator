@@ -320,3 +320,22 @@ class TestProbeDurationNonNumeric:
         monkeypatch.setattr("subprocess.run", lambda *a, **kw: fake_result)
         with pytest.raises(FFmpegError, match="non-numeric duration"):
             probe_duration(Path("/tmp/corrupt.mp4"))
+
+
+# ---------------------------------------------------------------------------
+# TestBuildConcatCommandLengthValidation — segment list length mismatch
+# ---------------------------------------------------------------------------
+
+
+class TestBuildConcatCommandLengthValidation:
+    """build_concat_command validates segment_paths and segment_durations match."""
+
+    def test_mismatched_lengths_raises_value_error(self):
+        """Mismatched segment_paths and segment_durations raises ValueError."""
+        with pytest.raises(ValueError, match="segment_paths.*segment_durations"):
+            build_concat_command(
+                segment_paths=[Path("/tmp/a.mp4"), Path("/tmp/b.mp4")],
+                segment_durations=[10.0],
+                output_path=Path("/tmp/out.mp4"),
+                video_config=VideoConfig(),
+            )

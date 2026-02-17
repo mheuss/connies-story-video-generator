@@ -162,6 +162,13 @@ def build_concat_command(
         msg = "segment_paths must contain at least one segment"
         raise ValueError(msg)
 
+    if len(segment_paths) != len(segment_durations):
+        msg = (
+            f"segment_paths ({len(segment_paths)}) and "
+            f"segment_durations ({len(segment_durations)}) must have the same length"
+        )
+        raise ValueError(msg)
+
     n = len(segment_paths)
     transition_dur = video_config.transition_duration
     audio_transition_dur = video_config.audio_transition_duration
