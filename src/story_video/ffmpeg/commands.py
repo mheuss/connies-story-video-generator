@@ -156,7 +156,8 @@ def build_concat_command(
         FFmpeg command as a list of strings.
 
     Raises:
-        ValueError: If segment_paths is empty.
+        ValueError: If segment_paths is empty or if segment_paths and
+            segment_durations have different lengths.
     """
     if not segment_paths:
         msg = "segment_paths must contain at least one segment"
@@ -293,7 +294,7 @@ def probe_duration(path: Path) -> float:
         Duration as a float in seconds.
 
     Raises:
-        FFmpegError: If ffprobe exits with a non-zero return code.
+        FFmpegError: If ffprobe fails or returns non-numeric output.
     """
     cmd = [
         "ffprobe",

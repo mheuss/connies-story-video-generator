@@ -761,7 +761,7 @@ class TestProviderSelection:
 class TestRunWithProviders:
     """_run_with_providers instantiates providers and calls run_pipeline."""
 
-    def test_calls_run_pipeline_with_all_providers(self, monkeypatch, tmp_path):
+    def test_calls_run_pipeline_with_all_providers(self, monkeypatch):
         """Helper instantiates all 4 providers and passes them to run_pipeline."""
         mock_run = MagicMock()
         monkeypatch.setattr("story_video.cli.run_pipeline", mock_run)
