@@ -755,6 +755,32 @@ class TestGenerateAudioMultiSegment:
         call_kwargs = mock_provider.synthesize.call_args.kwargs
         assert call_kwargs["voice"] == "nova"  # AppConfig default
 
+    def test_non_concat_safe_format_with_multi_segment_raises(self, tmp_path, mock_provider):
+        """Multi-segment with non-concatenatable format raises ValueError."""
+        config = AppConfig(tts=TTSConfig(output_format="aac"))
+        state = ProjectState.create("fmt-test", InputMode.ADAPT, config, tmp_path)
+        state.add_scene(1, "Scene", "Hello. **voice:jane** Bye.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
+        scene = state.metadata.scenes[0]
+        header = StoryHeader(voices={"narrator": "nova", "jane": "shimmer"})
+
+        with pytest.raises(ValueError, match="[Cc]oncatenat"):
+            generate_audio(scene, state, mock_provider, story_header=header)
+
+    def test_single_segment_non_concat_format_allowed(self, tmp_path, mock_provider):
+        """Single segment with any format is fine (no concatenation needed)."""
+        config = AppConfig(tts=TTSConfig(output_format="aac"))
+        state = ProjectState.create("fmt-single", InputMode.ADAPT, config, tmp_path)
+        state.add_scene(1, "Scene", "Just one voice speaking.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
+        scene = state.metadata.scenes[0]
+        header = StoryHeader(voices={"narrator": "nova"})
+
+        generate_audio(scene, state, mock_provider, story_header=header)
+        assert mock_provider.synthesize.call_count == 1
+
 
 # ---------------------------------------------------------------------------
 # generate_audio — tags without header raises ValueError

@@ -2,7 +2,27 @@
 
 import pytest
 
-from story_video.utils.narration_tags import parse_narration_segments, parse_story_header
+from story_video.utils.narration_tags import (
+    has_narration_tags,
+    parse_narration_segments,
+    parse_story_header,
+)
+
+
+class TestHasNarrationTags:
+    """has_narration_tags detects inline voice/mood tags."""
+
+    def test_voice_tag_detected(self):
+        assert has_narration_tags("Hello **voice:jane** world") is True
+
+    def test_mood_tag_detected(self):
+        assert has_narration_tags("**mood:sad** Goodbye.") is True
+
+    def test_plain_text_not_detected(self):
+        assert has_narration_tags("Just plain text.") is False
+
+    def test_bold_text_not_detected(self):
+        assert has_narration_tags("**bold text** is fine") is False
 
 
 class TestParseStoryHeader:

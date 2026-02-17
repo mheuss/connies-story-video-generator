@@ -15,9 +15,14 @@ from pydantic import ValidationError
 
 from story_video.models import NarrationSegment, StoryHeader
 
-__all__ = ["parse_narration_segments", "parse_story_header"]
+__all__ = ["has_narration_tags", "parse_narration_segments", "parse_story_header"]
 
 _TAG_PATTERN = re.compile(r"\*\*(voice|mood):([^*]+)\*\*")
+
+
+def has_narration_tags(text: str) -> bool:
+    """Check whether text contains inline voice or mood tags."""
+    return bool(_TAG_PATTERN.search(text))
 
 
 def parse_story_header(text: str) -> tuple[StoryHeader | None, str]:

@@ -5,7 +5,6 @@ Ships with OpenAI and ElevenLabs implementations.
 """
 
 import logging
-import re
 from typing import Protocol
 
 import elevenlabs
@@ -13,7 +12,7 @@ import openai
 
 from story_video.models import AssetType, Scene, SceneStatus, StoryHeader
 from story_video.state import ProjectState
-from story_video.utils.narration_tags import parse_narration_segments
+from story_video.utils.narration_tags import has_narration_tags, parse_narration_segments
 from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS, with_retry
 
 logger = logging.getLogger(__name__)
@@ -27,8 +26,8 @@ __all__ = [
     "generate_audio",
 ]
 
-# Pattern to detect voice/mood tags in text (for fail-fast validation).
-_TAG_CHECK_PATTERN = re.compile(r"\*\*(voice|mood):([^*]+)\*\*")
+# Formats that support raw byte concatenation (independently decodable frames).
+_CONCAT_SAFE_FORMATS = frozenset({"mp3", "opus"})
 
 
 class TTSProvider(Protocol):
@@ -231,7 +230,7 @@ def generate_audio(
 
     # Fail fast if tags are present but no header defines the voice mappings.
     # Without this check, tags would be spoken aloud as literal text.
-    if story_header is None and _TAG_CHECK_PATTERN.search(text):
+    if story_header is None and has_narration_tags(text):
         msg = (
             f"Voice/mood tag found in scene {scene.scene_number} text but no "
             "voices header defined. Add a YAML header with voice mappings."
@@ -246,6 +245,14 @@ def generate_audio(
             default_voice=story_header.default_voice,
             scene_number=scene.scene_number,
         )
+        # Guard: raw byte concat only works for streaming formats
+        if len(segments) > 1 and tts_config.output_format not in _CONCAT_SAFE_FORMATS:
+            msg = (
+                f"Multi-voice audio concatenation requires mp3 or opus format, "
+                f"got '{tts_config.output_format}'. "
+                f"Set tts.output_format to 'mp3' or 'opus'."
+            )
+            raise ValueError(msg)
         audio_chunks: list[bytes] = []
         for segment in segments:
             chunk = provider.synthesize(
