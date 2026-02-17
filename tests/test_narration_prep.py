@@ -1,5 +1,6 @@
 """Tests for story_video.pipeline.narration_prep — LLM-based TTS text preparation."""
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -273,3 +274,50 @@ class TestPrepareNarrationLlm:
         call_kwargs = client.generate_structured.call_args.kwargs
         assert call_kwargs["tool_name"] == _TOOL_NAME
         assert call_kwargs["tool_schema"] == _TOOL_SCHEMA
+
+
+class TestWriteNarrationChangelog:
+    """write_narration_changelog writes JSON to project directory."""
+
+    def test_writes_json_file(self, tmp_path):
+        from story_video.pipeline.narration_prep import write_narration_changelog
+
+        changelog = [
+            {
+                "scene": 1,
+                "original": "Dr. Smith",
+                "replacement": "Doctor Smith",
+                "reason": "abbreviation",
+            }
+        ]
+        path = write_narration_changelog(changelog, tmp_path)
+        assert path.exists()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert len(data) == 1
+        assert data[0]["original"] == "Dr. Smith"
+
+    def test_file_name(self, tmp_path):
+        from story_video.pipeline.narration_prep import write_narration_changelog
+
+        path = write_narration_changelog([], tmp_path)
+        assert path.name == "narration_prep_changelog.json"
+
+    def test_empty_changelog(self, tmp_path):
+        from story_video.pipeline.narration_prep import write_narration_changelog
+
+        path = write_narration_changelog([], tmp_path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data == []
+
+    def test_multiple_scenes(self, tmp_path):
+        from story_video.pipeline.narration_prep import write_narration_changelog
+
+        changelog = [
+            {"scene": 1, "original": "5", "replacement": "five", "reason": "number"},
+            {"scene": 2, "original": "Mr.", "replacement": "Mister", "reason": "abbreviation"},
+        ]
+        path = write_narration_changelog(changelog, tmp_path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert len(data) == 2
+        assert data[0]["scene"] == 1
+        assert data[1]["scene"] == 2

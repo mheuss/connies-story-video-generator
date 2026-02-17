@@ -7,12 +7,14 @@ punctuation smoothing, and contextual decisions.
 See design doc: docs/plans/2026-02-17-llm-tts-text-prep-design.md
 """
 
+import json
 import logging
 import re
+from pathlib import Path
 
 from story_video.pipeline.claude_client import ClaudeClient
 
-__all__ = ["NarrationPrepError", "prepare_narration_llm"]
+__all__ = ["NarrationPrepError", "prepare_narration_llm", "write_narration_changelog"]
 
 logger = logging.getLogger(__name__)
 
@@ -218,3 +220,25 @@ def prepare_narration_llm(
         "changes": result.get("changes", []),
         "pronunciation_guide_additions": result.get("pronunciation_guide_additions", []),
     }
+
+
+def write_narration_changelog(
+    changelog: list[dict],
+    project_dir: Path,
+) -> Path:
+    """Write narration prep changelog to project directory as JSON.
+
+    Args:
+        changelog: List of change dicts from all scenes.
+            Each dict has keys: scene, original, replacement, reason.
+        project_dir: Project directory path.
+
+    Returns:
+        Path to the written changelog file.
+    """
+    path = project_dir / "narration_prep_changelog.json"
+    path.write_text(
+        json.dumps(changelog, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return path
