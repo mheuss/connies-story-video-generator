@@ -290,6 +290,15 @@ class ImageConfig(BaseModel):
     style: str | None = Field(default=None)
     style_prefix: str = Field(default="Cinematic, dramatic lighting:")
 
+    @field_validator("size")
+    @classmethod
+    def validate_size(cls, v: str) -> str:
+        """Validate size is in WIDTHxHEIGHT format."""
+        if not re.match(r"^\d+x\d+$", v):
+            msg = f"Size must be 'WIDTHxHEIGHT', got '{v}'"
+            raise ValueError(msg)
+        return v
+
 
 class VideoConfig(BaseModel):
     """Video assembly parameters.

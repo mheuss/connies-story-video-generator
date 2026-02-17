@@ -299,6 +299,22 @@ class TestImageConfig:
         assert restored == config
 
 
+class TestImageConfigSizeValidator:
+    """ImageConfig.size must be WIDTHxHEIGHT format."""
+
+    def test_valid_size_accepted(self):
+        config = ImageConfig(size="1024x1024")
+        assert config.size == "1024x1024"
+
+    def test_invalid_size_rejected(self):
+        with pytest.raises(ValidationError, match="WIDTHxHEIGHT"):
+            ImageConfig(size="big")
+
+    def test_default_size_valid(self):
+        config = ImageConfig()
+        assert config.size == "1536x1024"
+
+
 class TestVideoConfig:
     """VideoConfig — video assembly parameters."""
 
