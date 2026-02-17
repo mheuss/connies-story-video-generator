@@ -201,30 +201,48 @@ def _dispatch_phase(
         story_header: Parsed story header for multi-voice TTS, or None.
 
     Raises:
-        ValueError: If the phase is unknown.
+        ValueError: If the phase is unknown or a required provider is None.
     """
     if phase == PipelinePhase.SCENE_SPLITTING:
+        if claude_client is None:
+            msg = "claude_client is required for SCENE_SPLITTING phase"
+            raise ValueError(msg)
         split_scenes(state, claude_client)
 
     elif phase == PipelinePhase.NARRATION_FLAGGING:
+        if claude_client is None:
+            msg = "claude_client is required for NARRATION_FLAGGING phase"
+            raise ValueError(msg)
         flag_narration(state, claude_client)
 
     elif phase == PipelinePhase.IMAGE_PROMPTS:
+        if claude_client is None:
+            msg = "claude_client is required for IMAGE_PROMPTS phase"
+            raise ValueError(msg)
         generate_image_prompts(state, claude_client)
 
     elif phase == PipelinePhase.NARRATION_PREP:
         _run_narration_prep(state)
 
     elif phase == PipelinePhase.TTS_GENERATION:
+        if tts_provider is None:
+            msg = "tts_provider is required for TTS_GENERATION phase"
+            raise ValueError(msg)
         _run_per_scene(
             state,
             lambda scene: generate_audio(scene, state, tts_provider, story_header=story_header),
         )
 
     elif phase == PipelinePhase.IMAGE_GENERATION:
+        if image_provider is None:
+            msg = "image_provider is required for IMAGE_GENERATION phase"
+            raise ValueError(msg)
         _run_per_scene(state, lambda scene: generate_image(scene, state, image_provider))
 
     elif phase == PipelinePhase.CAPTION_GENERATION:
+        if caption_provider is None:
+            msg = "caption_provider is required for CAPTION_GENERATION phase"
+            raise ValueError(msg)
         _run_per_scene(state, lambda scene: generate_captions(scene, state, caption_provider))
 
     elif phase == PipelinePhase.VIDEO_ASSEMBLY:

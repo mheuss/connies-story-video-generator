@@ -772,6 +772,81 @@ class TestDispatchPhaseUnknown:
 
 
 # ---------------------------------------------------------------------------
+# TestDispatchPhaseProviderGuards — fail-fast when required provider is None
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchPhaseProviderGuards:
+    """_dispatch_phase raises ValueError when required provider is None."""
+
+    def test_scene_splitting_requires_claude_client(self, adapt_state):
+        with pytest.raises(ValueError, match="claude_client"):
+            _dispatch_phase(
+                PipelinePhase.SCENE_SPLITTING,
+                adapt_state,
+                claude_client=None,
+                tts_provider=MagicMock(),
+                image_provider=MagicMock(),
+                caption_provider=MagicMock(),
+            )
+
+    def test_narration_flagging_requires_claude_client(self, adapt_state):
+        with pytest.raises(ValueError, match="claude_client"):
+            _dispatch_phase(
+                PipelinePhase.NARRATION_FLAGGING,
+                adapt_state,
+                claude_client=None,
+                tts_provider=MagicMock(),
+                image_provider=MagicMock(),
+                caption_provider=MagicMock(),
+            )
+
+    def test_image_prompts_requires_claude_client(self, adapt_state):
+        with pytest.raises(ValueError, match="claude_client"):
+            _dispatch_phase(
+                PipelinePhase.IMAGE_PROMPTS,
+                adapt_state,
+                claude_client=None,
+                tts_provider=MagicMock(),
+                image_provider=MagicMock(),
+                caption_provider=MagicMock(),
+            )
+
+    def test_tts_generation_requires_tts_provider(self, adapt_state):
+        with pytest.raises(ValueError, match="tts_provider"):
+            _dispatch_phase(
+                PipelinePhase.TTS_GENERATION,
+                adapt_state,
+                claude_client=MagicMock(),
+                tts_provider=None,
+                image_provider=MagicMock(),
+                caption_provider=MagicMock(),
+            )
+
+    def test_image_generation_requires_image_provider(self, adapt_state):
+        with pytest.raises(ValueError, match="image_provider"):
+            _dispatch_phase(
+                PipelinePhase.IMAGE_GENERATION,
+                adapt_state,
+                claude_client=MagicMock(),
+                tts_provider=MagicMock(),
+                image_provider=None,
+                caption_provider=MagicMock(),
+            )
+
+    def test_caption_generation_requires_caption_provider(self, adapt_state):
+        with pytest.raises(ValueError, match="caption_provider"):
+            _dispatch_phase(
+                PipelinePhase.CAPTION_GENERATION,
+                adapt_state,
+                claude_client=MagicMock(),
+                tts_provider=MagicMock(),
+                image_provider=MagicMock(),
+                caption_provider=None,
+            )
+
+
+# ---------------------------------------------------------------------------
 # TestStoryHeaderParsing — orchestrator parses story header before TTS phase
 # ---------------------------------------------------------------------------
 
