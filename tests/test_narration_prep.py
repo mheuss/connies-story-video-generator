@@ -86,3 +86,71 @@ class TestNarrationPrepError:
         from story_video.pipeline.narration_prep import NarrationPrepError
 
         assert issubclass(NarrationPrepError, Exception)
+
+
+class TestBuildUserMessage:
+    """_build_user_message constructs the Claude user message."""
+
+    def test_basic_message(self):
+        from story_video.pipeline.narration_prep import _build_user_message
+
+        result = _build_user_message(
+            "Hello world.",
+            pronunciation_guide=[],
+            story_title="Test Story",
+            scene_number=1,
+            total_scenes=3,
+        )
+        assert "Test Story" in result
+        assert "Scene 1 of 3" in result
+        assert "Hello world." in result
+
+    def test_includes_pronunciation_guide(self):
+        from story_video.pipeline.narration_prep import _build_user_message
+
+        guide = [{"term": "Cthulhu", "pronunciation": "kuh-THOO-loo", "context": "proper noun"}]
+        result = _build_user_message(
+            "Cthulhu rises.",
+            pronunciation_guide=guide,
+            story_title="Horror",
+            scene_number=2,
+            total_scenes=5,
+        )
+        assert "Cthulhu" in result
+        assert "kuh-THOO-loo" in result
+
+    def test_empty_guide_omitted(self):
+        from story_video.pipeline.narration_prep import _build_user_message
+
+        result = _build_user_message(
+            "Plain text.",
+            pronunciation_guide=[],
+            story_title="Test",
+            scene_number=1,
+            total_scenes=1,
+        )
+        assert "Pronunciation guide" not in result
+
+
+class TestPromptConstants:
+    """Verify prompt constants exist and have expected structure."""
+
+    def test_system_prompt_mentions_tags(self):
+        from story_video.pipeline.narration_prep import _SYSTEM_PROMPT
+
+        assert "voice" in _SYSTEM_PROMPT.lower()
+        assert "mood" in _SYSTEM_PROMPT.lower()
+
+    def test_tool_schema_has_required_fields(self):
+        from story_video.pipeline.narration_prep import _TOOL_SCHEMA
+
+        props = _TOOL_SCHEMA["properties"]
+        assert "modified_text" in props
+        assert "changes" in props
+        assert "pronunciation_guide_additions" in props
+
+    def test_tool_name_is_string(self):
+        from story_video.pipeline.narration_prep import _TOOL_NAME
+
+        assert isinstance(_TOOL_NAME, str)
+        assert len(_TOOL_NAME) > 0
