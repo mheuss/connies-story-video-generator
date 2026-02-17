@@ -498,11 +498,10 @@ class TestEstimateCommand:
         assert result.exit_code == 0
         assert "60 minutes" in result.output
 
-    def test_estimate_with_voice_override(self):
-        """--voice affects the estimate (changes TTS model cost)."""
+    def test_estimate_rejects_voice_option(self):
+        """--voice is not a valid option on estimate."""
         result = runner.invoke(app, ["estimate", "--mode", "adapt", "--voice", "nova"])
-        assert result.exit_code == 0
-        assert "cost estimate" in result.output.lower()
+        assert result.exit_code != 0
 
     def test_estimate_invalid_mode(self):
         """Unknown mode shows an error."""

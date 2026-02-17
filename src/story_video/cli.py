@@ -402,7 +402,6 @@ def resume(
 def estimate(
     mode: str = typer.Option(..., help="Input mode: original, inspired_by, or adapt"),
     duration: int | None = typer.Option(None, help="Target duration in minutes"),
-    voice: str | None = typer.Option(None, help="TTS voice name (affects cost)"),
     config: Path | None = typer.Option(None, help="Path to config.yaml"),
 ) -> None:
     """Show cost estimate without starting generation."""
@@ -423,9 +422,6 @@ def estimate(
     cli_overrides: dict[str, Any] = {}
     if duration is not None:
         cli_overrides["story.target_duration_minutes"] = duration
-    if voice is not None:
-        cli_overrides["tts.voice"] = voice
-
     # --- Load config ---
     try:
         app_config = load_config(config_path=config, cli_overrides=cli_overrides)

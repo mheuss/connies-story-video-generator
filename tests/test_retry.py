@@ -44,7 +44,7 @@ class TestWithRetryBasicBehavior:
         """When the function succeeds immediately, no retries occur."""
         tracker = TrackedCallable(fail_times=0)
 
-        @with_retry(max_retries=3, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=3, base_delay=0.01)
         def fn():
             return tracker()
 
@@ -56,7 +56,7 @@ class TestWithRetryBasicBehavior:
         """When the function fails once then succeeds, retry recovers."""
         tracker = TrackedCallable(fail_times=1)
 
-        @with_retry(max_retries=3, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=3, base_delay=0.01)
         def fn():
             return tracker()
 
@@ -68,7 +68,7 @@ class TestWithRetryBasicBehavior:
         """When the function fails twice then succeeds, retry recovers."""
         tracker = TrackedCallable(fail_times=2)
 
-        @with_retry(max_retries=3, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=3, base_delay=0.01)
         def fn():
             return tracker()
 
@@ -83,7 +83,7 @@ class TestWithRetryBasicBehavior:
         """
         tracker = TrackedCallable(fail_times=100)
 
-        @with_retry(max_retries=3, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=3, base_delay=0.01)
         def fn():
             return tracker()
 
@@ -95,7 +95,7 @@ class TestWithRetryBasicBehavior:
     def test_preserves_return_value(self):
         """The decorated function returns the original function's return value."""
 
-        @with_retry(max_retries=1, base_delay=0.01)
+        @with_retry(retry_on=(Exception,), max_retries=1, base_delay=0.01)
         def fn():
             return {"key": "value", "number": 42}
 
@@ -114,7 +114,7 @@ class TestWithRetryCustomParameters:
         """max_retries=1 means 1 initial + 1 retry = 2 total attempts."""
         tracker = TrackedCallable(fail_times=100)
 
-        @with_retry(max_retries=1, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=1, base_delay=0.01)
         def fn():
             return tracker()
 
@@ -126,7 +126,7 @@ class TestWithRetryCustomParameters:
         """max_retries=5 means 1 initial + 5 retries = 6 total attempts."""
         tracker = TrackedCallable(fail_times=100)
 
-        @with_retry(max_retries=5, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=5, base_delay=0.01)
         def fn():
             return tracker()
 
@@ -138,7 +138,7 @@ class TestWithRetryCustomParameters:
         """max_retries=0 means only 1 attempt, no retries."""
         tracker = TrackedCallable(fail_times=1)
 
-        @with_retry(max_retries=0, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=0, base_delay=0.01)
         def fn():
             return tracker()
 
@@ -150,7 +150,7 @@ class TestWithRetryCustomParameters:
         """Function succeeds on the very last allowed attempt."""
         tracker = TrackedCallable(fail_times=3)
 
-        @with_retry(max_retries=3, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=3, base_delay=0.01)
         def fn():
             return tracker()
 
@@ -209,17 +209,10 @@ class TestWithRetryExceptionFiltering:
         assert result == "success"
         assert call_count == 3
 
-    def test_default_retry_on_retries_any_exception(self):
-        """Default retry_on=(Exception,) retries on any exception."""
-        tracker = TrackedCallable(fail_times=1, exception=KeyError)
-
-        @with_retry(max_retries=3, base_delay=0.01)
-        def fn():
-            return tracker()
-
-        result = fn()
-        assert result == "success"
-        assert tracker.call_count == 2
+    def test_retry_on_is_required(self):
+        """Omitting retry_on raises TypeError — no silent catch-all default."""
+        with pytest.raises(TypeError):
+            with_retry(max_retries=3, base_delay=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +227,7 @@ class TestWithRetryLogging:
         """Each retry attempt produces a log message."""
         tracker = TrackedCallable(fail_times=2)
 
-        @with_retry(max_retries=3, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=3, base_delay=0.01)
         def fn():
             return tracker()
 
@@ -248,7 +241,7 @@ class TestWithRetryLogging:
     def test_no_log_on_first_success(self, caplog):
         """When the function succeeds on the first try, no retry logs appear."""
 
-        @with_retry(max_retries=3, base_delay=0.01)
+        @with_retry(retry_on=(Exception,), max_retries=3, base_delay=0.01)
         def fn():
             return "ok"
 
@@ -283,7 +276,7 @@ class TestWithRetryMetadata:
     def test_decorated_function_preserves_name(self):
         """The decorated function preserves the original function's __name__."""
 
-        @with_retry(max_retries=1, base_delay=0.01)
+        @with_retry(retry_on=(Exception,), max_retries=1, base_delay=0.01)
         def my_function():
             return 42
 
