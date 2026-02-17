@@ -15,6 +15,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
 __all__ = [
     "ADAPT_FLOW_PHASES",
     "CREATIVE_FLOW_PHASES",
@@ -407,7 +409,7 @@ class SubtitleConfig(BaseModel):
     @field_validator("color", "outline_color")
     @classmethod
     def _validate_hex_color(cls, v: str) -> str:
-        if not re.match(r"^#[0-9A-Fa-f]{6}$", v):
+        if not _HEX_COLOR_RE.match(v):
             msg = f"Invalid hex color: {v!r} (expected #RRGGBB format)"
             raise ValueError(msg)
         return v
