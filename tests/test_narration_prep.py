@@ -1,5 +1,7 @@
 """Tests for story_video.pipeline.narration_prep — LLM-based TTS text preparation."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 
@@ -154,3 +156,120 @@ class TestPromptConstants:
 
         assert isinstance(_TOOL_NAME, str)
         assert len(_TOOL_NAME) > 0
+
+
+class TestPrepareNarrationLlm:
+    """prepare_narration_llm calls Claude and returns structured result."""
+
+    def _make_mock_client(self, modified_text="Prepared text.", changes=None, guide=None):
+        """Create a mock ClaudeClient returning a canned response."""
+        client = MagicMock()
+        client.generate_structured.return_value = {
+            "modified_text": modified_text,
+            "changes": changes or [],
+            "pronunciation_guide_additions": guide or [],
+        }
+        return client
+
+    def test_returns_modified_text(self):
+        from story_video.pipeline.narration_prep import prepare_narration_llm
+
+        client = self._make_mock_client(modified_text="Rewritten text.")
+        result = prepare_narration_llm("Original text.", client)
+        assert result["modified_text"] == "Rewritten text."
+
+    def test_returns_changes(self):
+        from story_video.pipeline.narration_prep import prepare_narration_llm
+
+        changes = [{"original": "Dr.", "replacement": "Doctor", "reason": "abbreviation"}]
+        client = self._make_mock_client(changes=changes)
+        result = prepare_narration_llm("Dr. Smith spoke.", client)
+        assert result["changes"] == changes
+
+    def test_returns_pronunciation_guide_additions(self):
+        from story_video.pipeline.narration_prep import prepare_narration_llm
+
+        guide = [{"term": "Cthulhu", "pronunciation": "kuh-THOO-loo", "context": "deity name"}]
+        client = self._make_mock_client(guide=guide)
+        result = prepare_narration_llm("Cthulhu rises.", client)
+        assert result["pronunciation_guide_additions"] == guide
+
+    def test_passes_pronunciation_guide_to_prompt(self):
+        from story_video.pipeline.narration_prep import prepare_narration_llm
+
+        client = self._make_mock_client()
+        guide = [{"term": "Nyarlathotep", "pronunciation": "nyar-LATH-oh-tep", "context": "name"}]
+        prepare_narration_llm(
+            "Plain text.", client, pronunciation_guide=guide, scene_number=2, total_scenes=3
+        )
+
+        call_kwargs = client.generate_structured.call_args.kwargs
+        assert "Nyarlathotep" in call_kwargs["user_message"]
+
+    def test_preserves_tags_passes(self):
+        from story_video.pipeline.narration_prep import prepare_narration_llm
+
+        client = self._make_mock_client(modified_text="**voice:narrator** Prepared text.")
+        result = prepare_narration_llm("**voice:narrator** Original text.", client)
+        assert result["modified_text"] == "**voice:narrator** Prepared text."
+
+    def test_corrupted_tags_retries_once(self):
+        from story_video.pipeline.narration_prep import prepare_narration_llm
+
+        client = MagicMock()
+        # First call: tags missing. Second call: tags correct.
+        client.generate_structured.side_effect = [
+            {
+                "modified_text": "Tags removed.",
+                "changes": [],
+                "pronunciation_guide_additions": [],
+            },
+            {
+                "modified_text": "**voice:narrator** Tags restored.",
+                "changes": [],
+                "pronunciation_guide_additions": [],
+            },
+        ]
+        result = prepare_narration_llm("**voice:narrator** Original.", client)
+        assert client.generate_structured.call_count == 2
+        assert result["modified_text"] == "**voice:narrator** Tags restored."
+
+    def test_corrupted_tags_after_retry_raises(self):
+        from story_video.pipeline.narration_prep import (
+            NarrationPrepError,
+            prepare_narration_llm,
+        )
+
+        client = MagicMock()
+        # Both calls return corrupted tags
+        client.generate_structured.return_value = {
+            "modified_text": "No tags here.",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        }
+        with pytest.raises(NarrationPrepError, match="tags corrupted"):
+            prepare_narration_llm("**voice:narrator** Original.", client)
+
+    def test_empty_modified_text_raises(self):
+        from story_video.pipeline.narration_prep import (
+            NarrationPrepError,
+            prepare_narration_llm,
+        )
+
+        client = self._make_mock_client(modified_text="")
+        with pytest.raises(NarrationPrepError, match="empty"):
+            prepare_narration_llm("Some text.", client)
+
+    def test_calls_generate_structured_with_tool_schema(self):
+        from story_video.pipeline.narration_prep import (
+            _TOOL_NAME,
+            _TOOL_SCHEMA,
+            prepare_narration_llm,
+        )
+
+        client = self._make_mock_client()
+        prepare_narration_llm("Text.", client)
+        client.generate_structured.assert_called_once()
+        call_kwargs = client.generate_structured.call_args.kwargs
+        assert call_kwargs["tool_name"] == _TOOL_NAME
+        assert call_kwargs["tool_schema"] == _TOOL_SCHEMA

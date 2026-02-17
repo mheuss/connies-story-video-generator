@@ -7,9 +7,14 @@ punctuation smoothing, and contextual decisions.
 See design doc: docs/plans/2026-02-17-llm-tts-text-prep-design.md
 """
 
+import logging
 import re
 
-__all__ = ["NarrationPrepError"]
+from story_video.pipeline.claude_client import ClaudeClient
+
+__all__ = ["NarrationPrepError", "prepare_narration_llm"]
+
+logger = logging.getLogger(__name__)
 
 _TAG_PATTERN = re.compile(r"\*\*(?:voice|mood):[^*]+\*\*")
 
@@ -134,3 +139,82 @@ def _build_user_message(
     parts.append(text)
 
     return "\n".join(parts)
+
+
+def prepare_narration_llm(
+    text: str,
+    claude_client: ClaudeClient,
+    *,
+    pronunciation_guide: list[dict[str, str]] | None = None,
+    story_title: str = "Untitled",
+    scene_number: int = 1,
+    total_scenes: int = 1,
+) -> dict:
+    """Prepare narration text for TTS using Claude.
+
+    Sends scene text to Claude with instructions to rewrite it for natural
+    TTS delivery. Validates that voice/mood tags are preserved. Retries
+    once on tag corruption before failing.
+
+    Args:
+        text: Scene narration text (may contain voice/mood tags).
+        claude_client: Claude API client for generate_structured calls.
+        pronunciation_guide: Accumulated guide entries from previous scenes.
+        story_title: Story title for context in the prompt.
+        scene_number: Current scene number (1-based).
+        total_scenes: Total number of scenes in the story.
+
+    Returns:
+        Dict with keys: modified_text (str), changes (list),
+        pronunciation_guide_additions (list).
+
+    Raises:
+        NarrationPrepError: If modified_text is empty or tags are corrupted
+            after retry.
+    """
+    guide = pronunciation_guide or []
+
+    user_message = _build_user_message(
+        text,
+        pronunciation_guide=guide,
+        story_title=story_title,
+        scene_number=scene_number,
+        total_scenes=total_scenes,
+    )
+
+    result = claude_client.generate_structured(
+        system=_SYSTEM_PROMPT,
+        user_message=user_message,
+        tool_name=_TOOL_NAME,
+        tool_schema=_TOOL_SCHEMA,
+    )
+
+    modified_text = result.get("modified_text", "")
+    if not modified_text:
+        msg = f"Scene {scene_number}: Claude returned empty modified_text"
+        raise NarrationPrepError(msg)
+
+    # Validate tags preserved
+    if not _validate_tags_preserved(text, modified_text):
+        logger.warning("Scene %d: tags not preserved, retrying with correction", scene_number)
+        corrective = (
+            user_message + "\n\nIMPORTANT: Your previous response modified the voice/mood tags. "
+            "You must preserve ALL **voice:X** and **mood:X** tags exactly as they "
+            "appear in the original text — same tags, same positions, same order."
+        )
+        result = claude_client.generate_structured(
+            system=_SYSTEM_PROMPT,
+            user_message=corrective,
+            tool_name=_TOOL_NAME,
+            tool_schema=_TOOL_SCHEMA,
+        )
+        modified_text = result.get("modified_text", "")
+        if not modified_text or not _validate_tags_preserved(text, modified_text):
+            msg = f"Scene {scene_number}: tags corrupted after retry"
+            raise NarrationPrepError(msg)
+
+    return {
+        "modified_text": modified_text,
+        "changes": result.get("changes", []),
+        "pronunciation_guide_additions": result.get("pronunciation_guide_additions", []),
+    }
