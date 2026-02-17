@@ -24,7 +24,7 @@ Acknowledged items not yet scheduled.
 - [x] [bug] `assemble_video` silently proceeds with zero completed segments — empty segment list passed to `build_concat_command` produces cryptic error. Add explicit guard. (PR-7)
 - [x] [bug] `probe_duration` crashes on empty/non-numeric stdout — `float(result.stdout.strip())` raises bare `ValueError` for corrupt files. Wrap and re-raise as `FFmpegError` with file path context. (PR-8)
 - [x] [bug] `build_concat_command` does not validate `segment_paths` and `segment_durations` have same length — mismatch causes `IndexError` deep in xfade calculation. Add length guard. (PR-9)
-- [ ] [bug] Sentence-ending period lost after abbreviations — `"cats, dogs, etc. She left."` becomes `"...et cetera She left."` missing the period. `_make_replacer` only preserves trailing period at end-of-string or before `\n`. (PR-10)
+- [ ] [bug] Sentence-ending period lost after abbreviations — `"cats, dogs, etc. She left."` becomes `"...et cetera She left."` missing the period. `_make_replacer` only preserves trailing period at end-of-string or before `\n`. Known limitation — will be superseded by LLM-based TTS text prep feature. (PR-10)
 - [ ] [test] Orchestrator integration test gap — `test_runs_all_phases_without_pausing` mocks 9 internal functions, can't detect wiring mistakes. Add integration test that only mocks external APIs and exercises actual data flow between phases. (PR-11)
 - [x] [refactor] `_patch_sleep` fixture duplicated in three test files — move to `conftest.py`. (PR-12)
 
@@ -46,6 +46,7 @@ Acknowledged items not yet scheduled.
 
 ---
 
+- [ ] [feature] LLM-based TTS text prep — optional pipeline phase that runs narration text through Claude for context-aware pronunciation preparation. Handles abbreviation expansion, number pronunciation (dates vs quantities), unusual name phonetics, and other contextual decisions that regex rules can't get right. Produces a changelog of all modifications with locations for human review. Supersedes PR-10 and the regex-based `expand_abbreviations` approach. Slots in after narration text finalization, before TTS generation.
 - [ ] [feature] Implement story writer creative flow — analysis, bible, outline, prose, critique (pipeline/story_writer.py)
 - [ ] [feature] Add marker-based scene splitting as early-exit path in split_scenes (pre-split input support)
 - [ ] [feature] Inline image tags — define image prompts in YAML header, reference with `**image:tag**` in story text. Decouples image transitions from scene boundaries, gives authors direct control over visuals. Requires video assembler refactor for multiple images per scene.
