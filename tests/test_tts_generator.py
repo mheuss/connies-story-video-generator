@@ -14,7 +14,6 @@ from story_video.pipeline.tts_generator import (
     ElevenLabsTTSProvider,
     OpenAITTSProvider,
     TTSProvider,
-    _mood_to_instructions,
     generate_audio,
 )
 from story_video.state import ProjectState
@@ -636,6 +635,42 @@ class TestElevenLabsTTSProvider:
         text_sent = call_kwargs["text"]
         assert text_sent.startswith("[mysterious]")
 
+    def test_speed_warning_logged(self, mock_elevenlabs, caplog):
+        """Non-1.0 speed logs a warning since ElevenLabs ignores it."""
+        import logging
+
+        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
+
+        provider = ElevenLabsTTSProvider()
+        with caplog.at_level(logging.WARNING):
+            provider.synthesize("Hello", "voice-id", "eleven_v3", 1.5, "mp3_44100_128")
+
+        assert any("speed" in r.message.lower() for r in caplog.records)
+
+    def test_no_speed_warning_at_default(self, mock_elevenlabs, caplog):
+        """Speed 1.0 does not log a warning."""
+        import logging
+
+        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
+
+        provider = ElevenLabsTTSProvider()
+        with caplog.at_level(logging.WARNING):
+            provider.synthesize("Hello", "voice-id", "eleven_v3", 1.0, "mp3_44100_128")
+
+        assert not any("speed" in r.message.lower() for r in caplog.records)
+
+    def test_no_retry_on_auth_error(self, mock_elevenlabs):
+        """ElevenLabs auth error (4xx) is not retried."""
+        from elevenlabs import UnauthorizedError
+
+        mock_elevenlabs.text_to_speech.convert.side_effect = UnauthorizedError(body="unauthorized")
+
+        provider = ElevenLabsTTSProvider()
+        with pytest.raises(UnauthorizedError):
+            provider.synthesize("Hello", "voice-id", "eleven_v3", 1.0, "mp3_44100_128")
+
+        assert mock_elevenlabs.text_to_speech.convert.call_count == 1
+
 
 # ---------------------------------------------------------------------------
 # MOOD_TO_ELEVENLABS_TAG — mapping verification
@@ -653,27 +688,6 @@ class TestMoodToElevenLabsTag:
 
     def test_happy_maps_to_excited(self):
         assert MOOD_TO_ELEVENLABS_TAG["happy"] == "excited"
-
-
-# ---------------------------------------------------------------------------
-# _mood_to_instructions — helper function
-# ---------------------------------------------------------------------------
-
-
-class TestMoodToInstructions:
-    """_mood_to_instructions converts mood tags to TTS instructions."""
-
-    def test_returns_none_for_none(self):
-        """None mood produces None instructions."""
-        assert _mood_to_instructions(None) is None
-
-    def test_converts_mood_to_instruction_string(self):
-        """A mood string becomes 'Speak in a X tone'."""
-        assert _mood_to_instructions("sad") == "Speak in a sad tone"
-
-    def test_converts_arbitrary_mood(self):
-        """Any mood string is wrapped in the instruction format."""
-        assert _mood_to_instructions("mysterious") == "Speak in a mysterious tone"
 
 
 # ---------------------------------------------------------------------------

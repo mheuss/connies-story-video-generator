@@ -4,6 +4,7 @@ Converts scene narration text to audio files using a pluggable TTS provider.
 Ships with OpenAI and ElevenLabs implementations.
 """
 
+import logging
 import re
 from typing import Protocol
 
@@ -15,7 +16,10 @@ from story_video.state import ProjectState
 from story_video.utils.narration_tags import parse_narration_segments
 from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS, with_retry
 
+logger = logging.getLogger(__name__)
+
 __all__ = [
+    "ELEVENLABS_TRANSIENT_ERRORS",
     "ElevenLabsTTSProvider",
     "MOOD_TO_ELEVENLABS_TAG",
     "OpenAITTSProvider",
@@ -130,6 +134,14 @@ def _mood_to_elevenlabs_text(text: str, instructions: str | None) -> str:
     return f"[{tag}] {text}"
 
 
+# ElevenLabs transient errors: network failures only.
+# The with_retry decorator uses type-based filtering, so we can only
+# retry on exception types, not status codes. Network errors are the
+# most common transient failure; ElevenLabs API errors (4xx, 5xx) are
+# not retried to avoid masking auth or bad-request errors.
+ELEVENLABS_TRANSIENT_ERRORS = (ConnectionError, TimeoutError)
+
+
 class ElevenLabsTTSProvider:
     """ElevenLabs TTS provider using the standard text-to-speech API.
 
@@ -139,7 +151,7 @@ class ElevenLabsTTSProvider:
     def __init__(self) -> None:
         self._client = elevenlabs.ElevenLabs()
 
-    @with_retry(max_retries=3, base_delay=2.0, retry_on=(Exception,))
+    @with_retry(max_retries=3, base_delay=2.0, retry_on=ELEVENLABS_TRANSIENT_ERRORS)
     def synthesize(
         self,
         text: str,
@@ -155,13 +167,19 @@ class ElevenLabsTTSProvider:
             text: The text to convert to speech.
             voice: ElevenLabs voice ID (hash string).
             model: ElevenLabs model ID.
-            speed: Playback speed (currently unused by ElevenLabs API).
+            speed: Playback speed (not supported by ElevenLabs API).
             output_format: ElevenLabs output format (mp3_44100_128, etc.).
             instructions: Optional mood instruction, translated to audio tag.
 
         Returns:
             Raw audio bytes from the streaming response.
         """
+        if speed != 1.0:
+            logger.warning(
+                "ElevenLabs does not support speed adjustment (got %.2f). "
+                "Audio will be generated at normal speed.",
+                speed,
+            )
         tagged_text = _mood_to_elevenlabs_text(text, instructions)
         audio_iter = self._client.text_to_speech.convert(
             voice_id=voice,
