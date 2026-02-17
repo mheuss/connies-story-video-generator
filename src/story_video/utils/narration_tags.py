@@ -67,6 +67,17 @@ def parse_story_header(text: str) -> tuple[StoryHeader | None, str]:
     return header, body
 
 
+def _resolve_voice(label: str, voice_map: dict[str, str]) -> str:
+    """Look up a voice label in the voice map, raising on unknown labels."""
+    voice_id = voice_map.get(label)
+    if voice_id is None:
+        msg = (
+            f"Unknown voice label '{label}'. Defined voices: {', '.join(sorted(voice_map.keys()))}."
+        )
+        raise ValueError(msg)
+    return voice_id
+
+
 def parse_narration_segments(
     text: str,
     voice_map: dict[str, str],
@@ -106,13 +117,7 @@ def parse_narration_segments(
         before_text = text[last_end : match.start()].strip()
 
         if before_text:
-            voice_id = voice_map.get(current_voice_label)
-            if voice_id is None:
-                msg = (
-                    f"Unknown voice label '{current_voice_label}'. "
-                    f"Defined voices: {', '.join(sorted(voice_map.keys()))}."
-                )
-                raise ValueError(msg)
+            voice_id = _resolve_voice(current_voice_label, voice_map)
 
             segments.append(
                 NarrationSegment(
@@ -128,12 +133,7 @@ def parse_narration_segments(
 
         # Apply the tag
         if tag_type == "voice":
-            if tag_value not in voice_map:
-                msg = (
-                    f"Unknown voice label '{tag_value}'. "
-                    f"Defined voices: {', '.join(sorted(voice_map.keys()))}."
-                )
-                raise ValueError(msg)
+            _resolve_voice(tag_value, voice_map)
             current_voice_label = tag_value
             current_mood = None  # Voice change resets mood
         elif tag_type == "mood":
@@ -144,13 +144,7 @@ def parse_narration_segments(
     # Remaining text after last tag
     remaining = text[last_end:].strip()
     if remaining:
-        voice_id = voice_map.get(current_voice_label)
-        if voice_id is None:
-            msg = (
-                f"Unknown voice label '{current_voice_label}'. "
-                f"Defined voices: {', '.join(sorted(voice_map.keys()))}."
-            )
-            raise ValueError(msg)
+        voice_id = _resolve_voice(current_voice_label, voice_map)
 
         segments.append(
             NarrationSegment(
