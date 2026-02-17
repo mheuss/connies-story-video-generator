@@ -30,19 +30,19 @@ Acknowledged items not yet scheduled.
 
 **Low priority:**
 
-- [ ] [chore] Delete dead file `ffmpeg/transitions.py` — empty, transition logic merged into `commands.py`. (PR-13)
-- [ ] [bug] `_hex_to_ass_color` does not validate input format — silently produces garbage for malformed hex like `"#FFF"` or `"red"`. (PR-14)
-- [ ] [bug] No cross-field validation on scene word count bounds — `scene_word_min`, `scene_word_target`, `scene_word_max` can be set in contradictory order. Add `@model_validator`. (PR-15)
-- [ ] [bug] `SubtitleConfig.color` and `outline_color` lack hex format validation — bare `str` type, invalid values produce opaque FFmpeg errors. (PR-16)
-- [ ] [docs] Stale docstring in `state.py:418` lists IMAGE_PROMPTS as having no per-scene asset — contradicts `PHASE_ASSET_MAP`. (PR-17)
-- [ ] [bug] `--voice` option on `estimate` command is misleading — help text says "(affects cost)" but voice has no effect on cost calculation. Remove option or fix help text. (PR-18)
-- [ ] [chore] `api_retry` exported but never used in production code — zero consumers in `src/`. Consider removing. (PR-19)
-- [ ] [bug] `with_retry` default `retry_on=(Exception,)` is overly broad — catches `ValueError`, `TypeError`, etc. All callers specify explicitly, but default is a footgun for new callers. (PR-20)
-- [ ] [chore] Inline regex not pre-compiled in `text.py:495` — `re.sub(r"  +", " ", result)` breaks file convention of module-level compiled patterns. (PR-21)
-- [ ] [chore] Missing `logging.getLogger(__name__)` in `image_generator.py`, `video_assembler.py`, `caption_generator.py` — every other pipeline module has one. (PR-22)
-- [ ] [chore] No logging configuration in CLI — logger created but no handler configured, debug logs vanish silently. Add `--verbose` flag. (PR-23)
-- [ ] [test] Multiple test gaps: `_check_preservation` edge cases, `_strip_narration_tags` dedicated tests, `_format_to_extension` direct tests, CLI `_make_tts_provider` unknown provider path, `_apply_dotted_overrides` error path, `parse_narration_segments` with empty input, `build_concat_command` with short/zero-duration segments, `subtitle_filter` with special-character paths, `probe_duration` with non-numeric output. (PR-24)
-- [ ] [test] Multiple-assertions-per-test convention violations in `test_caption_generator.py`, `test_image_generator.py`, `test_tts_generator.py` — split composite assertions into focused tests. (PR-25)
+- [x] [chore] Delete dead file `ffmpeg/transitions.py` — empty, transition logic merged into `commands.py`. (PR-13)
+- [x] [bug] `_hex_to_ass_color` does not validate input format — silently produces garbage for malformed hex like `"#FFF"` or `"red"`. (PR-14)
+- [x] [bug] No cross-field validation on scene word count bounds — `scene_word_min`, `scene_word_target`, `scene_word_max` can be set in contradictory order. Add `@model_validator`. (PR-15)
+- [x] [bug] `SubtitleConfig.color` and `outline_color` lack hex format validation — bare `str` type, invalid values produce opaque FFmpeg errors. (PR-16)
+- [x] [docs] Stale docstring in `state.py:418` lists IMAGE_PROMPTS as having no per-scene asset — contradicts `PHASE_ASSET_MAP`. (PR-17)
+- [x] [bug] `--voice` option on `estimate` command is misleading — help text says "(affects cost)" but voice has no effect on cost calculation. Remove option or fix help text. (PR-18)
+- [x] [chore] `api_retry` exported but never used in production code — zero consumers in `src/`. Consider removing. (PR-19)
+- [x] [bug] `with_retry` default `retry_on=(Exception,)` is overly broad — catches `ValueError`, `TypeError`, etc. All callers specify explicitly, but default is a footgun for new callers. (PR-20)
+- [x] [chore] Inline regex not pre-compiled in `text.py:495` — `re.sub(r"  +", " ", result)` breaks file convention of module-level compiled patterns. (PR-21)
+- [x] [chore] Missing `logging.getLogger(__name__)` in `image_generator.py`, `video_assembler.py`, `caption_generator.py` — every other pipeline module has one. (PR-22)
+- [x] [chore] No logging configuration in CLI — logger created but no handler configured, debug logs vanish silently. Add `--verbose` flag. (PR-23)
+- [x] [test] Multiple test gaps: `_check_preservation` edge cases, `_strip_narration_tags` dedicated tests, `_format_to_extension` direct tests, CLI `_make_tts_provider` unknown provider path, `_apply_dotted_overrides` error path, `parse_narration_segments` with empty input, `build_concat_command` with short/zero-duration segments, `subtitle_filter` with special-character paths, `probe_duration` with non-numeric output. (PR-24)
+- [x] [test] Multiple-assertions-per-test convention violations in `test_caption_generator.py`, `test_image_generator.py`, `test_tts_generator.py` — split composite assertions into focused tests. (PR-25)
 
 ---
 
@@ -125,6 +125,19 @@ Completed items awaiting migration to VERSION_HISTORY.md at next release.
 - [x] [bug] `build_concat_command` does not validate list lengths — add length guard (PR-9)
 - [x] [refactor] `_patch_sleep` fixture duplicated in three test files — move to `conftest.py` (PR-12)
 - [x] [test] Orchestrator integration test — full pipeline data flow with only external APIs mocked (PR-11)
+- [x] [chore] Delete dead file `ffmpeg/transitions.py` (PR-13)
+- [x] [bug] `_hex_to_ass_color` input validation — reject malformed hex (PR-14)
+- [x] [bug] Cross-field validation on scene word count bounds — `@model_validator` (PR-15)
+- [x] [bug] `SubtitleConfig.color` and `outline_color` hex format validation (PR-16)
+- [x] [docs] Fix stale docstring in `state.py` — remove IMAGE_PROMPTS from no-asset list (PR-17)
+- [x] [bug] Remove misleading `--voice` option from `estimate` command (PR-18)
+- [x] [chore] Remove unused `api_retry` export and function (PR-19)
+- [x] [bug] Make `with_retry` `retry_on` parameter required (PR-20)
+- [x] [chore] Pre-compile inline regex in `text.py` (PR-21)
+- [x] [chore] Add `logging.getLogger(__name__)` to 3 pipeline modules (PR-22)
+- [x] [chore] Add `--verbose` flag to CLI for logging configuration (PR-23)
+- [x] [test] Fill test gaps — preservation, narration tags, file extension, concat duration (PR-24)
+- [x] [test] Split multi-assertion tests into focused single-assertion tests (PR-25)
 
 ## Session Notes
 
