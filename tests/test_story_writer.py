@@ -948,3 +948,20 @@ class TestFlagNarrationUpdatesNarrationTextStatus:
 
         for scene in state_with_scenes.metadata.scenes:
             assert scene.asset_status.narration_text == SceneStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# Preservation check — edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestCheckPreservationEdgeCases:
+    """_check_preservation handles edge-case inputs."""
+
+    def test_empty_original_and_scenes(self):
+        """Empty original text with no scenes passes."""
+        _check_preservation("", [])
+
+    def test_whitespace_only_original(self):
+        """Whitespace-only original with no scenes passes."""
+        _check_preservation("   \n\t  ", [])

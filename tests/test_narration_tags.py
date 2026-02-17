@@ -175,3 +175,14 @@ class TestParseNarrationSegments:
         segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
         assert len(segments) == 1
         assert segments[0].mood == "happy"
+
+
+class TestParseNarrationSegmentsEdgeCases:
+    """parse_narration_segments handles edge-case inputs."""
+
+    VOICE_MAP = {"narrator": "nova"}
+
+    def test_empty_string_returns_empty(self):
+        """Empty string produces no segments."""
+        result = parse_narration_segments("", self.VOICE_MAP, "narrator", scene_number=1)
+        assert result == []

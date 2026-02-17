@@ -339,3 +339,28 @@ class TestBuildConcatCommandLengthValidation:
                 output_path=Path("/tmp/out.mp4"),
                 video_config=VideoConfig(),
             )
+
+
+# ---------------------------------------------------------------------------
+# TestBuildConcatCommandShortDuration — segments shorter than xfade
+# ---------------------------------------------------------------------------
+
+
+class TestBuildConcatCommandShortDuration:
+    """build_concat_command handles segments shorter than xfade duration."""
+
+    def test_zero_duration_segment(self):
+        """Zero-duration segment in multi-segment concat."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        durations = [0.0, 5.0]
+        config = VideoConfig()
+        cmd = build_concat_command(paths, durations, Path("/out.mp4"), config)
+        assert isinstance(cmd, list)
+
+    def test_very_short_duration_segment(self):
+        """Segment shorter than xfade transition duration."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        durations = [0.5, 5.0]  # 0.5s < typical 1.5s xfade
+        config = VideoConfig()
+        cmd = build_concat_command(paths, durations, Path("/out.mp4"), config)
+        assert isinstance(cmd, list)
