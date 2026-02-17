@@ -31,6 +31,18 @@ SOURCE_TEXT = (
     "Part three of the story. And they all lived happily ever after."
 )
 
+SOURCE_TEXT_WITH_HEADER = (
+    "---\n"
+    "voices:\n"
+    "  narrator: alloy\n"
+    "  old_man: echo\n"
+    "default_voice: narrator\n"
+    "---\n"
+    "Part one of the story. It was a dark and stormy night. "
+    "Part two of the story. The hero ventured forth bravely. "
+    "Part three of the story. And they all lived happily ever after."
+)
+
 SCENE_RESPONSES = {
     "scenes": [
         {
@@ -73,6 +85,20 @@ def sample_state(tmp_path):
     )
     source = tmp_path / "test-project" / "source_story.txt"
     source.write_text(SOURCE_TEXT)
+    return state
+
+
+@pytest.fixture()
+def state_with_header(tmp_path):
+    """Create a project state with source_story.txt that has YAML front matter."""
+    state = ProjectState.create(
+        project_id="header-test",
+        mode=InputMode.ADAPT,
+        config=AppConfig(),
+        output_dir=tmp_path,
+    )
+    source = tmp_path / "header-test" / "source_story.txt"
+    source.write_text(SOURCE_TEXT_WITH_HEADER)
     return state
 
 
@@ -328,6 +354,52 @@ class TestSplitScenesClaudeParams:
         assert call_kwargs["system"] == SCENE_SPLIT_SYSTEM
         assert call_kwargs["tool_name"] == "split_into_scenes"
         assert call_kwargs["tool_schema"] == SCENE_SPLIT_SCHEMA
+
+
+# ---------------------------------------------------------------------------
+# YAML header stripping
+# ---------------------------------------------------------------------------
+
+
+class TestSplitScenesStripsYamlHeader:
+    """split_scenes() strips YAML front matter before scene splitting."""
+
+    def test_source_with_header_sends_only_body_to_claude(self, state_with_header, mock_client):
+        """YAML header is stripped — Claude receives only the story body."""
+        split_scenes(state_with_header, mock_client)
+
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        user_message = call_kwargs["user_message"]
+        assert "---" not in user_message
+        assert "voices:" not in user_message
+        assert "narrator: alloy" not in user_message
+        assert user_message.startswith("Part one of the story")
+
+    def test_source_with_header_preservation_passes(self, state_with_header, mock_client):
+        """Preservation check compares against body only, not the YAML header."""
+        split_scenes(state_with_header, mock_client)
+
+        assert len(state_with_header.metadata.scenes) == 3
+
+    def test_source_with_header_preservation_fails_on_mismatch(
+        self, state_with_header, mock_client
+    ):
+        """Preservation check still catches mismatches in the body text."""
+        mock_client.generate_structured.return_value = {
+            "scenes": [
+                {"title": "Part One", "text": "WRONG TEXT here."},
+            ]
+        }
+
+        with pytest.raises(ValueError, match="mismatch"):
+            split_scenes(state_with_header, mock_client)
+
+    def test_source_without_header_unchanged(self, sample_state, mock_client):
+        """Source without YAML header still works — body equals full text."""
+        split_scenes(sample_state, mock_client)
+
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        assert call_kwargs["user_message"] == SOURCE_TEXT
 
 
 # ---------------------------------------------------------------------------

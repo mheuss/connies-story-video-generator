@@ -10,6 +10,7 @@ import logging
 from story_video.models import AssetType, SceneStatus
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.state import ProjectState
+from story_video.utils.narration_tags import parse_story_header
 
 __all__ = ["flag_narration", "split_scenes"]
 
@@ -148,6 +149,12 @@ def split_scenes(state: ProjectState, client: ClaudeClient) -> None:
         msg = f"source_story.txt not found in {state.project_dir}"
         raise FileNotFoundError(msg)
     source_text = source_path.read_text(encoding="utf-8")
+
+    # 1b. Strip YAML front matter (voice definitions) — Claude should only
+    #     see the story body, and the preservation check must compare against
+    #     the body without the header.
+    _, body_text = parse_story_header(source_text)
+    source_text = body_text
 
     # 2. Call Claude for scene splitting
     result = client.generate_structured(

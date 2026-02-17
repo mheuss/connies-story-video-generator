@@ -1,0 +1,17 @@
+---
+voices:
+  narrator: alloy
+  old_man: echo
+default_voice: narrator
+---
+The chess clock ticked in the empty park. Two stone tables stood beneath the oak trees, but only one was occupied. The old man sat alone, pieces arranged on both sides of the board, playing against himself.
+
+**voice:old_man** "You're late," he said without looking up. He moved a white knight to f3 and folded his hands. **voice:narrator** A boy dropped his backpack on the bench across from him and sat down. He was maybe twelve, still wearing his school uniform, tie loosened and shirt untucked.
+
+**voice:old_man** **mood:dry** "Black or white?" **voice:narrator** The boy pointed at the black pieces. The old man nodded, swept the board clean, and set up a fresh game. He opened with pawn to e4, the most common first move in chess. The boy mirrored him. e5.
+
+They played in silence for twenty moves. The old man captured a bishop and set it aside with a small click. **voice:old_man** **mood:thoughtful** "Your mother called me. She says you're not talking to anyone at school." **voice:narrator** The boy shrugged and moved his rook. **voice:old_man** "That's not an answer." **voice:narrator** **mood:warm** The boy looked up for the first time. His eyes were red but dry. He moved his queen to d4.
+
+**voice:old_man** **mood:surprised** "That's a good move." **voice:narrator** The old man studied the board for a long time. The shadows of the oak leaves shifted across the pieces as clouds moved overhead. He moved his king behind a wall of pawns. **voice:old_man** **mood:gentle** "You don't have to talk. But you do have to keep showing up. Deal?"
+
+**voice:narrator** The boy nodded. He reached across the board and captured the old man's knight with his queen. **voice:old_man** **mood:amused** "And stop taking my knights." **voice:narrator** **mood:warm** Something close to a smile crossed the boy's face. They played until the streetlights came on, resetting the board twice more before the boy picked up his backpack and walked home through the blue dusk.
