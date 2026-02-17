@@ -17,16 +17,16 @@ Acknowledged items not yet scheduled.
 
 **Medium priority:**
 
-- [ ] [bug] `_dispatch_phase` does not validate that providers are non-None — provider-dependent phases produce opaque `AttributeError: NoneType has no attribute 'synthesize'` instead of descriptive error when provider is None. Add fail-fast guards. (PR-3)
-- [ ] [bug] `ImageConfig.size` lacks format validation — `VideoConfig.resolution` has a `@field_validator` enforcing `WIDTHxHEIGHT` but `ImageConfig.size` does not. Invalid values pass validation and fail at the API. (PR-4)
-- [ ] [refactor] Provider instantiation duplicated between `create` and `resume` CLI commands — extract `_run_with_providers(state)` helper. (PR-5)
-- [ ] [refactor] Duplicated format-to-extension logic — `tts_generator.py` has `_format_to_extension()` but `caption_generator.py` and `video_assembler.py` inline `output_format.split("_")[0]`. Move to shared location or add `TTSConfig.file_extension` property. (PR-6)
-- [ ] [bug] `assemble_video` silently proceeds with zero completed segments — empty segment list passed to `build_concat_command` produces cryptic error. Add explicit guard. (PR-7)
-- [ ] [bug] `probe_duration` crashes on empty/non-numeric stdout — `float(result.stdout.strip())` raises bare `ValueError` for corrupt files. Wrap and re-raise as `FFmpegError` with file path context. (PR-8)
-- [ ] [bug] `build_concat_command` does not validate `segment_paths` and `segment_durations` have same length — mismatch causes `IndexError` deep in xfade calculation. Add length guard. (PR-9)
+- [x] [bug] `_dispatch_phase` does not validate that providers are non-None — provider-dependent phases produce opaque `AttributeError: NoneType has no attribute 'synthesize'` instead of descriptive error when provider is None. Add fail-fast guards. (PR-3)
+- [x] [bug] `ImageConfig.size` lacks format validation — `VideoConfig.resolution` has a `@field_validator` enforcing `WIDTHxHEIGHT` but `ImageConfig.size` does not. Invalid values pass validation and fail at the API. (PR-4)
+- [x] [refactor] Provider instantiation duplicated between `create` and `resume` CLI commands — extract `_run_with_providers(state)` helper. (PR-5)
+- [x] [refactor] Duplicated format-to-extension logic — `tts_generator.py` has `_format_to_extension()` but `caption_generator.py` and `video_assembler.py` inline `output_format.split("_")[0]`. Move to shared location or add `TTSConfig.file_extension` property. (PR-6)
+- [x] [bug] `assemble_video` silently proceeds with zero completed segments — empty segment list passed to `build_concat_command` produces cryptic error. Add explicit guard. (PR-7)
+- [x] [bug] `probe_duration` crashes on empty/non-numeric stdout — `float(result.stdout.strip())` raises bare `ValueError` for corrupt files. Wrap and re-raise as `FFmpegError` with file path context. (PR-8)
+- [x] [bug] `build_concat_command` does not validate `segment_paths` and `segment_durations` have same length — mismatch causes `IndexError` deep in xfade calculation. Add length guard. (PR-9)
 - [ ] [bug] Sentence-ending period lost after abbreviations — `"cats, dogs, etc. She left."` becomes `"...et cetera She left."` missing the period. `_make_replacer` only preserves trailing period at end-of-string or before `\n`. (PR-10)
 - [ ] [test] Orchestrator integration test gap — `test_runs_all_phases_without_pausing` mocks 9 internal functions, can't detect wiring mistakes. Add integration test that only mocks external APIs and exercises actual data flow between phases. (PR-11)
-- [ ] [refactor] `_patch_sleep` fixture duplicated in three test files — move to `conftest.py`. (PR-12)
+- [x] [refactor] `_patch_sleep` fixture duplicated in three test files — move to `conftest.py`. (PR-12)
 
 **Low priority:**
 
@@ -115,6 +115,14 @@ Completed items awaiting migration to VERSION_HISTORY.md at next release.
 - [x] [refactor] Deduplicate tag regex — export has_narration_tags() (narration_tags.py, tts_generator.py)
 - [x] [bug] `estimate_cost` crashes with ElevenLabs TTS models — returns $0.00 with descriptive note instead of raising (PR-1)
 - [x] [security] Path injection in `subtitle_filter` — escape backslashes and single quotes in ASS file paths (PR-2)
+- [x] [bug] `_dispatch_phase` does not validate that providers are non-None — add fail-fast guards (PR-3)
+- [x] [bug] `ImageConfig.size` lacks format validation — add `@field_validator` enforcing `WIDTHxHEIGHT` (PR-4)
+- [x] [refactor] Provider instantiation duplicated between `create` and `resume` — extract `_run_with_providers` helper (PR-5)
+- [x] [refactor] Duplicated format-to-extension logic — add `TTSConfig.file_extension` property (PR-6)
+- [x] [bug] `assemble_video` silently proceeds with zero completed segments — add explicit guard (PR-7)
+- [x] [bug] `probe_duration` crashes on empty/non-numeric stdout — wrap as `FFmpegError` (PR-8)
+- [x] [bug] `build_concat_command` does not validate list lengths — add length guard (PR-9)
+- [x] [refactor] `_patch_sleep` fixture duplicated in three test files — move to `conftest.py` (PR-12)
 
 ## Session Notes
 
