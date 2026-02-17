@@ -6,6 +6,7 @@ Narration flagging identifies TTS-unfriendly content in scene texts.
 """
 
 import logging
+import re
 
 from story_video.models import AssetType, SceneStatus
 from story_video.pipeline.claude_client import ClaudeClient
@@ -224,11 +225,13 @@ def flag_narration(state: ProjectState, client: ClaudeClient) -> None:
         msg = "No scenes in project"
         raise ValueError(msg)
 
-    # 2. Build user message with numbered scenes
+    # 2. Build user message with numbered scenes.
+    #    Strip voice/mood tags — they're TTS metadata, not content for
+    #    Claude to evaluate or flag.
     parts = []
     for scene in scenes:
         parts.append(f"=== Scene {scene.scene_number}: {scene.title} ===")
-        parts.append(scene.prose)
+        parts.append(_strip_narration_tags(scene.prose))
         parts.append("")
     scene_text = "\n".join(parts)
 
@@ -371,3 +374,16 @@ def _find_first_difference(a: str, b: str) -> int:
         if a[i] != b[i]:
             return i
     return min_len
+
+
+_NARRATION_TAG_RE = re.compile(r"\*\*(voice|mood):[^*]+\*\*\s*")
+
+
+def _strip_narration_tags(text: str) -> str:
+    """Remove inline voice/mood tags from text.
+
+    Tags like ``**voice:narrator**`` and ``**mood:dry**`` are metadata
+    for the TTS pipeline and should not be seen by Claude during
+    narration flagging.
+    """
+    return _NARRATION_TAG_RE.sub("", text)

@@ -10,10 +10,11 @@ import pytest
 
 from story_video.models import AppConfig, AssetType, InputMode, SceneStatus, StoryHeader, TTSConfig
 from story_video.pipeline.tts_generator import (
-    MOOD_TO_ELEVENLABS_TAG,
     ElevenLabsTTSProvider,
     OpenAITTSProvider,
     TTSProvider,
+    _mood_to_elevenlabs_text,
+    _mood_to_instructions,
     generate_audio,
 )
 from story_video.state import ProjectState
@@ -584,6 +585,7 @@ class TestElevenLabsTTSProvider:
         return mock_client
 
     def test_mood_prepended_as_audio_tag(self, mock_elevenlabs):
+        """Any mood is passed through as a freeform v3 audio tag."""
         mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
 
         provider = ElevenLabsTTSProvider()
@@ -598,8 +600,25 @@ class TestElevenLabsTTSProvider:
 
         call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
         text_sent = call_kwargs["text"]
-        assert text_sent.startswith("[sorrowful]")
-        assert "Hello" in text_sent
+        assert text_sent == "[sad] Hello"
+
+    def test_freeform_mood_passed_through(self, mock_elevenlabs):
+        """Freeform moods like 'thoughtful' are passed directly as tags."""
+        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
+
+        provider = ElevenLabsTTSProvider()
+        provider.synthesize(
+            "Hello",
+            "voice-id",
+            "eleven_v3",
+            1.0,
+            "mp3_44100_128",
+            instructions="Speak in a thoughtful tone",
+        )
+
+        call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
+        text_sent = call_kwargs["text"]
+        assert text_sent == "[thoughtful] Hello"
 
     def test_no_mood_sends_plain_text(self, mock_elevenlabs):
         mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
@@ -612,23 +631,6 @@ class TestElevenLabsTTSProvider:
         call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
         text_sent = call_kwargs["text"]
         assert text_sent == "Hello"
-
-    def test_unknown_mood_passed_through(self, mock_elevenlabs):
-        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
-
-        provider = ElevenLabsTTSProvider()
-        provider.synthesize(
-            "Hello",
-            "voice-id",
-            "eleven_v3",
-            1.0,
-            "mp3_44100_128",
-            instructions="Speak in a mysterious tone",
-        )
-
-        call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
-        text_sent = call_kwargs["text"]
-        assert text_sent.startswith("[mysterious]")
 
     def test_speed_warning_logged(self, mock_elevenlabs, caplog):
         """Non-1.0 speed logs a warning since ElevenLabs ignores it."""
@@ -681,21 +683,52 @@ class TestElevenLabsTTSProvider:
 
 
 # ---------------------------------------------------------------------------
-# MOOD_TO_ELEVENLABS_TAG — mapping verification
+# _mood_to_elevenlabs_text — freeform v3 audio tags
 # ---------------------------------------------------------------------------
 
 
-class TestMoodToElevenLabsTag:
-    """MOOD_TO_ELEVENLABS_TAG maps mood keywords to audio tags."""
+class TestMoodToElevenLabsText:
+    """_mood_to_elevenlabs_text passes any mood through as a v3 audio tag."""
 
-    def test_sad_maps_to_sorrowful(self):
-        assert MOOD_TO_ELEVENLABS_TAG["sad"] == "sorrowful"
+    def test_mood_prepended_as_tag(self):
+        """Mood keyword is extracted and prepended as [tag]."""
+        result = _mood_to_elevenlabs_text("Hello world", "Speak in a sad tone")
+        assert result == "[sad] Hello world"
 
-    def test_angry_maps_to_frustrated(self):
-        assert MOOD_TO_ELEVENLABS_TAG["angry"] == "frustrated"
+    def test_freeform_mood_passed_through(self):
+        """Any mood works — no mapping table required."""
+        result = _mood_to_elevenlabs_text("Hello", "Speak in a thoughtful tone")
+        assert result == "[thoughtful] Hello"
 
-    def test_happy_maps_to_excited(self):
-        assert MOOD_TO_ELEVENLABS_TAG["happy"] == "excited"
+    def test_none_instructions_returns_plain_text(self):
+        """None instructions return text unchanged."""
+        result = _mood_to_elevenlabs_text("Hello world", None)
+        assert result == "Hello world"
+
+    def test_all_story_moods_produce_tags(self):
+        """All moods used in the two-voice test story produce audio tags."""
+        story_moods = ["dry", "thoughtful", "warm", "surprised", "gentle", "amused"]
+        for mood in story_moods:
+            result = _mood_to_elevenlabs_text("Hello", f"Speak in a {mood} tone")
+            assert result == f"[{mood}] Hello", f"Failed for mood={mood}"
+
+
+# ---------------------------------------------------------------------------
+# _mood_to_instructions — mood to natural language
+# ---------------------------------------------------------------------------
+
+
+class TestMoodToInstructions:
+    """_mood_to_instructions converts mood tags to instruction strings."""
+
+    def test_none_returns_none(self):
+        assert _mood_to_instructions(None) is None
+
+    def test_mood_returns_instruction(self):
+        assert _mood_to_instructions("sad") == "Speak in a sad tone"
+
+    def test_custom_mood_returns_instruction(self):
+        assert _mood_to_instructions("thoughtful") == "Speak in a thoughtful tone"
 
 
 # ---------------------------------------------------------------------------

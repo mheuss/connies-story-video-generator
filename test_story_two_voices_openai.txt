@@ -1,7 +1,7 @@
 ---
 voices:
-  narrator: QPlUUUYwYemzeRQ0PL9r
-  old_man: 5F6a8n4ijdCrImoXgxM9
+  narrator: nova
+  old_man: echo
 default_voice: narrator
 ---
 The chess clock ticked in the empty park. Two stone tables stood beneath the oak trees, but only one was occupied. The old man sat alone, pieces arranged on both sides of the board, playing against himself.

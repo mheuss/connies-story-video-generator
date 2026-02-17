@@ -16,6 +16,7 @@ from story_video.pipeline.story_writer import (
     SCENE_SPLIT_SCHEMA,
     SCENE_SPLIT_SYSTEM,
     _check_preservation,
+    _strip_narration_tags,
     flag_narration,
     split_scenes,
 )
@@ -596,6 +597,105 @@ class TestFlagNarrationBuildsUserMessage:
         assert "=== Scene 3: The Ending ===" in user_msg
         assert "The storm raged" in user_msg
         assert "They all lived happily ever after." in user_msg
+
+
+# ---------------------------------------------------------------------------
+# Narration flagging — voice/mood tags stripped for Claude
+# ---------------------------------------------------------------------------
+
+
+class TestFlagNarrationStripsVoiceTags:
+    """flag_narration() strips voice/mood tags before sending to Claude."""
+
+    def test_voice_tags_not_sent_to_claude(self, tmp_path, flagging_client):
+        """Voice/mood tags are stripped from the user message sent to Claude."""
+        config = AppConfig(pipeline=PipelineConfig(autonomous=True))
+        state = ProjectState.create(
+            project_id="tag-strip-test",
+            mode=InputMode.ADAPT,
+            config=config,
+            output_dir=tmp_path,
+        )
+        state.add_scene(
+            1,
+            "Tagged Scene",
+            "**voice:narrator** The hero spoke."
+            ' **voice:villain** **mood:angry** "Never!" he cried.',
+        )
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        flag_narration(state, flagging_client)
+
+        call_kwargs = flagging_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+        assert "**voice:" not in user_msg
+        assert "**mood:" not in user_msg
+        assert "The hero spoke." in user_msg
+        assert '"Never!" he cried.' in user_msg
+
+    def test_autonomous_fix_preserves_voice_tags(self, tmp_path):
+        """Autonomous fixes are applied without stripping voice/mood tags."""
+        config = AppConfig(pipeline=PipelineConfig(autonomous=True))
+        state = ProjectState.create(
+            project_id="tag-preserve-test",
+            mode=InputMode.ADAPT,
+            config=config,
+            output_dir=tmp_path,
+        )
+        state.add_scene(
+            1,
+            "Tagged Scene",
+            '**voice:narrator** The storm raged as noted in [1]. **voice:old_man** "Run!" he said.',
+        )
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        client = MagicMock()
+        client.generate_structured.return_value = {
+            "flags": [
+                {
+                    "scene_number": 1,
+                    "location": "paragraph 1",
+                    "category": "footnote",
+                    "original_text": "as noted in [1]",
+                    "suggested_fix": "as noted in the first reference",
+                    "severity": "must_fix",
+                }
+            ]
+        }
+
+        flag_narration(state, client)
+
+        scene = state.metadata.scenes[0]
+        # Fix applied
+        assert "as noted in the first reference" in scene.narration_text
+        # Voice tags preserved
+        assert "**voice:narrator**" in scene.narration_text
+        assert "**voice:old_man**" in scene.narration_text
+
+
+# ---------------------------------------------------------------------------
+# Strip narration tags helper
+# ---------------------------------------------------------------------------
+
+
+class TestStripNarrationTags:
+    """_strip_narration_tags() removes voice/mood tags from text."""
+
+    def test_strips_voice_tags(self):
+        text = "**voice:narrator** Hello. **voice:villain** Goodbye."
+        assert _strip_narration_tags(text) == "Hello. Goodbye."
+
+    def test_strips_mood_tags(self):
+        text = '**mood:angry** "Never!" he cried.'
+        assert _strip_narration_tags(text) == '"Never!" he cried.'
+
+    def test_strips_combined_tags(self):
+        text = '**voice:old_man** **mood:dry** "Black or white?"'
+        assert _strip_narration_tags(text) == '"Black or white?"'
+
+    def test_no_tags_unchanged(self):
+        text = "The hero spoke plainly."
+        assert _strip_narration_tags(text) == text
 
 
 # ---------------------------------------------------------------------------

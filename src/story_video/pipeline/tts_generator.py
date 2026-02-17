@@ -20,14 +20,24 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "ELEVENLABS_TRANSIENT_ERRORS",
     "ElevenLabsTTSProvider",
-    "MOOD_TO_ELEVENLABS_TAG",
     "OpenAITTSProvider",
     "TTSProvider",
     "generate_audio",
 ]
 
 # Formats that support raw byte concatenation (independently decodable frames).
-_CONCAT_SAFE_FORMATS = frozenset({"mp3", "opus"})
+# Prefixes, not exact matches — ElevenLabs uses e.g. "mp3_44100_128".
+_CONCAT_SAFE_PREFIXES = ("mp3", "opus")
+
+
+def _format_to_extension(output_format: str) -> str:
+    """Extract file extension from an output format string.
+
+    ElevenLabs uses compound format strings like "mp3_44100_128".
+    This returns just the codec portion (e.g. "mp3") for use as a
+    file extension.
+    """
+    return output_format.split("_")[0]
 
 
 class TTSProvider(Protocol):
@@ -103,25 +113,16 @@ class OpenAITTSProvider:
         return response.content
 
 
-MOOD_TO_ELEVENLABS_TAG: dict[str, str] = {
-    "sad": "sorrowful",
-    "happy": "excited",
-    "angry": "frustrated",
-    "tired": "weary",
-    "scared": "nervous",
-    "calm": "calm",
-    "excited": "excited",
-    "whisper": "whispers",
-    "crying": "sorrowful",
-    "seductive": "playfully",
-}
-
-
 def _mood_to_elevenlabs_text(text: str, instructions: str | None) -> str:
-    """Prepend an ElevenLabs audio tag for the mood instruction."""
+    """Prepend an Eleven v3 audio tag for the mood instruction.
+
+    Eleven v3 supports freeform audio tags like ``[thoughtful]``,
+    ``[whispers]``, ``[excited]``. The mood keyword is extracted from
+    the ``instructions`` string and passed through directly as a tag —
+    no mapping table needed.
+    """
     if instructions is None:
         return text
-    # Extract mood keyword from "Speak in a X tone" format
     mood = (
         instructions.removeprefix("Speak in a ")
         .removeprefix("Speak in an ")
@@ -129,8 +130,7 @@ def _mood_to_elevenlabs_text(text: str, instructions: str | None) -> str:
         .strip()
         .lower()
     )
-    tag = MOOD_TO_ELEVENLABS_TAG.get(mood, mood)
-    return f"[{tag}] {text}"
+    return f"[{mood}] {text}"
 
 
 # ElevenLabs transient errors: network failures only.
@@ -144,7 +144,7 @@ ELEVENLABS_TRANSIENT_ERRORS = (ConnectionError, TimeoutError)
 class ElevenLabsTTSProvider:
     """ElevenLabs TTS provider using the standard text-to-speech API.
 
-    Reads ELEVEN_API_KEY from the environment.
+    Reads ELEVENLABS_API_KEY from the environment (the SDK default).
     """
 
     def __init__(self) -> None:
@@ -192,8 +192,8 @@ class ElevenLabsTTSProvider:
 def _mood_to_instructions(mood: str | None) -> str | None:
     """Convert a mood tag to a natural language TTS instruction.
 
-    Note: _mood_to_elevenlabs_text reverse-parses this format to extract
-    the mood keyword. If you change this format, update that function too.
+    Used by OpenAI TTS (``instructions`` parameter) and reverse-parsed by
+    ``_mood_to_elevenlabs_text`` to extract the mood keyword for audio tags.
     """
     if mood is None:
         return None
@@ -250,7 +250,7 @@ def generate_audio(
             scene_number=scene.scene_number,
         )
         # Guard: raw byte concat only works for streaming formats
-        if len(segments) > 1 and tts_config.output_format not in _CONCAT_SAFE_FORMATS:
+        if len(segments) > 1 and not tts_config.output_format.startswith(_CONCAT_SAFE_PREFIXES):
             msg = (
                 f"Multi-voice audio concatenation requires mp3 or opus format, "
                 f"got '{tts_config.output_format}'. "
@@ -281,7 +281,8 @@ def generate_audio(
 
     audio_dir = state.project_dir / "audio"
     audio_dir.mkdir(exist_ok=True)
-    filename = f"scene_{scene.scene_number:03d}.{tts_config.output_format}"
+    ext = _format_to_extension(tts_config.output_format)
+    filename = f"scene_{scene.scene_number:03d}.{ext}"
     audio_path = audio_dir / filename
     audio_path.write_bytes(audio_bytes)
 
