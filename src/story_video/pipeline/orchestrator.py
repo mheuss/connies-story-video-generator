@@ -162,13 +162,20 @@ def _parse_source_header(state: ProjectState) -> StoryHeader | None:
 
     Returns:
         Parsed StoryHeader, or None if no header is present.
+
+    Raises:
+        ValueError: If the source file contains a malformed YAML header.
     """
     source_path = state.project_dir / "source_story.txt"
     if not source_path.exists():
         return None
 
     source_text = source_path.read_text(encoding="utf-8")
-    header, _ = parse_story_header(source_text)
+    try:
+        header, _ = parse_story_header(source_text)
+    except ValueError:
+        logger.error("Failed to parse story header from %s", source_path)
+        raise
     return header
 
 

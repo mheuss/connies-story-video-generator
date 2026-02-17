@@ -23,6 +23,7 @@ from story_video.pipeline.orchestrator import (
     _CHECKPOINT_PHASES,
     _determine_start_phase,
     _dispatch_phase,
+    _parse_source_header,
     run_pipeline,
 )
 from story_video.state import ProjectState
@@ -911,3 +912,13 @@ class TestStoryHeaderParsing:
 
         assert mock_audio.call_count == 1
         assert mock_audio.call_args.kwargs.get("story_header") is None
+
+    def test_malformed_header_raises_descriptive_error(self, tmp_path):
+        """Malformed YAML in source_story.txt raises ValueError with clear message."""
+        state = _make_adapt_state(tmp_path, autonomous=True)
+
+        source_path = state.project_dir / "source_story.txt"
+        source_path.write_text("---\n: bad: yaml: {{{\n---\nBody.", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="[Ss]tory header"):
+            _parse_source_header(state)
