@@ -204,6 +204,32 @@ def _status_icon(status: SceneStatus) -> str:
     return icons.get(status, str(status.value))
 
 
+def _make_tts_provider(provider_name: str) -> OpenAITTSProvider | ElevenLabsTTSProvider:
+    """Instantiate the TTS provider by name.
+
+    Args:
+        provider_name: Provider identifier from config (openai, elevenlabs).
+
+    Returns:
+        An instantiated TTS provider.
+
+    Raises:
+        typer.Exit: If the provider name is not recognized.
+    """
+    if provider_name == "openai":
+        return OpenAITTSProvider()
+    if provider_name == "elevenlabs":
+        return ElevenLabsTTSProvider()
+    console.print(
+        Panel(
+            f"Unknown TTS provider: '{provider_name}'. Supported providers: openai, elevenlabs",
+            title="Configuration Error",
+            border_style="red",
+        )
+    )
+    raise typer.Exit(1)
+
+
 # ---------------------------------------------------------------------------
 # CLI commands
 # ---------------------------------------------------------------------------
@@ -289,13 +315,9 @@ def create(
     console.print(f"Created project {project_id}")
 
     # --- Instantiate providers and run pipeline ---
+    tts_provider = _make_tts_provider(app_config.tts.provider)
     try:
         claude_client = ClaudeClient()
-        tts_config = app_config.tts
-        if tts_config.provider == "elevenlabs":
-            tts_provider = ElevenLabsTTSProvider()
-        else:
-            tts_provider = OpenAITTSProvider()
         image_provider = OpenAIImageProvider()
         caption_provider = OpenAIWhisperProvider()
 
@@ -355,13 +377,9 @@ def resume(
     console.print(f"Resuming project {state.metadata.project_id}")
 
     # --- Instantiate providers and run pipeline ---
+    tts_provider = _make_tts_provider(state.metadata.config.tts.provider)
     try:
         claude_client = ClaudeClient()
-        tts_config = state.metadata.config.tts
-        if tts_config.provider == "elevenlabs":
-            tts_provider = ElevenLabsTTSProvider()
-        else:
-            tts_provider = OpenAITTSProvider()
         image_provider = OpenAIImageProvider()
         caption_provider = OpenAIWhisperProvider()
 

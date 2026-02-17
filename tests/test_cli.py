@@ -735,6 +735,28 @@ class TestProviderSelection:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["tts_provider"] == mock_eleven_tts.return_value
 
+    def test_unknown_provider_exits_with_error(self, tmp_path, monkeypatch):
+        """Unknown provider string produces an error, not silent OpenAI fallback."""
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("tts:\n  provider: google\n", encoding="utf-8")
+
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--source-material",
+                "Test story text.",
+                "--config",
+                str(config_path),
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "unknown" in result.output.lower() or "unsupported" in result.output.lower()
+
 
 class TestDisplayOutcomeSuccessPath:
     """_display_outcome success message points to final.mp4."""
