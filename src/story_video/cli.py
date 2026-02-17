@@ -25,9 +25,21 @@ logger = logging.getLogger(__name__)
 
 app = typer.Typer(
     name="story-video",
-    help="Generate narrated story videos for YouTube.",
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def main(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+) -> None:
+    """Generate narrated story videos for YouTube."""
+    level = logging.DEBUG if verbose else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(name)s %(levelname)s: %(message)s",
+    )
+
 
 console = Console()
 

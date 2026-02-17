@@ -784,6 +784,20 @@ class TestRunWithProviders:
         assert "caption_provider" in call_kwargs
 
 
+class TestVerboseFlag:
+    """--verbose flag configures logging level."""
+
+    def test_verbose_flag_accepted(self):
+        """--verbose is a valid global option."""
+        result = runner.invoke(app, ["--verbose", "estimate", "--mode", "adapt"])
+        assert result.exit_code == 0
+
+    def test_short_verbose_flag_accepted(self):
+        """-v is a valid shorthand for --verbose."""
+        result = runner.invoke(app, ["-v", "estimate", "--mode", "adapt"])
+        assert result.exit_code == 0
+
+
 class TestDisplayOutcomeSuccessPath:
     """_display_outcome success message points to final.mp4."""
 

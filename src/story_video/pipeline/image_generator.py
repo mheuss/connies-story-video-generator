@@ -5,6 +5,7 @@ Ships with an OpenAI implementation supporting GPT Image and DALL-E models.
 """
 
 import base64
+import logging
 from typing import Protocol
 
 import openai
@@ -14,6 +15,8 @@ from story_video.state import ProjectState
 from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS, with_retry
 
 __all__ = ["ImageProvider", "OpenAIImageProvider", "generate_image"]
+
+logger = logging.getLogger(__name__)
 
 
 class ImageProvider(Protocol):

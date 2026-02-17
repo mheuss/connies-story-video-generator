@@ -5,6 +5,7 @@ for subtitle rendering. Ships with an OpenAI Whisper implementation; designed fo
 easy addition of alternative transcription providers.
 """
 
+import logging
 from pathlib import Path
 from typing import Protocol
 
@@ -29,6 +30,8 @@ __all__ = [
     "OpenAIWhisperProvider",
     "generate_captions",
 ]
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

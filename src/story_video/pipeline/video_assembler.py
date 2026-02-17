@@ -8,6 +8,7 @@ Both functions delegate to ``story_video.ffmpeg.commands`` for FFmpeg execution
 and ``story_video.ffmpeg.subtitles`` for ASS subtitle generation.
 """
 
+import logging
 from pathlib import Path
 
 from story_video.ffmpeg.commands import (
@@ -24,6 +25,8 @@ __all__ = [
     "assemble_scene",
     "assemble_video",
 ]
+
+logger = logging.getLogger(__name__)
 
 
 def assemble_scene(scene: Scene, state: ProjectState) -> None:
