@@ -659,6 +659,19 @@ class TestElevenLabsTTSProvider:
 
         assert not any("speed" in r.message.lower() for r in caplog.records)
 
+    def test_retry_on_connection_error(self, mock_elevenlabs):
+        """ElevenLabs retries on ConnectionError then succeeds."""
+        mock_elevenlabs.text_to_speech.convert.side_effect = [
+            ConnectionError("network failed"),
+            iter([b"recovered-audio"]),
+        ]
+
+        provider = ElevenLabsTTSProvider()
+        result = provider.synthesize("Hello", "voice-id", "eleven_v3", 1.0, "mp3_44100_128")
+
+        assert result == b"recovered-audio"
+        assert mock_elevenlabs.text_to_speech.convert.call_count == 2
+
     def test_no_retry_on_auth_error(self, mock_elevenlabs):
         """ElevenLabs auth error (4xx) is not retried."""
         from elevenlabs import UnauthorizedError
@@ -767,6 +780,16 @@ class TestGenerateAudioMultiSegment:
 
         with pytest.raises(ValueError, match="[Cc]oncatenat"):
             generate_audio(scene, state, mock_provider, story_header=header)
+
+    def test_header_no_tags_uses_default_voice(self, state_with_header, mock_provider):
+        """Story header with no tags in text uses the header's default voice."""
+        scene = state_with_header.metadata.scenes[0]
+        scene.narration_text = "Just plain narration text."
+        header = StoryHeader(voices={"narrator": "alloy"})
+        generate_audio(scene, state_with_header, mock_provider, story_header=header)
+
+        call_kwargs = mock_provider.synthesize.call_args.kwargs
+        assert call_kwargs["voice"] == "alloy"
 
     def test_single_segment_non_concat_format_allowed(self, tmp_path, mock_provider):
         """Single segment with any format is fine (no concatenation needed)."""

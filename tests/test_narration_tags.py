@@ -71,6 +71,18 @@ class TestParseStoryHeader:
         assert header is None
         assert body == text
 
+    def test_non_dict_yaml_raises(self):
+        """YAML that parses to a scalar (not a dict) raises ValueError."""
+        text = "---\njust a string\n---\nBody."
+        with pytest.raises(ValueError, match="[Ee]mpty"):
+            parse_story_header(text)
+
+    def test_voices_null_raises(self):
+        """voices: null (YAML None) raises ValueError."""
+        text = "---\nvoices:\n---\nBody."
+        with pytest.raises(ValueError, match="[Ee]mpty"):
+            parse_story_header(text)
+
 
 class TestParseNarrationSegments:
     """parse_narration_segments splits tagged text into segments."""
@@ -149,3 +161,17 @@ class TestParseNarrationSegments:
         assert len(segments) == 4
         labels = [s.voice_label for s in segments]
         assert labels == ["narrator", "jane", "bob", "narrator"]
+
+    def test_unknown_default_voice_raises(self):
+        """Unknown default voice (no tags in text) raises ValueError."""
+        with pytest.raises(ValueError, match="Unknown voice label"):
+            parse_narration_segments(
+                "Plain text.", self.VOICE_MAP, "unknown_default", scene_number=1
+            )
+
+    def test_consecutive_mood_tags_last_wins(self):
+        """Two consecutive mood tags — second overwrites first."""
+        text = "**mood:sad** **mood:happy** Text."
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert len(segments) == 1
+        assert segments[0].mood == "happy"

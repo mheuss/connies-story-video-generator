@@ -850,6 +850,46 @@ class TestNarrationSegment:
         with pytest.raises(ValidationError):
             seg.text = "other"
 
+    def test_rejects_scene_number_zero(self):
+        with pytest.raises(ValidationError):
+            NarrationSegment(
+                text="Hi",
+                voice="nova",
+                voice_label="narrator",
+                scene_number=0,
+                segment_index=0,
+            )
+
+    def test_rejects_negative_segment_index(self):
+        with pytest.raises(ValidationError):
+            NarrationSegment(
+                text="Hi",
+                voice="nova",
+                voice_label="narrator",
+                scene_number=1,
+                segment_index=-1,
+            )
+
+    def test_rejects_empty_voice(self):
+        with pytest.raises(ValidationError):
+            NarrationSegment(
+                text="Hi",
+                voice="",
+                voice_label="narrator",
+                scene_number=1,
+                segment_index=0,
+            )
+
+    def test_rejects_empty_voice_label(self):
+        with pytest.raises(ValidationError):
+            NarrationSegment(
+                text="Hi",
+                voice="nova",
+                voice_label="",
+                scene_number=1,
+                segment_index=0,
+            )
+
     def test_serialization_roundtrip(self):
         seg = NarrationSegment(
             text="Hello world",
