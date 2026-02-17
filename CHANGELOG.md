@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `--verbose` / `-v` CLI flag for debug logging output
 - Multi-voice narration with inline `**voice:X**` tags and per-story voice mapping via YAML front matter
 - Emotion direction with `**mood:X**` tags — maps to OpenAI `instructions` parameter and ElevenLabs audio tags
 - ElevenLabs TTS provider with audio tag translation for emotion control
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CLI commands — create (adapt mode), resume, estimate, status, and list with Rich terminal output
 
 ### Changed
+- `with_retry` `retry_on` parameter is now required — all callers already specified it explicitly
 - Default TTS model changed from `tts-1-hd` to `gpt-4o-mini-tts` for emotion instruction support
 - `TTSProvider.synthesize()` accepts optional `instructions` parameter — BREAKING for custom providers
 - Default image model changed from DALL-E 3 to GPT Image 1.5 — better quality, supports `output_format` parameter
@@ -31,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Deprecated
 
 ### Removed
+- `--voice` option from `estimate` command — had no effect on cost calculation
+- Unused `api_retry` convenience decorator from retry utilities
 - Ken Burns zoom/pan effect — replaced with still image scaling for simpler, more reliable video assembly
 
 ### Fixed
@@ -42,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Unknown TTS provider in config now fails fast with error message instead of silently defaulting to OpenAI
 - `StoryHeader` with `default_voice` not matching any voice label now fails at construction instead of at runtime
 - Voice/mood tags in text without a YAML header now raise immediately instead of being spoken as literal text
+- Invalid hex colors in `SubtitleConfig` now rejected at construction instead of producing opaque FFmpeg errors
+- Contradictory scene word count bounds (`scene_word_min` > `scene_word_max`) now rejected at construction
+- Malformed hex input to `_hex_to_ass_color` now raises `ValueError` instead of silently producing garbage
 
 ### Security
 
