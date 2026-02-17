@@ -768,7 +768,10 @@ class TestStoryHeader:
         assert header.default_voice == "narrator"
 
     def test_custom_default_voice(self):
-        header = StoryHeader(voices={"narrator": "nova"}, default_voice="bob")
+        header = StoryHeader(
+            voices={"narrator": "nova", "bob": "echo"},
+            default_voice="bob",
+        )
         assert header.default_voice == "bob"
 
     def test_voices_required(self):
@@ -783,6 +786,11 @@ class TestStoryHeader:
         header = StoryHeader(voices={"narrator": "nova"})
         with pytest.raises(ValidationError):
             header.default_voice = "other"
+
+    def test_rejects_default_voice_not_in_voices(self):
+        """default_voice must exist in voices dict."""
+        with pytest.raises(ValidationError, match="default_voice"):
+            StoryHeader(voices={"narrator": "nova"}, default_voice="nonexistent")
 
     def test_serialization_roundtrip(self):
         header = StoryHeader(voices={"jane": "nova", "bob": "alloy"}, default_voice="jane")

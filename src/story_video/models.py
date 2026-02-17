@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 __all__ = [
     "ADAPT_FLOW_PHASES",
@@ -231,6 +231,17 @@ class StoryHeader(BaseModel):
 
     voices: dict[str, str] = Field(min_length=1)
     default_voice: str = Field(default="narrator")
+
+    @model_validator(mode="after")
+    def validate_default_voice_in_voices(self) -> "StoryHeader":
+        """Ensure default_voice refers to a label defined in voices."""
+        if self.default_voice not in self.voices:
+            msg = (
+                f"default_voice '{self.default_voice}' is not defined in voices. "
+                f"Defined voices: {', '.join(sorted(self.voices.keys()))}"
+            )
+            raise ValueError(msg)
+        return self
 
 
 class NarrationSegment(BaseModel):
