@@ -10,7 +10,7 @@ import pytest
 from tenacity import RetryError
 
 from story_video.utils.retry import RetryError as ReexportedRetryError
-from story_video.utils.retry import api_retry, with_retry
+from story_video.utils.retry import with_retry
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -260,48 +260,6 @@ class TestWithRetryLogging:
 
 
 # ---------------------------------------------------------------------------
-# api_retry — convenience decorator
-# ---------------------------------------------------------------------------
-
-
-class TestApiRetry:
-    """api_retry is a convenience decorator with default settings."""
-
-    def test_succeeds_on_first_try(self):
-        """api_retry works when the function succeeds immediately."""
-
-        @api_retry
-        def fn():
-            return "ok"
-
-        assert fn() == "ok"
-
-    def test_retries_on_failure(self):
-        """api_retry retries on failure like with_retry with defaults."""
-        tracker = TrackedCallable(fail_times=1)
-
-        @api_retry
-        def fn():
-            return tracker()
-
-        result = fn()
-        assert result == "success"
-        assert tracker.call_count == 2
-
-    def test_exhausts_default_retries(self):
-        """api_retry uses max_retries=3 by default (4 total attempts)."""
-        tracker = TrackedCallable(fail_times=100)
-
-        @api_retry
-        def fn():
-            return tracker()
-
-        with pytest.raises(RuntimeError):
-            fn()
-        assert tracker.call_count == 4
-
-
-# ---------------------------------------------------------------------------
 # RetryError re-export
 # ---------------------------------------------------------------------------
 
@@ -326,15 +284,6 @@ class TestWithRetryMetadata:
         """The decorated function preserves the original function's __name__."""
 
         @with_retry(max_retries=1, base_delay=0.01)
-        def my_function():
-            return 42
-
-        assert my_function.__name__ == "my_function"
-
-    def test_api_retry_preserves_name(self):
-        """The api_retry decorated function preserves the original function's __name__."""
-
-        @api_retry
         def my_function():
             return 42
 

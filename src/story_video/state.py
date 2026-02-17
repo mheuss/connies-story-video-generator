@@ -414,9 +414,9 @@ class ProjectState:
         Returns scenes whose relevant asset is pending or failed (for retry).
         Skips scenes whose asset is completed or in_progress.
 
-        For phases with no per-scene asset (ANALYSIS, STORY_BIBLE, OUTLINE,
-        IMAGE_PROMPTS), returns an empty list — those phases don't operate
-        on individual scene assets.
+        For phases with no per-scene asset (ANALYSIS, STORY_BIBLE, OUTLINE),
+        returns an empty list — those phases don't operate on individual
+        scene assets.
 
         Returns:
             List of Scene objects needing work.

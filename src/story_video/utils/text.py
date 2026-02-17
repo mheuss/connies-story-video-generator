@@ -455,6 +455,9 @@ _NESTED_PAREN_PATTERN = re.compile(r"\(([^()]*)\(([^()]*)\)([^()]*)\)")
 # Footnote markers like [1], [2], [42]
 _FOOTNOTE_PATTERN = re.compile(r"\[\d+\]")
 
+# Double (or more) spaces collapsed to single space
+_DOUBLE_SPACE_PATTERN = re.compile(r"  +")
+
 
 def smooth_punctuation(text: str) -> str:
     """Smooth punctuation that trips up TTS engines.
@@ -492,7 +495,7 @@ def smooth_punctuation(text: str) -> str:
     result = _FOOTNOTE_PATTERN.sub("", result)
 
     # Clean up any double spaces introduced by removals
-    result = re.sub(r"  +", " ", result)
+    result = _DOUBLE_SPACE_PATTERN.sub(" ", result)
 
     return result
 

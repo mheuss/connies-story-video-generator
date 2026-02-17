@@ -5,14 +5,10 @@ image generation, Whisper) with configurable exponential backoff. On failure, re
 increasing delays capped at 60 seconds.
 
 Usage:
-    from story_video.utils.retry import with_retry, api_retry, RetryError
+    from story_video.utils.retry import with_retry, RetryError
 
     @with_retry(max_retries=3, base_delay=2.0)
     def call_api():
-        ...
-
-    @api_retry
-    def call_api_with_defaults():
         ...
 """
 
@@ -30,7 +26,7 @@ from tenacity import (
     wait_exponential,
 )
 
-__all__ = ["OPENAI_TRANSIENT_ERRORS", "RetryError", "api_retry", "with_retry"]
+__all__ = ["OPENAI_TRANSIENT_ERRORS", "RetryError", "with_retry"]
 
 logger = logging.getLogger(__name__)
 
@@ -87,26 +83,6 @@ def with_retry(
         return decorated  # type: ignore[return-value]
 
     return decorator  # type: ignore[return-value]
-
-
-def api_retry(func: F) -> F:
-    """Convenience decorator using default retry settings.
-
-    Equivalent to ``@with_retry(max_retries=3, base_delay=2.0)``.
-    Use this for standard API calls that should use pipeline defaults.
-
-    Args:
-        func: The function to wrap with retry behavior.
-
-    Returns:
-        The wrapped function with default retry settings applied.
-
-    Example:
-        @api_retry
-        def call_openai_tts():
-            ...
-    """
-    return with_retry()(func)
 
 
 # Shared transient error tuple for OpenAI API calls.
