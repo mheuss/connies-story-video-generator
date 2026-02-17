@@ -6,6 +6,8 @@ Each test verifies one logical behavior of the subtitle generation functions.
 
 from pathlib import Path
 
+import pytest
+
 from story_video.ffmpeg.subtitles import (
     _format_ass_time,
     _hex_to_ass_color,
@@ -456,3 +458,32 @@ class TestEmptyWords:
             _make_empty_caption_result(), _default_subtitle_config(), _default_video_config()
         )
         assert "Dialogue:" not in result
+
+
+# ---------------------------------------------------------------------------
+# _hex_to_ass_color input validation
+# ---------------------------------------------------------------------------
+
+
+class TestHexToAssColorValidation:
+    """_hex_to_ass_color rejects malformed hex input."""
+
+    def test_rejects_short_hex(self):
+        """Three-digit hex is rejected."""
+        with pytest.raises(ValueError, match="Invalid hex color"):
+            _hex_to_ass_color("#FFF")
+
+    def test_rejects_non_hex_characters(self):
+        """Non-hex characters are rejected."""
+        with pytest.raises(ValueError, match="Invalid hex color"):
+            _hex_to_ass_color("#GGGGGG")
+
+    def test_rejects_missing_hash(self):
+        """Missing '#' prefix is rejected."""
+        with pytest.raises(ValueError, match="Invalid hex color"):
+            _hex_to_ass_color("FFFFFF")
+
+    def test_rejects_empty_string(self):
+        """Empty string is rejected."""
+        with pytest.raises(ValueError, match="Invalid hex color"):
+            _hex_to_ass_color("")

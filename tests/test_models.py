@@ -934,3 +934,37 @@ class TestNarrationSegment:
         data = seg.model_dump()
         restored = NarrationSegment(**data)
         assert restored == seg
+
+
+# ---------------------------------------------------------------------------
+# SubtitleConfig hex color validation tests
+# ---------------------------------------------------------------------------
+
+
+class TestSubtitleConfigColorValidation:
+    """SubtitleConfig rejects invalid hex color formats."""
+
+    def test_rejects_named_color(self):
+        """Named colors like 'red' are not valid."""
+        with pytest.raises(ValidationError):
+            SubtitleConfig(color="red")
+
+    def test_rejects_short_hex(self):
+        """Three-digit hex like '#FFF' is not valid."""
+        with pytest.raises(ValidationError):
+            SubtitleConfig(color="#FFF")
+
+    def test_rejects_outline_named_color(self):
+        """outline_color also validates."""
+        with pytest.raises(ValidationError):
+            SubtitleConfig(outline_color="blue")
+
+    def test_accepts_valid_uppercase_hex(self):
+        """Standard #RRGGBB format passes."""
+        config = SubtitleConfig(color="#FF0000")
+        assert config.color == "#FF0000"
+
+    def test_accepts_valid_lowercase_hex(self):
+        """Lowercase hex passes."""
+        config = SubtitleConfig(color="#ff0000")
+        assert config.color == "#ff0000"

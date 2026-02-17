@@ -382,6 +382,14 @@ class SubtitleConfig(BaseModel):
     max_chars_per_line: int = Field(default=42, gt=0)
     max_lines: int = Field(default=2, gt=0)
 
+    @field_validator("color", "outline_color")
+    @classmethod
+    def _validate_hex_color(cls, v: str) -> str:
+        if not re.match(r"^#[0-9A-Fa-f]{6}$", v):
+            msg = f"Invalid hex color: {v!r} (expected #RRGGBB format)"
+            raise ValueError(msg)
+        return v
+
 
 class PipelineConfig(BaseModel):
     """Pipeline behavior parameters.

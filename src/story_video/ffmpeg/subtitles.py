@@ -8,9 +8,12 @@ Public functions:
     subtitle_filter: Return the FFmpeg filter fragment for ASS subtitle overlay.
 """
 
+import re
 from pathlib import Path
 
 from story_video.models import CaptionResult, CaptionWord, SubtitleConfig, VideoConfig
+
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 __all__ = [
     "generate_ass_content",
@@ -34,6 +37,9 @@ def _hex_to_ass_color(hex_color: str) -> str:
     Returns:
         ASS color string in ``&H00BBGGRR&`` format.
     """
+    if not _HEX_COLOR_RE.match(hex_color):
+        msg = f"Invalid hex color format: {hex_color!r} (expected #RRGGBB)"
+        raise ValueError(msg)
     hex_color = hex_color.lstrip("#")
     rr = hex_color[0:2]
     gg = hex_color[2:4]
