@@ -230,12 +230,15 @@ def generate_ass_content(
 def subtitle_filter(ass_path: Path) -> str:
     """Return the FFmpeg filter fragment for ASS subtitle overlay.
 
+    Escapes backslashes and single quotes in the path to prevent
+    FFmpeg filter graph injection or parse errors.
+
     Args:
         ass_path: Path to the ASS subtitle file.
 
     Returns:
-        Filter string in the form ``ass='/path/to/file.ass'``.
+        Filter string in the form ``ass='/path/to/file.ass'``
+        with special characters escaped.
     """
-    # NOTE: Single quotes work on macOS/Linux. Windows FFmpeg may need
-    # escaped backslashes or forward slashes instead.
-    return f"ass='{ass_path}'"
+    escaped = str(ass_path).replace("\\", "\\\\").replace("'", "\\'")
+    return f"ass='{escaped}'"

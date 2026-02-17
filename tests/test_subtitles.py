@@ -416,6 +416,22 @@ class TestSubtitleFilter:
         result = subtitle_filter(Path("/output/project/subtitles/scene_01.ass"))
         assert result == "ass='/output/project/subtitles/scene_01.ass'"
 
+    def test_escapes_single_quote_in_path(self):
+        """Single quotes in path are escaped to prevent filter graph breakage."""
+        result = subtitle_filter(Path("/tmp/user's project/scene.ass"))
+        assert "\\'" in result
+        assert result == "ass='/tmp/user\\'s project/scene.ass'"
+
+    def test_escapes_backslash_in_path(self):
+        """Backslashes in path are escaped for FFmpeg filter safety."""
+        result = subtitle_filter(Path("/tmp/back\\slash/scene.ass"))
+        assert result == "ass='/tmp/back\\\\slash/scene.ass'"
+
+    def test_clean_path_unchanged(self):
+        """Normal paths without special characters pass through unchanged."""
+        result = subtitle_filter(Path("/tmp/subs.ass"))
+        assert result == "ass='/tmp/subs.ass'"
+
 
 # ---------------------------------------------------------------------------
 # Empty words — no Dialogue lines produced
