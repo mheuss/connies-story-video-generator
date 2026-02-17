@@ -997,3 +997,185 @@ class TestStoryHeaderParsing:
 
         with pytest.raises(ValueError, match="[Ss]tory header"):
             _parse_source_header(state)
+
+
+# ---------------------------------------------------------------------------
+# TestPipelineIntegration — full data flow with only external APIs mocked
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineIntegration:
+    """Integration test: full 8-phase pipeline with only external APIs mocked.
+
+    Catches wiring mistakes that unit tests miss: wrong phase ordering,
+    broken data flow, incorrect provider routing, missing state updates.
+    """
+
+    def test_full_adapt_pipeline_data_flow(self, tmp_path, monkeypatch):
+        """Full adapt pipeline creates expected files and state transitions."""
+        import subprocess as _subprocess
+
+        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
+
+        # Scene texts — source_story.txt must equal these joined by "\n\n"
+        scene1_text = (
+            "The lighthouse keeper watched the storm approach. "
+            "Dark clouds gathered on the horizon, and the waves grew tall."
+        )
+        scene2_text = (
+            "By morning the storm had passed. The keeper climbed the tower "
+            "and lit the lamp, its beam cutting through the dawn mist."
+        )
+        source_text = scene1_text + "\n\n" + scene2_text
+
+        # --- Mock Claude client ---
+        claude_responses = {
+            "split_into_scenes": {
+                "scenes": [
+                    {"title": "The Storm", "text": scene1_text},
+                    {"title": "The Dawn", "text": scene2_text},
+                ],
+            },
+            "flag_narration_issues": {"flags": []},
+            "generate_image_prompts": {
+                "prompts": [
+                    {
+                        "scene_number": 1,
+                        "image_prompt": "A weathered lighthouse on a rocky cliff.",
+                    },
+                    {
+                        "scene_number": 2,
+                        "image_prompt": "Golden dawn light through lighthouse glass.",
+                    },
+                ],
+            },
+        }
+
+        mock_claude = MagicMock()
+
+        def _claude_dispatch(**kwargs):
+            tool_name = kwargs.get("tool_name", "")
+            return claude_responses[tool_name]
+
+        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+
+        # --- Mock TTS provider ---
+        mock_tts = MagicMock()
+        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
+
+        # --- Mock image provider ---
+        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+        mock_image = MagicMock()
+        mock_image.generate = MagicMock(return_value=fake_png)
+
+        # --- Mock caption provider ---
+        def _make_caption_result(text):
+            words = text.split()
+            duration = len(words) * 0.5
+            return CaptionResult(
+                segments=[CaptionSegment(text=text, start=0.0, end=duration)],
+                words=[
+                    CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5)
+                    for i, w in enumerate(words)
+                ],
+                language="en",
+                duration=duration,
+            )
+
+        mock_caption = MagicMock()
+        mock_caption.transcribe = MagicMock(
+            side_effect=lambda path: _make_caption_result("Transcribed narration text.")
+        )
+
+        # --- Mock subprocess.run (FFmpeg/ffprobe) ---
+        real_subprocess_run = _subprocess.run
+
+        def _mock_subprocess_run(cmd, **kwargs):
+            cmd_str = cmd[0] if cmd else ""
+
+            if "ffprobe" in cmd_str:
+                return _subprocess.CompletedProcess(
+                    args=cmd, returncode=0, stdout="5.0\n", stderr=""
+                )
+
+            if "ffmpeg" in cmd_str:
+                from pathlib import Path
+
+                output_path = Path(cmd[-1])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"\x00" * 50)
+                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+            return real_subprocess_run(cmd, **kwargs)
+
+        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+
+        # --- Create project state ---
+        state = _make_adapt_state(tmp_path, autonomous=True)
+
+        # Write source story
+        source_path = state.project_dir / "source_story.txt"
+        source_path.write_text(source_text, encoding="utf-8")
+
+        # --- Run the full pipeline ---
+        run_pipeline(
+            state,
+            claude_client=mock_claude,
+            tts_provider=mock_tts,
+            image_provider=mock_image,
+            caption_provider=mock_caption,
+        )
+
+        # --- Verify final state ---
+        assert state.metadata.status == PhaseStatus.COMPLETED
+        assert state.metadata.current_phase == PipelinePhase.VIDEO_ASSEMBLY
+        assert len(state.metadata.scenes) == 2
+
+        # --- Verify scene data flowed between phases ---
+        scene1 = state.metadata.scenes[0]
+        scene2 = state.metadata.scenes[1]
+
+        assert "lighthouse" in scene1.prose.lower()
+        assert "dawn" in scene2.prose.lower()
+        assert scene1.narration_text is not None
+        assert scene2.narration_text is not None
+        assert "lighthouse" in scene1.image_prompt.lower()
+        assert "dawn" in scene2.image_prompt.lower()
+
+        # --- Verify all asset statuses are COMPLETED ---
+        for scene in state.metadata.scenes:
+            s = scene.asset_status
+            assert s.text == SceneStatus.COMPLETED
+            assert s.narration_text == SceneStatus.COMPLETED
+            assert s.image_prompt == SceneStatus.COMPLETED
+            assert s.audio == SceneStatus.COMPLETED
+            assert s.image == SceneStatus.COMPLETED
+            assert s.captions == SceneStatus.COMPLETED
+            assert s.video_segment == SceneStatus.COMPLETED
+
+        # --- Verify expected files exist on disk ---
+        pd = state.project_dir
+        assert (pd / "scenes" / "scene_001.md").exists()
+        assert (pd / "scenes" / "scene_002.md").exists()
+        assert (pd / "audio" / "scene_001.mp3").exists()
+        assert (pd / "audio" / "scene_002.mp3").exists()
+        assert (pd / "images" / "scene_001.png").exists()
+        assert (pd / "images" / "scene_002.png").exists()
+        assert (pd / "captions" / "scene_001.json").exists()
+        assert (pd / "captions" / "scene_002.json").exists()
+        assert (pd / "captions" / "scene_001.ass").exists()
+        assert (pd / "captions" / "scene_002.ass").exists()
+        assert (pd / "segments" / "scene_001.mp4").exists()
+        assert (pd / "segments" / "scene_002.mp4").exists()
+        assert (pd / "final.mp4").exists()
+
+        # --- Verify external APIs were called ---
+        assert mock_claude.generate_structured.call_count == 3
+        assert mock_tts.synthesize.call_count == 2
+        assert mock_image.generate.call_count == 2
+        assert mock_caption.transcribe.call_count == 2
+
+        # --- Verify state was persisted to disk ---
+        reloaded = ProjectState.load(pd)
+        assert reloaded.metadata.status == PhaseStatus.COMPLETED
+        assert len(reloaded.metadata.scenes) == 2
