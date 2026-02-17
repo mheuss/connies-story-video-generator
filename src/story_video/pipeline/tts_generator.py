@@ -30,16 +30,6 @@ __all__ = [
 _CONCAT_SAFE_PREFIXES = ("mp3", "opus")
 
 
-def _format_to_extension(output_format: str) -> str:
-    """Extract file extension from an output format string.
-
-    ElevenLabs uses compound format strings like "mp3_44100_128".
-    This returns just the codec portion (e.g. "mp3") for use as a
-    file extension.
-    """
-    return output_format.split("_")[0]
-
-
 class TTSProvider(Protocol):
     """Interface for text-to-speech providers."""
 
@@ -281,7 +271,7 @@ def generate_audio(
 
     audio_dir = state.project_dir / "audio"
     audio_dir.mkdir(exist_ok=True)
-    ext = _format_to_extension(tts_config.output_format)
+    ext = tts_config.file_extension
     filename = f"scene_{scene.scene_number:03d}.{ext}"
     audio_path = audio_dir / filename
     audio_path.write_bytes(audio_bytes)

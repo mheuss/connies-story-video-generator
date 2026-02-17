@@ -192,7 +192,7 @@ def generate_captions(scene: Scene, state: ProjectState, provider: CaptionProvid
         FileNotFoundError: If the scene's audio file does not exist.
     """
     tts_config = state.metadata.config.tts
-    ext = tts_config.output_format.split("_")[0]
+    ext = tts_config.file_extension
     filename = f"scene_{scene.scene_number:03d}.{ext}"
     audio_path = state.project_dir / "audio" / filename
 

@@ -50,7 +50,7 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     nn = f"{scene.scene_number:03d}"
 
     # Resolve prerequisite file paths
-    ext = tts_config.output_format.split("_")[0]
+    ext = tts_config.file_extension
     audio_path = state.project_dir / "audio" / f"scene_{nn}.{ext}"
     image_path = state.project_dir / "images" / f"scene_{nn}.png"
     caption_json_path = state.project_dir / "captions" / f"scene_{nn}.json"

@@ -218,6 +218,15 @@ class TTSConfig(BaseModel):
     speed: float = Field(default=1.0, gt=0)
     output_format: str = Field(default="mp3")
 
+    @property
+    def file_extension(self) -> str:
+        """Extract file extension from output_format.
+
+        ElevenLabs uses compound format strings like ``mp3_44100_128``.
+        Returns just the codec portion for use as a file extension.
+        """
+        return self.output_format.split("_")[0]
+
 
 class StoryHeader(BaseModel):
     """Parsed front matter from a story file.

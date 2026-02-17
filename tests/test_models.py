@@ -275,6 +275,22 @@ class TestTTSConfig:
         assert restored == config
 
 
+class TestTTSConfigFileExtension:
+    """TTSConfig.file_extension extracts codec from output_format."""
+
+    def test_simple_format(self):
+        config = TTSConfig(output_format="mp3")
+        assert config.file_extension == "mp3"
+
+    def test_compound_format(self):
+        config = TTSConfig(output_format="mp3_44100_128")
+        assert config.file_extension == "mp3"
+
+    def test_opus_format(self):
+        config = TTSConfig(output_format="opus")
+        assert config.file_extension == "opus"
+
+
 class TestImageConfig:
     """ImageConfig — image generation parameters."""
 
