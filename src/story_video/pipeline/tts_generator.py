@@ -190,7 +190,11 @@ class ElevenLabsTTSProvider:
 
 
 def _mood_to_instructions(mood: str | None) -> str | None:
-    """Convert a mood tag to a natural language TTS instruction."""
+    """Convert a mood tag to a natural language TTS instruction.
+
+    Note: _mood_to_elevenlabs_text reverse-parses this format to extract
+    the mood keyword. If you change this format, update that function too.
+    """
     if mood is None:
         return None
     return f"Speak in a {mood} tone"

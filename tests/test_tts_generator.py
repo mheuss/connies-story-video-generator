@@ -346,11 +346,6 @@ class TestOpenAITTSProviderNoRetryOnPermanentErrors:
 
 
 # ---------------------------------------------------------------------------
-# generate_audio — happy path
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # OpenAITTSProvider — instructions parameter
 # ---------------------------------------------------------------------------
 
@@ -712,7 +707,7 @@ class TestGenerateAudioMultiSegment:
     """generate_audio handles multi-segment narration."""
 
     @pytest.fixture()
-    def state_with_header(self, tmp_path, mock_provider):
+    def state_with_header(self, tmp_path):
         """Create project state for multi-segment testing."""
         state = ProjectState.create(
             project_id="multi-seg-test",
@@ -815,13 +810,9 @@ class TestGenerateAudioTagsWithoutHeader:
 
     def test_voice_tag_without_header_raises(self, tmp_path):
         """Voice tag in text with story_header=None raises ValueError."""
-        from story_video.models import AppConfig, InputMode
-
         provider = MagicMock(spec=TTSProvider)
         state = ProjectState.create("tag-check", InputMode.ADAPT, AppConfig(), tmp_path)
         state.add_scene(1, "Scene", "Hello. **voice:jane** Hi!")
-        from story_video.models import AssetType, SceneStatus
-
         state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
         state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
         scene = state.metadata.scenes[0]
@@ -831,13 +822,9 @@ class TestGenerateAudioTagsWithoutHeader:
 
     def test_mood_tag_without_header_raises(self, tmp_path):
         """Mood tag in text with story_header=None raises ValueError."""
-        from story_video.models import AppConfig, InputMode
-
         provider = MagicMock(spec=TTSProvider)
         state = ProjectState.create("tag-check-2", InputMode.ADAPT, AppConfig(), tmp_path)
         state.add_scene(1, "Scene", "**mood:sad** Goodbye.")
-        from story_video.models import AssetType, SceneStatus
-
         state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
         state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
         scene = state.metadata.scenes[0]
@@ -847,14 +834,10 @@ class TestGenerateAudioTagsWithoutHeader:
 
     def test_no_tags_without_header_works(self, tmp_path):
         """Plain text without tags and no header works fine."""
-        from story_video.models import AppConfig, InputMode
-
         provider = MagicMock(spec=TTSProvider)
         provider.synthesize.return_value = b"audio"
         state = ProjectState.create("no-tags", InputMode.ADAPT, AppConfig(), tmp_path)
         state.add_scene(1, "Scene", "Just plain text.")
-        from story_video.models import AssetType, SceneStatus
-
         state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
         state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
         scene = state.metadata.scenes[0]
