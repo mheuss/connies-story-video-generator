@@ -2,7 +2,7 @@
 
 Calculates projected costs for all API services used in video generation:
 - Claude API (story generation)
-- OpenAI TTS (text-to-speech)
+- TTS (text-to-speech)
 - OpenAI Image generation (GPT Image / DALL-E)
 - Whisper (caption generation)
 
@@ -160,30 +160,33 @@ def _calculate_claude_cost(mode: InputMode, scene_count: int) -> ServiceCost:
 
 
 def _calculate_tts_cost(tts_model: str, character_count: int) -> ServiceCost:
-    """Calculate OpenAI TTS cost.
+    """Calculate TTS cost.
 
     Formula: character_count / 1,000,000 * rate_per_million_chars
+
+    For models not in the rate table (e.g., ElevenLabs models with
+    subscription-dependent pricing), returns a zero-cost entry with
+    a descriptive note instead of raising.
 
     Args:
         tts_model: TTS model identifier (e.g., "tts-1-hd").
         character_count: Total characters to synthesize.
 
     Returns:
-        ServiceCost with the exact TTS cost.
-
-    Raises:
-        ValueError: If tts_model is not in the known rate table.
+        ServiceCost with the TTS cost (exact or zero if unknown).
     """
     if tts_model not in TTS_COST_PER_MILLION_CHARS:
-        raise ValueError(
-            f"Unknown TTS model: {tts_model!r}. "
-            f"Known models: {', '.join(sorted(TTS_COST_PER_MILLION_CHARS))}"
+        return ServiceCost(
+            service="TTS",
+            description=f"{tts_model} (not estimated — pricing not in rate table)",
+            low=0.0,
+            high=0.0,
         )
 
     rate = TTS_COST_PER_MILLION_CHARS[tts_model]
     cost = character_count / 1_000_000 * rate
 
-    return ServiceCost(service="OpenAI TTS", description=tts_model, low=cost, high=cost)
+    return ServiceCost(service="TTS", description=tts_model, low=cost, high=cost)
 
 
 def _calculate_image_cost(quality: str, scene_count: int) -> ServiceCost:

@@ -343,7 +343,7 @@ class TestTTSCost:
             scene_count=25,
             character_count=247500,
         )
-        tts = next(s for s in est.services if s.service == "OpenAI TTS")
+        tts = next(s for s in est.services if s.service == "TTS")
         expected = 247500 / 1_000_000 * 0.60
         assert tts.low == pytest.approx(expected)
         assert tts.high == pytest.approx(expected)  # Exact cost, low == high
@@ -357,7 +357,7 @@ class TestTTSCost:
             scene_count=25,
             character_count=247500,
         )
-        tts = next(s for s in est.services if s.service == "OpenAI TTS")
+        tts = next(s for s in est.services if s.service == "TTS")
         expected = 247500 / 1_000_000 * 15.00
         assert tts.low == pytest.approx(expected)
 
@@ -370,7 +370,7 @@ class TestTTSCost:
             scene_count=25,
             character_count=247500,
         )
-        tts = next(s for s in est.services if s.service == "OpenAI TTS")
+        tts = next(s for s in est.services if s.service == "TTS")
         expected = 247500 / 1_000_000 * 0.60
         assert tts.low == pytest.approx(expected)
 
@@ -382,19 +382,35 @@ class TestTTSCost:
             scene_count=25,
             character_count=247500,
         )
-        tts = next(s for s in est.services if s.service == "OpenAI TTS")
+        tts = next(s for s in est.services if s.service == "TTS")
         assert "tts-1" in tts.description
 
-    def test_unknown_tts_model_raises(self):
-        """Unknown TTS model should raise ValueError."""
-        config = _config(tts=TTSConfig(model="unknown-model"))
-        with pytest.raises(ValueError, match="Unknown TTS model"):
-            estimate_cost(
-                mode=InputMode.ORIGINAL,
-                config=config,
-                scene_count=25,
-                character_count=247500,
-            )
+    def test_unknown_tts_model_returns_zero_cost(self):
+        """Unknown TTS model returns $0.00 with descriptive note instead of crashing."""
+        config = _config(tts=TTSConfig(model="eleven_multilingual_v2"))
+        est = estimate_cost(
+            mode=InputMode.ORIGINAL,
+            config=config,
+            scene_count=25,
+            character_count=247500,
+        )
+        tts = next(s for s in est.services if s.service == "TTS")
+        assert tts.low == 0.0
+        assert tts.high == 0.0
+        assert "not estimated" in tts.description
+
+    def test_unknown_tts_model_included_in_service_list(self):
+        """Unknown TTS model still appears as a service entry (not silently dropped)."""
+        config = _config(tts=TTSConfig(model="eleven_multilingual_v2"))
+        est = estimate_cost(
+            mode=InputMode.ORIGINAL,
+            config=config,
+            scene_count=25,
+            character_count=247500,
+        )
+        assert len(est.services) == 4
+        service_names = [s.service for s in est.services]
+        assert "TTS" in service_names
 
 
 # ---------------------------------------------------------------------------
@@ -538,7 +554,7 @@ class TestTotalCost:
         est = estimate_cost(mode=InputMode.ORIGINAL, config=config)
         assert len(est.services) == 4
         service_names = {s.service for s in est.services}
-        assert service_names == {"Claude", "OpenAI TTS", "Images", "Whisper"}
+        assert service_names == {"Claude", "TTS", "Images", "Whisper"}
 
     def test_default_original_mode_total_range(self):
         """Sanity check: default original mode total should be reasonable.
@@ -571,7 +587,7 @@ class TestServiceOrder:
         config = _config()
         est = estimate_cost(mode=InputMode.ORIGINAL, config=config)
         names = [s.service for s in est.services]
-        assert names == ["Claude", "OpenAI TTS", "Images", "Whisper"]
+        assert names == ["Claude", "TTS", "Images", "Whisper"]
 
 
 # ---------------------------------------------------------------------------
@@ -622,7 +638,7 @@ class TestFormatCostEstimate:
         )
         output = format_cost_estimate(est)
         assert "Claude" in output
-        assert "OpenAI TTS" in output
+        assert "TTS" in output
         assert "Images" in output
         assert "Whisper" in output
 
@@ -696,6 +712,19 @@ class TestFormatCostEstimate:
         # Should have at least two horizontal rule lines
         lines_with_rules = [line for line in output.split("\n") if "\u2500" in line]
         assert len(lines_with_rules) >= 2
+
+    def test_unknown_model_format(self):
+        """Unknown TTS model shows 'not estimated' in formatted output."""
+        config = _config(tts=TTSConfig(model="eleven_multilingual_v2"))
+        est = estimate_cost(
+            mode=InputMode.ORIGINAL,
+            config=config,
+            scene_count=25,
+            character_count=247500,
+        )
+        output = format_cost_estimate(est)
+        assert "not estimated" in output
+        assert "$0.00" in output
 
     def test_is_plain_text(self):
         """Output should be plain text, not Rich markup."""
