@@ -233,6 +233,11 @@ class TestRunPipelineSemiAutoCheckpoints:
         """Verify the checkpoint phases set contains the expected phases."""
         assert _CHECKPOINT_PHASES == frozenset(
             {
+                PipelinePhase.ANALYSIS,
+                PipelinePhase.STORY_BIBLE,
+                PipelinePhase.OUTLINE,
+                PipelinePhase.SCENE_PROSE,
+                PipelinePhase.CRITIQUE_REVISION,
                 PipelinePhase.SCENE_SPLITTING,
                 PipelinePhase.NARRATION_FLAGGING,
                 PipelinePhase.IMAGE_PROMPTS,
@@ -850,11 +855,13 @@ class TestDispatchPhaseUnknown:
     def test_unknown_phase_raises_value_error(self, tmp_path):
         """Passing an unrecognized phase raises ValueError."""
         state = _make_adapt_state(tmp_path)
-        # Use a phase not in the adapt flow dispatch table
-        # PipelinePhase.ANALYSIS is a creative-flow phase, not handled by dispatch
+        # Create a fake phase value that's not in the dispatch table
+        fake_phase = MagicMock()
+        fake_phase.__eq__ = lambda self, other: False
+        fake_phase.__hash__ = lambda self: hash("fake_phase")
         with pytest.raises(ValueError, match="Unknown phase"):
             _dispatch_phase(
-                PipelinePhase.ANALYSIS,
+                fake_phase,
                 state,
                 claude_client=None,
                 tts_provider=None,
@@ -947,6 +954,127 @@ class TestDispatchPhaseProviderGuards:
                 image_provider=MagicMock(),
                 caption_provider=MagicMock(),
             )
+
+
+# ---------------------------------------------------------------------------
+# TestDispatchCreativePhases — creative phase dispatch routing
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchCreativePhases:
+    """_dispatch_phase routes creative phases to story_writer functions."""
+
+    def test_dispatches_analysis(self, mocker):
+        """ANALYSIS phase calls story_writer.analyze_source."""
+        mock_fn = mocker.patch("story_video.pipeline.orchestrator.analyze_source")
+        state = MagicMock()
+        client = MagicMock()
+        _dispatch_phase(
+            PipelinePhase.ANALYSIS,
+            state,
+            claude_client=client,
+            tts_provider=None,
+            image_provider=None,
+            caption_provider=None,
+        )
+        mock_fn.assert_called_once_with(state, client)
+
+    def test_dispatches_story_bible(self, mocker):
+        """STORY_BIBLE phase calls story_writer.create_story_bible."""
+        mock_fn = mocker.patch("story_video.pipeline.orchestrator.create_story_bible")
+        state = MagicMock()
+        client = MagicMock()
+        _dispatch_phase(
+            PipelinePhase.STORY_BIBLE,
+            state,
+            claude_client=client,
+            tts_provider=None,
+            image_provider=None,
+            caption_provider=None,
+        )
+        mock_fn.assert_called_once_with(state, client)
+
+    def test_dispatches_outline(self, mocker):
+        """OUTLINE phase calls story_writer.create_outline."""
+        mock_fn = mocker.patch("story_video.pipeline.orchestrator.create_outline")
+        state = MagicMock()
+        client = MagicMock()
+        _dispatch_phase(
+            PipelinePhase.OUTLINE,
+            state,
+            claude_client=client,
+            tts_provider=None,
+            image_provider=None,
+            caption_provider=None,
+        )
+        mock_fn.assert_called_once_with(state, client)
+
+    def test_dispatches_scene_prose(self, mocker):
+        """SCENE_PROSE phase calls story_writer.write_scene_prose."""
+        mock_fn = mocker.patch("story_video.pipeline.orchestrator.write_scene_prose")
+        state = MagicMock()
+        client = MagicMock()
+        _dispatch_phase(
+            PipelinePhase.SCENE_PROSE,
+            state,
+            claude_client=client,
+            tts_provider=None,
+            image_provider=None,
+            caption_provider=None,
+        )
+        mock_fn.assert_called_once_with(state, client)
+
+    def test_dispatches_critique_revision(self, mocker):
+        """CRITIQUE_REVISION phase calls story_writer.critique_and_revise."""
+        mock_fn = mocker.patch("story_video.pipeline.orchestrator.critique_and_revise")
+        state = MagicMock()
+        client = MagicMock()
+        _dispatch_phase(
+            PipelinePhase.CRITIQUE_REVISION,
+            state,
+            claude_client=client,
+            tts_provider=None,
+            image_provider=None,
+            caption_provider=None,
+        )
+        mock_fn.assert_called_once_with(state, client)
+
+    def test_creative_phases_require_claude_client(self):
+        """All creative phases raise ValueError when claude_client is None."""
+        state = MagicMock()
+        for phase in [
+            PipelinePhase.ANALYSIS,
+            PipelinePhase.STORY_BIBLE,
+            PipelinePhase.OUTLINE,
+            PipelinePhase.SCENE_PROSE,
+            PipelinePhase.CRITIQUE_REVISION,
+        ]:
+            with pytest.raises(ValueError, match="claude_client is required"):
+                _dispatch_phase(
+                    phase,
+                    state,
+                    claude_client=None,
+                    tts_provider=None,
+                    image_provider=None,
+                    caption_provider=None,
+                )
+
+
+# ---------------------------------------------------------------------------
+# TestCreativePhasesAreCheckpoints — creative phases in checkpoint set
+# ---------------------------------------------------------------------------
+
+
+class TestCreativePhasesAreCheckpoints:
+    """All five creative phases are checkpoint phases."""
+
+    def test_creative_phases_in_checkpoint_set(self):
+        """ANALYSIS through CRITIQUE_REVISION are all checkpoint phases."""
+        assert PipelinePhase.ANALYSIS in _CHECKPOINT_PHASES
+        assert PipelinePhase.STORY_BIBLE in _CHECKPOINT_PHASES
+        assert PipelinePhase.OUTLINE in _CHECKPOINT_PHASES
+        assert PipelinePhase.SCENE_PROSE in _CHECKPOINT_PHASES
+        assert PipelinePhase.CRITIQUE_REVISION in _CHECKPOINT_PHASES
 
 
 # ---------------------------------------------------------------------------

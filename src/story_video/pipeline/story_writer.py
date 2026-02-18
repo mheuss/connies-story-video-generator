@@ -12,7 +12,15 @@ from story_video.pipeline.claude_client import ClaudeClient
 from story_video.state import ProjectState
 from story_video.utils.narration_tags import parse_story_header, strip_narration_tags
 
-__all__ = ["flag_narration", "split_scenes"]
+__all__ = [
+    "analyze_source",
+    "create_outline",
+    "create_story_bible",
+    "critique_and_revise",
+    "flag_narration",
+    "split_scenes",
+    "write_scene_prose",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -314,6 +322,31 @@ def flag_narration(state: ProjectState, client: ClaudeClient) -> None:
 
     # 9. Persist state
     state.save()
+
+
+def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
+    """Analyze source material to extract craft notes and thematic brief."""
+    raise NotImplementedError("analyze_source not yet implemented")
+
+
+def create_story_bible(state: ProjectState, client: ClaudeClient) -> None:
+    """Create story bible with characters, setting, and world rules."""
+    raise NotImplementedError("create_story_bible not yet implemented")
+
+
+def create_outline(state: ProjectState, client: ClaudeClient) -> None:
+    """Create scene-by-scene outline with beats and word targets."""
+    raise NotImplementedError("create_outline not yet implemented")
+
+
+def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
+    """Write prose for each scene from the outline."""
+    raise NotImplementedError("write_scene_prose not yet implemented")
+
+
+def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
+    """Review and revise each scene's prose in a single pass."""
+    raise NotImplementedError("critique_and_revise not yet implemented")
 
 
 # ---------------------------------------------------------------------------

@@ -23,7 +23,15 @@ from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import ImageProvider, generate_image
 from story_video.pipeline.image_prompt_writer import generate_image_prompts
 from story_video.pipeline.narration_prep import prepare_narration_llm, write_narration_changelog
-from story_video.pipeline.story_writer import flag_narration, split_scenes
+from story_video.pipeline.story_writer import (
+    analyze_source,
+    create_outline,
+    create_story_bible,
+    critique_and_revise,
+    flag_narration,
+    split_scenes,
+    write_scene_prose,
+)
 from story_video.pipeline.tts_generator import TTSProvider, generate_audio
 from story_video.pipeline.video_assembler import assemble_scene, assemble_video
 from story_video.state import ProjectState
@@ -38,6 +46,11 @@ logger = logging.getLogger(__name__)
 # before proceeding to expensive media generation.
 _CHECKPOINT_PHASES = frozenset(
     {
+        PipelinePhase.ANALYSIS,
+        PipelinePhase.STORY_BIBLE,
+        PipelinePhase.OUTLINE,
+        PipelinePhase.SCENE_PROSE,
+        PipelinePhase.CRITIQUE_REVISION,
         PipelinePhase.SCENE_SPLITTING,
         PipelinePhase.NARRATION_FLAGGING,
         PipelinePhase.IMAGE_PROMPTS,
@@ -204,7 +217,37 @@ def _dispatch_phase(
     Raises:
         ValueError: If the phase is unknown or a required provider is None.
     """
-    if phase == PipelinePhase.SCENE_SPLITTING:
+    if phase == PipelinePhase.ANALYSIS:
+        if claude_client is None:
+            msg = "claude_client is required for ANALYSIS phase"
+            raise ValueError(msg)
+        analyze_source(state, claude_client)
+
+    elif phase == PipelinePhase.STORY_BIBLE:
+        if claude_client is None:
+            msg = "claude_client is required for STORY_BIBLE phase"
+            raise ValueError(msg)
+        create_story_bible(state, claude_client)
+
+    elif phase == PipelinePhase.OUTLINE:
+        if claude_client is None:
+            msg = "claude_client is required for OUTLINE phase"
+            raise ValueError(msg)
+        create_outline(state, claude_client)
+
+    elif phase == PipelinePhase.SCENE_PROSE:
+        if claude_client is None:
+            msg = "claude_client is required for SCENE_PROSE phase"
+            raise ValueError(msg)
+        write_scene_prose(state, claude_client)
+
+    elif phase == PipelinePhase.CRITIQUE_REVISION:
+        if claude_client is None:
+            msg = "claude_client is required for CRITIQUE_REVISION phase"
+            raise ValueError(msg)
+        critique_and_revise(state, claude_client)
+
+    elif phase == PipelinePhase.SCENE_SPLITTING:
         if claude_client is None:
             msg = "claude_client is required for SCENE_SPLITTING phase"
             raise ValueError(msg)
