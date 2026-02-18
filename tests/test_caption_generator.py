@@ -130,30 +130,48 @@ def project_state(tmp_path):
 class TestTranscribeReturnsCaptionResult:
     """OpenAIWhisperProvider.transcribe() maps Whisper response to CaptionResult."""
 
-    def test_maps_response_to_caption_result(self, mock_openai, tmp_path):
-        """transcribe() maps Whisper response fields to CaptionResult."""
+    @pytest.fixture()
+    def caption_result(self, mock_openai, tmp_path):
+        """Transcribe a fake audio file and return the CaptionResult."""
         whisper_response = _make_whisper_response()
         mock_openai.audio.transcriptions.create.return_value = whisper_response
 
-        # Create a fake audio file for the provider to open
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
 
         provider = OpenAIWhisperProvider()
-        result = provider.transcribe(audio_file)
+        return provider.transcribe(audio_file)
 
-        assert isinstance(result, CaptionResult)
-        assert len(result.segments) == 1
-        assert result.segments[0].text == "The storm raged on."
-        assert result.segments[0].start == 0.0
-        assert result.segments[0].end == 2.5
-        assert len(result.words) == 4
-        assert result.words[0].word == "The"
-        assert result.words[0].start == 0.0
-        assert result.words[0].end == 0.3
-        assert result.words[3].word == "on."
-        assert result.language == "en"
-        assert result.duration == 2.5
+    def test_returns_caption_result_instance(self, caption_result):
+        """transcribe() returns a CaptionResult instance."""
+        assert isinstance(caption_result, CaptionResult)
+
+    def test_segment_count(self, caption_result):
+        """Result contains the expected number of segments."""
+        assert len(caption_result.segments) == 1
+
+    def test_segment_text_and_timing(self, caption_result):
+        """Segment text and start/end times match the Whisper response."""
+        seg = caption_result.segments[0]
+        assert seg.text == "The storm raged on."
+        assert seg.start == 0.0
+        assert seg.end == 2.5
+
+    def test_word_count_and_timing(self, caption_result):
+        """Word count and representative word timings match the Whisper response."""
+        assert len(caption_result.words) == 4
+        assert caption_result.words[0].word == "The"
+        assert caption_result.words[0].start == 0.0
+        assert caption_result.words[0].end == 0.3
+        assert caption_result.words[3].word == "on."
+
+    def test_language(self, caption_result):
+        """Detected language matches the Whisper response."""
+        assert caption_result.language == "en"
+
+    def test_duration(self, caption_result):
+        """Duration matches the Whisper response."""
+        assert caption_result.duration == 2.5
 
 
 # ---------------------------------------------------------------------------

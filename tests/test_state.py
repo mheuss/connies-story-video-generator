@@ -401,6 +401,13 @@ class TestPhaseTransitions:
         adapt_project_state.start_phase(PipelinePhase.IMAGE_PROMPTS)
         assert adapt_project_state.metadata.current_phase == PipelinePhase.IMAGE_PROMPTS
 
+    def test_start_phase_after_fail_allows_retry(self, adapt_project_state):
+        """A failed phase can be restarted (retry scenario)."""
+        adapt_project_state.start_phase(PipelinePhase.SCENE_SPLITTING)
+        adapt_project_state.fail_phase()
+        adapt_project_state.start_phase(PipelinePhase.SCENE_SPLITTING)
+        assert adapt_project_state.metadata.status == PhaseStatus.IN_PROGRESS
+
     def test_rejects_start_phase_while_in_progress(self, project_state):
         """Cannot start a new phase while another is still in progress."""
         project_state.start_phase(PipelinePhase.ANALYSIS)
@@ -716,6 +723,14 @@ class TestPhaseSequenceHelpers:
         adapt_project_state.start_phase(PipelinePhase.SCENE_SPLITTING)
         adapt_project_state.complete_phase()
         assert adapt_project_state.get_next_phase() == PipelinePhase.NARRATION_FLAGGING
+
+    def test_get_next_phase_falls_back_to_first_when_phase_not_in_sequence(
+        self, adapt_project_state
+    ):
+        """When current_phase is not in the mode's sequence, returns the first phase."""
+        # ANALYSIS belongs to creative flow, not adapt flow
+        adapt_project_state._metadata.current_phase = PipelinePhase.ANALYSIS
+        assert adapt_project_state.get_next_phase() == PipelinePhase.SCENE_SPLITTING
 
 
 # ---------------------------------------------------------------------------

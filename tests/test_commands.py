@@ -5,6 +5,7 @@ Each test verifies one logical behavior of the command builder/executor function
 All tests mock subprocess — no actual FFmpeg calls.
 """
 
+import logging
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -308,7 +309,9 @@ class TestProbeDurationNonNumeric:
         fake_result = subprocess.CompletedProcess(
             args=["ffprobe"], returncode=0, stdout="", stderr=""
         )
-        monkeypatch.setattr("subprocess.run", lambda *a, **kw: fake_result)
+        monkeypatch.setattr(
+            "story_video.ffmpeg.commands.subprocess.run", lambda *a, **kw: fake_result
+        )
         with pytest.raises(FFmpegError, match="non-numeric duration"):
             probe_duration(Path("/tmp/corrupt.mp4"))
 
@@ -317,7 +320,9 @@ class TestProbeDurationNonNumeric:
         fake_result = subprocess.CompletedProcess(
             args=["ffprobe"], returncode=0, stdout="N/A\n", stderr=""
         )
-        monkeypatch.setattr("subprocess.run", lambda *a, **kw: fake_result)
+        monkeypatch.setattr(
+            "story_video.ffmpeg.commands.subprocess.run", lambda *a, **kw: fake_result
+        )
         with pytest.raises(FFmpegError, match="non-numeric duration"):
             probe_duration(Path("/tmp/corrupt.mp4"))
 
@@ -364,3 +369,39 @@ class TestBuildConcatCommandShortDuration:
         config = VideoConfig()
         cmd = build_concat_command(paths, durations, Path("/out.mp4"), config)
         assert isinstance(cmd, list)
+
+
+# ---------------------------------------------------------------------------
+# TestBuildConcatCommandXfadeClamp — negative xfade offset guard
+# ---------------------------------------------------------------------------
+
+
+class TestBuildConcatCommandXfadeClamp:
+    """build_concat_command clamps negative xfade offsets to zero."""
+
+    def test_negative_offset_clamped_to_zero(self):
+        """When segment duration < transition_duration, offset is clamped to 0."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        durations = [0.5, 5.0]  # 0.5s < 1.5s transition_duration -> would be -1.0
+        config = VideoConfig()  # transition_duration=1.5
+        cmd = build_concat_command(paths, durations, Path("/out.mp4"), config)
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        assert "offset=0" in filter_str
+
+    def test_clamping_logs_warning(self, caplog):
+        """Clamping emits a warning log message."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        durations = [0.5, 5.0]
+        config = VideoConfig()
+        with caplog.at_level(logging.WARNING, logger="story_video.ffmpeg.commands"):
+            build_concat_command(paths, durations, Path("/out.mp4"), config)
+        assert any("clamped" in record.message for record in caplog.records)
+
+    def test_no_warning_when_offset_positive(self, caplog):
+        """No warning when segment duration exceeds transition_duration."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        durations = [10.0, 10.0]
+        config = VideoConfig()
+        with caplog.at_level(logging.WARNING, logger="story_video.ffmpeg.commands"):
+            build_concat_command(paths, durations, Path("/out.mp4"), config)
+        assert not any("clamped" in record.message for record in caplog.records)

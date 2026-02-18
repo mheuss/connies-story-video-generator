@@ -10,6 +10,7 @@ import pytest
 
 from story_video.ffmpeg.subtitles import (
     _format_ass_time,
+    _group_words_into_events,
     _hex_to_ass_color,
     generate_ass_content,
     subtitle_filter,
@@ -487,3 +488,46 @@ class TestHexToAssColorValidation:
         """Empty string is rejected."""
         with pytest.raises(ValueError, match="Invalid hex color"):
             _hex_to_ass_color("")
+
+
+# ---------------------------------------------------------------------------
+# _group_words_into_events — direct unit tests for boundary cases
+# ---------------------------------------------------------------------------
+
+
+class TestGroupWordsIntoEvents:
+    """_group_words_into_events boundary case tests."""
+
+    def test_exactly_max_chars_per_line_fits_on_one_line(self):
+        """Words totalling exactly max_chars_per_line stay on one line."""
+        # "abc def" = 7 chars (3 + 1 space + 3)
+        words = [
+            CaptionWord(word="abc", start=0.0, end=0.5),
+            CaptionWord(word="def", start=0.6, end=1.0),
+        ]
+        events = _group_words_into_events(words, max_chars_per_line=7, max_lines=2)
+        assert len(events) == 1
+        assert len(events[0]) == 1  # single line
+        assert len(events[0][0]) == 2  # both words on the same line
+
+    def test_exactly_max_lines_per_event(self):
+        """When lines fill exactly max_lines, one event is produced with that many lines."""
+        # Each word is 5 chars, max_chars_per_line=5, so each word gets its own line
+        words = [
+            CaptionWord(word="alpha", start=0.0, end=0.5),
+            CaptionWord(word="bravo", start=0.6, end=1.0),
+            CaptionWord(word="delta", start=1.1, end=1.5),
+        ]
+        events = _group_words_into_events(words, max_chars_per_line=5, max_lines=3)
+        assert len(events) == 1
+        assert len(events[0]) == 3  # three lines in one event
+
+    def test_single_word_exceeding_max_chars(self):
+        """A single word longer than max_chars_per_line is placed on its own line."""
+        words = [
+            CaptionWord(word="Supercalifragilistic", start=0.0, end=1.0),
+        ]
+        events = _group_words_into_events(words, max_chars_per_line=5, max_lines=2)
+        assert len(events) == 1
+        assert len(events[0]) == 1  # one line
+        assert events[0][0][0].word == "Supercalifragilistic"

@@ -222,6 +222,28 @@ class TestDisplayOutcome:
         captured = capsys.readouterr().out.lower()
         assert "failed" in captured or "error" in captured
 
+    def test_pending_shows_info(self, capsys) -> None:
+        """PENDING status prints an info panel with the status value."""
+        state = MagicMock()
+        state.metadata.status = PhaseStatus.PENDING
+        state.metadata.current_phase = None
+
+        _display_outcome(state)
+
+        captured = capsys.readouterr().out.lower()
+        assert "pending" in captured
+
+    def test_in_progress_shows_info(self, capsys) -> None:
+        """IN_PROGRESS status prints an info panel with the status value."""
+        state = MagicMock()
+        state.metadata.status = PhaseStatus.IN_PROGRESS
+        state.metadata.current_phase = PipelinePhase.SCENE_SPLITTING
+
+        _display_outcome(state)
+
+        captured = capsys.readouterr().out.lower()
+        assert "in_progress" in captured
+
 
 class TestCreateCommand:
     """Tests for the create CLI command — validate, configure, run pipeline."""
@@ -279,8 +301,6 @@ class TestCreateCommand:
                 "create",
                 "--mode",
                 "original",
-                "--topic",
-                "A lighthouse",
                 "--output-dir",
                 str(tmp_path / "output"),
             ],
