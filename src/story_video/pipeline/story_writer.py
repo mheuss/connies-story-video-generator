@@ -1,8 +1,7 @@
-"""Story writer pipeline — adaptation flow.
+"""Story writer pipeline — adapt and inspired_by flows.
 
-Provides scene splitting and narration flagging for the adapt input mode.
-Scene splitting divides a source story into scenes at natural boundaries.
-Narration flagging identifies TTS-unfriendly content in scene texts.
+Adapt mode: scene splitting and narration flagging.
+Inspired_by mode: analysis, story bible, outline, scene prose, critique/revision.
 """
 
 import json
@@ -276,6 +275,31 @@ OUTLINE_SCHEMA = {
         "total_target_words": {"type": "integer"},
     },
     "required": ["scenes", "total_target_words"],
+}
+
+SCENE_PROSE_SYSTEM = (
+    "You are a fiction writer crafting a scene for a story.\n\n"
+    "Match the writing style described in the craft notes exactly."
+    " Stay faithful to the story bible. Follow the beat — don't add"
+    " plot points or skip them.\n\n"
+    "Return the scene prose and a 2-3 sentence summary of what happens"
+    " in this scene (the summary will be used as context for writing"
+    " subsequent scenes)."
+)
+
+SCENE_PROSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "prose": {
+            "type": "string",
+            "description": "The full scene prose text",
+        },
+        "summary": {
+            "type": "string",
+            "description": "2-3 sentence summary of what happens in this scene",
+        },
+    },
+    "required": ["prose", "summary"],
 }
 
 
@@ -613,8 +637,102 @@ def create_outline(state: ProjectState, client: ClaudeClient) -> None:
 
 
 def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
-    """Write prose for each scene from the outline."""
-    raise NotImplementedError("write_scene_prose not yet implemented")
+    """Write prose for each scene from the outline.
+
+    Reads analysis.json, story_bible.json, and outline.json. For each
+    outline beat, generates prose via Claude. Maintains a running summary
+    so later scenes have context of what came before.
+
+    Creates scenes via state.add_scene() and writes .md files. Supports
+    resume — skips scenes that already exist in state.
+
+    Args:
+        state: Project state.
+        client: Claude API client.
+
+    Raises:
+        FileNotFoundError: If required artifact files are missing.
+    """
+    analysis_path = state.project_dir / "analysis.json"
+    if not analysis_path.exists():
+        msg = f"analysis.json not found in {state.project_dir}"
+        raise FileNotFoundError(msg)
+    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+
+    bible_path = state.project_dir / "story_bible.json"
+    if not bible_path.exists():
+        msg = f"story_bible.json not found in {state.project_dir}"
+        raise FileNotFoundError(msg)
+    bible = json.loads(bible_path.read_text(encoding="utf-8"))
+
+    outline_path = state.project_dir / "outline.json"
+    if not outline_path.exists():
+        msg = f"outline.json not found in {state.project_dir}"
+        raise FileNotFoundError(msg)
+    outline = json.loads(outline_path.read_text(encoding="utf-8"))
+
+    # Determine which scenes already exist (for resume)
+    existing_scene_numbers = {s.scene_number for s in state.metadata.scenes}
+
+    # Shared context
+    craft_notes_text = json.dumps(analysis["craft_notes"], indent=2)
+    bible_text = json.dumps(bible, indent=2)
+    outline_text = json.dumps(outline["scenes"], indent=2)
+
+    running_summary: list[str] = []
+    scenes_dir = state.project_dir / "scenes"
+    scenes_dir.mkdir(exist_ok=True)
+
+    for beat in outline["scenes"]:
+        scene_num = beat["scene_number"]
+
+        if scene_num in existing_scene_numbers:
+            # Scene already created (resume). Still need its summary for context.
+            existing = next(s for s in state.metadata.scenes if s.scene_number == scene_num)
+            running_summary.append(f"Scene {scene_num}: {existing.title}")
+            continue
+
+        # Build user message
+        parts = [
+            "## Craft Notes\n",
+            craft_notes_text,
+            "\n## Story Bible\n",
+            bible_text,
+            "\n## Full Outline\n",
+            outline_text,
+        ]
+
+        if running_summary:
+            parts.append("\n## Previously:\n")
+            parts.append("\n".join(running_summary))
+
+        parts.append(f"\n## Current Scene: {beat['title']}\n")
+        parts.append(f"Beat: {beat['beat']}")
+        parts.append(f"Target: ~{beat['target_words']} words")
+
+        user_message = "\n".join(parts)
+
+        result = client.generate_structured(
+            system=SCENE_PROSE_SYSTEM,
+            user_message=user_message,
+            tool_name="write_scene",
+            tool_schema=SCENE_PROSE_SCHEMA,
+        )
+
+        # Create scene in state
+        state.add_scene(scene_num, beat["title"], result["prose"])
+        state.update_scene_asset(scene_num, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(scene_num, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        # Write .md file
+        filename = f"scene_{scene_num:03d}.md"
+        content = f"# Scene {scene_num}: {beat['title']}\n\n{result['prose']}\n"
+        (scenes_dir / filename).write_text(content, encoding="utf-8")
+
+        # Add summary for next scene's context
+        running_summary.append(f"Scene {scene_num} ({beat['title']}): {result['summary']}")
+
+    state.save()
 
 
 def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:

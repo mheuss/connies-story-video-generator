@@ -22,6 +22,7 @@ from story_video.pipeline.story_writer import (
     create_story_bible,
     flag_narration,
     split_scenes,
+    write_scene_prose,
 )
 from story_video.state import ProjectState
 
@@ -1340,3 +1341,160 @@ class TestCreateOutlineMissingBible:
         # state_with_analysis has analysis.json but not story_bible.json
         with pytest.raises(FileNotFoundError, match="story_bible.json"):
             create_outline(state_with_analysis, outline_client)
+
+
+# ---------------------------------------------------------------------------
+# Scene prose phase — test data
+# ---------------------------------------------------------------------------
+
+PROSE_RESPONSE_1 = {
+    "prose": "Maren stepped off the ferry onto the wet stones.",
+    "summary": "Maren arrives on the island and sees the lighthouse.",
+}
+
+PROSE_RESPONSE_2 = {
+    "prose": "The stranger stood at the door, rain dripping from his coat.",
+    "summary": "A stranger appears at the lighthouse door during the storm.",
+}
+
+PROSE_RESPONSE_3 = {
+    "prose": "The storm rattled the windows as they sat in silence.",
+    "summary": "Maren and the stranger wait out the storm together.",
+}
+
+
+# ---------------------------------------------------------------------------
+# Scene prose phase — fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def prose_client():
+    """Mock ClaudeClient for scene prose phase."""
+    client = MagicMock()
+    client.generate_structured.side_effect = [
+        PROSE_RESPONSE_1,
+        PROSE_RESPONSE_2,
+        PROSE_RESPONSE_3,
+    ]
+    return client
+
+
+@pytest.fixture()
+def state_with_outline(state_with_bible, outline_client):
+    """State with analysis.json, story_bible.json, and outline.json."""
+    create_outline(state_with_bible, outline_client)
+    return state_with_bible
+
+
+# ---------------------------------------------------------------------------
+# Scene prose phase — tests
+# ---------------------------------------------------------------------------
+
+
+class TestWriteSceneProseCreatesScenes:
+    """write_scene_prose() creates scenes in state."""
+
+    def test_scenes_created(self, state_with_outline, prose_client):
+        """One scene created per outline beat."""
+        write_scene_prose(state_with_outline, prose_client)
+
+        assert len(state_with_outline.metadata.scenes) == 3
+
+
+class TestWriteSceneProseContent:
+    """write_scene_prose() stores correct prose in each scene."""
+
+    def test_scene_prose_matches_response(self, state_with_outline, prose_client):
+        """Scene prose matches Claude response."""
+        write_scene_prose(state_with_outline, prose_client)
+
+        scenes = state_with_outline.metadata.scenes
+        assert scenes[0].prose == PROSE_RESPONSE_1["prose"]
+        assert scenes[1].prose == PROSE_RESPONSE_2["prose"]
+        assert scenes[2].prose == PROSE_RESPONSE_3["prose"]
+
+
+class TestWriteSceneProseCallsPerScene:
+    """write_scene_prose() makes one Claude call per outline scene."""
+
+    def test_one_call_per_scene(self, state_with_outline, prose_client):
+        """Claude called once per scene beat."""
+        write_scene_prose(state_with_outline, prose_client)
+
+        assert prose_client.generate_structured.call_count == 3
+
+
+class TestWriteSceneProseRunningSummary:
+    """write_scene_prose() includes running summary in subsequent calls."""
+
+    def test_second_call_includes_prior_summary(self, state_with_outline, prose_client):
+        """Second scene call includes summary of first scene."""
+        write_scene_prose(state_with_outline, prose_client)
+
+        # First call should not have prior summary
+        first_call = prose_client.generate_structured.call_args_list[0].kwargs
+        assert "Previously:" not in first_call["user_message"]
+
+        # Second call should include first scene's summary
+        second_call = prose_client.generate_structured.call_args_list[1].kwargs
+        assert PROSE_RESPONSE_1["summary"] in second_call["user_message"]
+
+
+class TestWriteSceneProseWritesMdFiles:
+    """write_scene_prose() writes scene .md files."""
+
+    def test_md_files_created(self, state_with_outline, prose_client):
+        """scenes/*.md files are written for each scene."""
+        write_scene_prose(state_with_outline, prose_client)
+
+        scenes_dir = state_with_outline.project_dir / "scenes"
+        assert (scenes_dir / "scene_001.md").exists()
+        assert (scenes_dir / "scene_002.md").exists()
+        assert (scenes_dir / "scene_003.md").exists()
+
+
+class TestWriteSceneProseAssetStatus:
+    """write_scene_prose() sets TEXT asset to COMPLETED."""
+
+    def test_text_asset_completed(self, state_with_outline, prose_client):
+        """TEXT asset status is COMPLETED for each scene."""
+        write_scene_prose(state_with_outline, prose_client)
+
+        for scene in state_with_outline.metadata.scenes:
+            assert scene.asset_status.text == SceneStatus.COMPLETED
+
+
+class TestWriteSceneProseResume:
+    """write_scene_prose() skips already-created scenes on resume."""
+
+    def test_resume_skips_completed_scenes(self, state_with_outline, prose_client):
+        """With scene 1 already added, only scenes 2 and 3 are processed."""
+        # Manually add scene 1
+        state_with_outline.add_scene(1, "The Arrival", "Pre-existing prose.")
+        state_with_outline.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state_with_outline.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        # Only 2 calls needed now
+        prose_client.generate_structured.side_effect = [
+            PROSE_RESPONSE_2,
+            PROSE_RESPONSE_3,
+        ]
+
+        write_scene_prose(state_with_outline, prose_client)
+
+        assert len(state_with_outline.metadata.scenes) == 3
+        # Scene 1 prose unchanged
+        assert state_with_outline.metadata.scenes[0].prose == "Pre-existing prose."
+        # Scenes 2 and 3 from Claude
+        assert state_with_outline.metadata.scenes[1].prose == PROSE_RESPONSE_2["prose"]
+        assert prose_client.generate_structured.call_count == 2
+
+
+class TestWriteSceneProseMissingOutline:
+    """write_scene_prose() raises when outline.json is missing."""
+
+    def test_missing_outline_raises(self, state_with_bible, prose_client):
+        """No outline.json raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError, match="outline.json"):
+            write_scene_prose(state_with_bible, prose_client)
