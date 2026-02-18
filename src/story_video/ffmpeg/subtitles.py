@@ -8,13 +8,16 @@ Public functions:
     subtitle_filter: Return the FFmpeg filter fragment for ASS subtitle overlay.
 """
 
-import re
 from pathlib import Path
 
 from story_video.ffmpeg.filters import _parse_resolution
-from story_video.models import CaptionResult, CaptionWord, SubtitleConfig, VideoConfig
-
-_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+from story_video.models import (
+    _HEX_COLOR_RE,
+    CaptionResult,
+    CaptionWord,
+    SubtitleConfig,
+    VideoConfig,
+)
 
 __all__ = [
     "generate_ass_content",

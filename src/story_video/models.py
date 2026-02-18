@@ -16,6 +16,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+_RESOLUTION_RE = re.compile(r"^\d+x\d+$")
 
 __all__ = [
     "ADAPT_FLOW_PHASES",
@@ -327,7 +328,7 @@ class ImageConfig(BaseModel):
     @classmethod
     def validate_size(cls, v: str) -> str:
         """Validate size is in WIDTHxHEIGHT format."""
-        if not re.match(r"^\d+x\d+$", v):
+        if not _RESOLUTION_RE.match(v):
             msg = f"Size must be 'WIDTHxHEIGHT', got '{v}'"
             raise ValueError(msg)
         return v
@@ -371,7 +372,7 @@ class VideoConfig(BaseModel):
     @classmethod
     def validate_resolution(cls, v: str) -> str:
         """Validate resolution is in WIDTHxHEIGHT format."""
-        if not re.match(r"^\d+x\d+$", v):
+        if not _RESOLUTION_RE.match(v):
             msg = f"Resolution must be 'WIDTHxHEIGHT', got '{v}'"
             raise ValueError(msg)
         return v
@@ -522,8 +523,8 @@ class CaptionSegment(BaseModel):
     """A transcribed segment (roughly sentence-level) with timing."""
 
     text: str
-    start: float
-    end: float
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
 
 
 class CaptionResult(BaseModel):
