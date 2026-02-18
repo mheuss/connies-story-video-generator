@@ -126,7 +126,7 @@ Acknowledged items not yet scheduled.
 ---
 
 - [x] [feature] LLM-based TTS text prep — replaced regex narration prep with Claude API calls for context-aware pronunciation preparation. Single `generate_structured()` call per scene handles abbreviations, numbers, punctuation, and unusual names. Produces JSON changelog. NARRATION_PREP is now a checkpoint phase. Old regex code deleted. (narration_prep.py, orchestrator.py)
-- [ ] [feature] Implement inspired_by mode — analysis, bible, outline, prose, critique/revision (pipeline/story_writer.py, see docs/plans/2026-02-18-inspired-by-design.md)
+- [x] [feature] Implement inspired_by mode — analysis, bible, outline, prose, critique/revision (pipeline/story_writer.py, see docs/plans/2026-02-18-inspired-by-design.md)
 - [ ] [limitation] write_scene_prose resume: running summary for skipped scenes uses title-only context instead of full prose summary — weaker context for Claude on subsequent scenes after resume (story_writer.py)
 - [ ] [feature] Implement original mode — same creative flow as inspired_by but with topic/premise input instead of source material
 - [ ] [feature] Add marker-based scene splitting as early-exit path in split_scenes (pre-split input support)

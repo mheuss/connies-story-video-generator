@@ -118,6 +118,23 @@ Significant technical decisions with context and rationale.
 
 ---
 
+### ADR-008: File-Based Artifact Storage for Creative Phases
+
+**Status:** Accepted
+
+**Context:** The inspired_by creative flow produces intermediate artifacts (analysis, story bible, outline) that subsequent phases read. These could be stored in `ProjectMetadata` (Pydantic model) or as JSON files on disk.
+
+**Decision:** Store creative phase artifacts as JSON files (`analysis.json`, `story_bible.json`, `outline.json`) in the project directory, not in `ProjectMetadata`. Scene prose goes into `state.metadata.scenes` via `add_scene()` (existing pattern).
+
+**Consequences:**
+- Human-readable at checkpoint pauses — users can review and edit before continuing
+- No model changes needed — `ProjectMetadata` stays focused on pipeline state
+- Consistent with existing patterns (scene `.md` files, `narration_flags.md`)
+- Each phase reads its dependencies from disk, making the data flow explicit
+- Resume works naturally — if a file exists, the phase already ran
+
+---
+
 ## Technical Notes
 
 ### Patterns
