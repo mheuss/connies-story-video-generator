@@ -59,6 +59,8 @@ The adapt flow works end-to-end. You can give it a story and get back a finished
 - Inline image tags -- author-controlled image transitions within scenes
 - Pause tags -- precise silence injection for pacing and poetry
 - Background music / sound effects -- audio overlay with volume and duration control
+- Iterative critique/revision -- critic and author personas with multi-pass refinement
+- User-configurable story length -- `--target-words`, `--target-scenes` flags
 - Web UI
 - Story translation
 
