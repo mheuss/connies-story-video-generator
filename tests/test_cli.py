@@ -818,6 +818,139 @@ class TestVerboseFlag:
         assert result.exit_code == 0
 
 
+class TestCreateInspiredByModeAccepted:
+    """Verify inspired_by mode does not show 'not yet implemented' error."""
+
+    @patch("story_video.cli._run_with_providers")
+    def test_inspired_by_does_not_show_not_implemented(self, mock_run, tmp_path):
+        """inspired_by mode is accepted and reaches the pipeline."""
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("A tale of the sea.", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "inspired_by",
+                "--source-material",
+                str(source_file),
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code == 0
+        assert "not yet implemented" not in result.output.lower()
+        mock_run.assert_called_once()
+
+    def test_original_mode_still_blocked(self, tmp_path):
+        """original mode still shows 'not yet implemented'."""
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "original",
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code != 0
+        assert "not yet implemented" in result.output.lower()
+
+
+class TestCreatePremiseFlag:
+    """Verify --premise is written to premise.txt for inspired_by mode."""
+
+    @patch("story_video.cli._run_with_providers")
+    def test_premise_written_for_inspired_by(self, mock_run, tmp_path):
+        """--premise with inspired_by writes premise.txt."""
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("A tale of the sea.", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "inspired_by",
+                "--source-material",
+                str(source_file),
+                "--premise",
+                "Set it in space",
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code == 0
+        call_state = mock_run.call_args[0][0]
+        premise_path = call_state.project_dir / "premise.txt"
+        assert premise_path.read_text(encoding="utf-8") == "Set it in space"
+
+    @patch("story_video.cli._run_with_providers")
+    def test_premise_ignored_for_adapt_mode(self, mock_run, tmp_path):
+        """--premise with adapt mode does not write premise.txt."""
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("A tale of the sea.", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--source-material",
+                str(source_file),
+                "--premise",
+                "Set it in space",
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code == 0
+        call_state = mock_run.call_args[0][0]
+        premise_path = call_state.project_dir / "premise.txt"
+        assert not premise_path.exists()
+
+    @patch("story_video.cli._run_with_providers")
+    def test_no_premise_means_no_file(self, mock_run, tmp_path):
+        """No --premise means no premise.txt regardless of mode."""
+        source_file = tmp_path / "source.txt"
+        source_file.write_text("A tale of the sea.", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "inspired_by",
+                "--source-material",
+                str(source_file),
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code == 0
+        call_state = mock_run.call_args[0][0]
+        premise_path = call_state.project_dir / "premise.txt"
+        assert not premise_path.exists()
+
+
+class TestCreateInspiredByRequiresSource:
+    """Verify inspired_by without --source-material fails."""
+
+    def test_inspired_by_without_source_material_fails(self, tmp_path):
+        """inspired_by mode without --source-material shows error."""
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "inspired_by",
+                "--output-dir",
+                str(tmp_path / "output"),
+            ],
+        )
+        assert result.exit_code != 0
+        assert "source-material" in result.output.lower()
+
+
 class TestDisplayOutcomeSuccessPath:
     """_display_outcome success message points to final.mp4."""
 

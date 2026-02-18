@@ -273,8 +273,11 @@ def _run_with_providers(state: ProjectState) -> None:
 
 @app.command()
 def create(
-    mode: str = typer.Option(..., help="Input mode: adapt (original/inspired_by coming soon)"),
+    mode: str = typer.Option(..., help="Input mode: adapt, inspired_by (original coming soon)"),
     source_material: str | None = typer.Option(None, help="Source story text or path to file"),
+    premise: str | None = typer.Option(
+        None, help="Optional creative direction for inspired_by mode"
+    ),
     duration: int | None = typer.Option(None, help="Target duration in minutes"),
     voice: str | None = typer.Option(None, help="TTS voice name"),
     autonomous: bool = typer.Option(False, help="Skip human review checkpoints"),
@@ -295,21 +298,22 @@ def create(
         )
         raise typer.Exit(1)
 
-    if input_mode in (InputMode.ORIGINAL, InputMode.INSPIRED_BY):
+    if input_mode == InputMode.ORIGINAL:
         console.print(
             Panel(
-                f"Mode '{mode}' is not yet implemented. Only 'adapt' is currently supported.",
+                f"Mode '{mode}' is not yet implemented."
+                " Only 'adapt' and 'inspired_by' are currently supported.",
                 title="Error",
                 border_style="red",
             )
         )
         raise typer.Exit(1)
 
-    # --- Validate adapt requires --source-material ---
-    if input_mode == InputMode.ADAPT and source_material is None:
+    # --- Validate source material required for adapt and inspired_by ---
+    if input_mode in (InputMode.ADAPT, InputMode.INSPIRED_BY) and source_material is None:
         console.print(
             Panel(
-                "Adapt mode requires --source-material (path to file or inline text).",
+                f"Mode '{mode}' requires --source-material (path to file or inline text).",
                 title="Error",
                 border_style="red",
             )
@@ -345,6 +349,13 @@ def create(
     if source_material is not None:
         text = _read_text_input(source_material)
         (state.project_dir / "source_story.txt").write_text(text, encoding="utf-8")
+
+    # --- Write premise ---
+    if premise is not None:
+        if input_mode in (InputMode.INSPIRED_BY, InputMode.ORIGINAL):
+            (state.project_dir / "premise.txt").write_text(premise, encoding="utf-8")
+        else:
+            logger.warning("--premise is only used with inspired_by or original modes; ignoring")
 
     console.print(f"Created project {project_id}")
 
