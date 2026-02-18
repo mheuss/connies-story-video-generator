@@ -1039,4 +1039,16 @@ git commit -m "docs: update backlog for completed LLM text prep feature"
 
 ## Retrospective
 
-(To be filled in after implementation)
+**What worked well:**
+- Subagent-driven development with TDD produced clean, well-tested code across all 8 tasks
+- Two-stage review (spec compliance + code quality) caught real issues — stale docstring, dead dict entry in integration test
+- Design doc → implementation plan → execution was smooth with no surprises
+- Tag regex deviation from design doc (`[^*]+` vs `\w+`) was correct — matched the existing `narration_tags.py` pattern
+
+**What was harder than expected:**
+- Pre-commit hook had a macOS `xargs` edge case with file-only deletions (no added/modified files) — required local hook fix
+- Branch tracking during pre-commit — ended up on `main` unexpectedly, had to switch back
+
+**Learnings:**
+- Design doc regex patterns should match existing codebase conventions — check the code during design, not just after
+- Verify current branch before starting pre-commit workflow

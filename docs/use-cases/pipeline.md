@@ -70,3 +70,17 @@
 **Location:** `src/story_video/pipeline/orchestrator.py:run_pipeline`
 
 **Notes:** Single `run_pipeline()` function drives all phases. Resume logic in `_determine_start_phase()` inspects `current_phase` and `status` to decide where to start. Checkpoint phases call `await_review()` instead of `complete_phase()` in semi-auto mode, then return — caller resumes by calling `run_pipeline()` again. Per-scene phases use `get_scenes_for_processing()` to skip completed scenes automatically. State is saved at three points: checkpoint pause, phase failure, and end of full run. Tests mock all pipeline modules via `@patch` — no real API calls.
+
+## LLM-Based TTS Text Preparation
+
+**Problem:** TTS engines mispronounce abbreviations, numbers, and unusual names. Regex transforms can't handle context-dependent decisions (e.g., "Dr." as "Doctor" vs "Drive").
+
+**Problem indicators:**
+- "context-aware text rewriting for TTS"
+- "expand abbreviations differently based on context"
+- "pronounce numbers as years vs quantities"
+- "validate that LLM preserves inline tags"
+
+**Location:** `src/story_video/pipeline/narration_prep.py:prepare_narration_llm`
+
+**Notes:** Sends full narration text (including voice/mood tags) to Claude via `generate_structured()` with a tool schema that returns modified text, a change list, and pronunciation guide additions. Tags are validated after each call — same tags, same order. On tag corruption, retries once with a corrective prompt, then raises `NarrationPrepError`. The pronunciation guide accumulates across scenes (scene 1's entries feed scene 2's prompt). The orchestrator loops all scenes, collects changes, and writes a JSON changelog to the project directory. NARRATION_PREP is a checkpoint phase in semi-auto mode.

@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Multi-voice narration with inline `**voice:X**` tags and per-story voice mapping via YAML front matter
 - Emotion direction with `**mood:X**` tags — maps to OpenAI `instructions` parameter and ElevenLabs audio tags
 - ElevenLabs TTS provider with audio tag translation for emotion control
-- Text utilities for TTS narration prep — expands abbreviations, converts numbers to words, inserts dramatic pauses, and smooths punctuation
+- LLM-based TTS narration prep — context-aware pronunciation preparation via Claude API with tag validation, pronunciation guide accumulation, and structured changelog
 - Retry decorators with exponential backoff for API calls (configurable retries, delays, exception filtering)
 - Cost estimation for story video projects — calculates per-service costs (Claude, TTS, Images, Whisper) with projected and actual modes
 - Claude API client wrapper — thin wrapper with text generation and structured output via tool_use
@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CLI commands — create (adapt mode), resume, estimate, status, and list with Rich terminal output
 
 ### Changed
+- Narration prep now uses Claude API instead of regex transforms — handles abbreviations, numbers, and punctuation contextually. NARRATION_PREP phase pauses for review in semi-auto mode. Produces a JSON changelog of all modifications.
 - `with_retry` `retry_on` parameter is now required — all callers already specified it explicitly
 - Default TTS model changed from `tts-1-hd` to `gpt-4o-mini-tts` for emotion instruction support
 - `TTSProvider.synthesize()` accepts optional `instructions` parameter — BREAKING for custom providers
@@ -33,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Deprecated
 
 ### Removed
+- Regex-based narration prep (`text.py`) — replaced by LLM-based approach
 - `--voice` option from `estimate` command — had no effect on cost calculation
 - Unused `api_retry` convenience decorator from retry utilities
 - Ken Burns zoom/pan effect — replaced with still image scaling for simpler, more reliable video assembly
