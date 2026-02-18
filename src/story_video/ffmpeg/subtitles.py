@@ -11,6 +11,7 @@ Public functions:
 import re
 from pathlib import Path
 
+from story_video.ffmpeg.filters import _parse_resolution
 from story_video.models import CaptionResult, CaptionWord, SubtitleConfig, VideoConfig
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
@@ -164,7 +165,7 @@ def generate_ass_content(
     Returns:
         Complete ASS file content as a string.
     """
-    width, height = video_config.resolution.split("x")
+    width, height = _parse_resolution(video_config.resolution)
 
     primary_color = _hex_to_ass_color(subtitle_config.color)
     outline_color = _hex_to_ass_color(subtitle_config.outline_color)

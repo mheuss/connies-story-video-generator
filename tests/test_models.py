@@ -402,7 +402,6 @@ class TestSubtitleConfig:
     def test_defaults(self):
         config = SubtitleConfig()
         assert config.font == "Montserrat"
-        assert config.font_fallback == "Arial"
         assert config.font_size == 48
         assert config.color == "#FFFFFF"
         assert config.outline_color == "#000000"
@@ -814,6 +813,37 @@ class TestCaptionModels:
         result = CaptionResult(segments=[], words=[], language="en", duration=1.0)
         assert result.language == "en"
         assert result.duration == 1.0
+
+
+# ---------------------------------------------------------------------------
+# CaptionWord timestamp validation
+# ---------------------------------------------------------------------------
+
+
+class TestCaptionWordTimestampValidation:
+    """CaptionWord rejects negative timestamps."""
+
+    def test_rejects_negative_start(self):
+        """Negative start timestamp is rejected."""
+        from story_video.models import CaptionWord
+
+        with pytest.raises(ValidationError):
+            CaptionWord(word="hello", start=-0.1, end=0.5)
+
+    def test_rejects_negative_end(self):
+        """Negative end timestamp is rejected."""
+        from story_video.models import CaptionWord
+
+        with pytest.raises(ValidationError):
+            CaptionWord(word="hello", start=0.0, end=-0.5)
+
+    def test_accepts_zero_timestamps(self):
+        """Zero timestamps are valid."""
+        from story_video.models import CaptionWord
+
+        word = CaptionWord(word="hello", start=0.0, end=0.0)
+        assert word.start == 0.0
+        assert word.end == 0.0
 
 
 # ---------------------------------------------------------------------------

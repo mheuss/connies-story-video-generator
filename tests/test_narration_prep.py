@@ -12,31 +12,31 @@ class TestExtractTags:
     def test_no_tags(self):
         from story_video.utils.narration_tags import extract_tags
 
-        assert _extract_tags("Plain text with no tags.") == []
+        assert extract_tags("Plain text with no tags.") == []
 
     def test_single_voice_tag(self):
         from story_video.utils.narration_tags import extract_tags
 
         text = "**voice:narrator** He spoke softly."
-        assert _extract_tags(text) == ["**voice:narrator**"]
+        assert extract_tags(text) == ["**voice:narrator**"]
 
     def test_multiple_tags(self):
         from story_video.utils.narration_tags import extract_tags
 
         text = '**voice:old_man** "I\'ve seen worse," **voice:narrator** he muttered.'
-        assert _extract_tags(text) == ["**voice:old_man**", "**voice:narrator**"]
+        assert extract_tags(text) == ["**voice:old_man**", "**voice:narrator**"]
 
     def test_mood_tag(self):
         from story_video.utils.narration_tags import extract_tags
 
         text = "**mood:somber** The rain fell."
-        assert _extract_tags(text) == ["**mood:somber**"]
+        assert extract_tags(text) == ["**mood:somber**"]
 
     def test_mixed_voice_and_mood(self):
         from story_video.utils.narration_tags import extract_tags
 
         text = "**voice:jane** **mood:excited** She laughed."
-        assert _extract_tags(text) == ["**voice:jane**", "**mood:excited**"]
+        assert extract_tags(text) == ["**voice:jane**", "**mood:excited**"]
 
 
 class TestValidateTagsPreserved:

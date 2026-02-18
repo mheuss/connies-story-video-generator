@@ -284,21 +284,45 @@ class TestWithRetryMetadata:
 
 
 # ---------------------------------------------------------------------------
-# OPENAI_TRANSIENT_ERRORS — shared constant
+# _OPENAI_TRANSIENT — per-module constant (moved from retry.py in PR2-13)
 # ---------------------------------------------------------------------------
 
 
-class TestOpenAITransientErrors:
-    """OPENAI_TRANSIENT_ERRORS is a shared tuple for retry configuration."""
+class TestOpenAITransientPerModule:
+    """Each OpenAI-consuming module defines its own _OPENAI_TRANSIENT tuple."""
 
-    def test_is_tuple_of_three(self):
-        """Contains exactly three exception types."""
+    def test_tts_generator_defines_transient(self):
+        """tts_generator has _OPENAI_TRANSIENT with the three OpenAI error types."""
         from openai import APIConnectionError, InternalServerError, RateLimitError
 
-        from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS
+        from story_video.pipeline.tts_generator import _OPENAI_TRANSIENT
 
-        assert isinstance(OPENAI_TRANSIENT_ERRORS, tuple)
-        assert len(OPENAI_TRANSIENT_ERRORS) == 3
-        assert APIConnectionError in OPENAI_TRANSIENT_ERRORS
-        assert RateLimitError in OPENAI_TRANSIENT_ERRORS
-        assert InternalServerError in OPENAI_TRANSIENT_ERRORS
+        assert isinstance(_OPENAI_TRANSIENT, tuple)
+        assert len(_OPENAI_TRANSIENT) == 3
+        assert APIConnectionError in _OPENAI_TRANSIENT
+        assert RateLimitError in _OPENAI_TRANSIENT
+        assert InternalServerError in _OPENAI_TRANSIENT
+
+    def test_image_generator_defines_transient(self):
+        """image_generator has _OPENAI_TRANSIENT with the three OpenAI error types."""
+        from openai import APIConnectionError, InternalServerError, RateLimitError
+
+        from story_video.pipeline.image_generator import _OPENAI_TRANSIENT
+
+        assert isinstance(_OPENAI_TRANSIENT, tuple)
+        assert len(_OPENAI_TRANSIENT) == 3
+        assert APIConnectionError in _OPENAI_TRANSIENT
+        assert RateLimitError in _OPENAI_TRANSIENT
+        assert InternalServerError in _OPENAI_TRANSIENT
+
+    def test_caption_generator_defines_transient(self):
+        """caption_generator has _OPENAI_TRANSIENT with the three OpenAI error types."""
+        from openai import APIConnectionError, InternalServerError, RateLimitError
+
+        from story_video.pipeline.caption_generator import _OPENAI_TRANSIENT
+
+        assert isinstance(_OPENAI_TRANSIENT, tuple)
+        assert len(_OPENAI_TRANSIENT) == 3
+        assert APIConnectionError in _OPENAI_TRANSIENT
+        assert RateLimitError in _OPENAI_TRANSIENT
+        assert InternalServerError in _OPENAI_TRANSIENT

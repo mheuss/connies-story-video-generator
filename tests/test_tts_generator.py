@@ -656,6 +656,21 @@ class TestElevenLabsTTSProvider:
 
         assert not any("speed" in r.message.lower() for r in caplog.records)
 
+    def test_speed_warning_logged_once(self, mock_elevenlabs, caplog):
+        """Speed warning is only logged on the first call, not subsequent ones."""
+        import logging
+
+        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
+
+        provider = ElevenLabsTTSProvider()
+        with caplog.at_level(logging.WARNING):
+            provider.synthesize("Hello", "voice-id", "eleven_v3", 1.5, "mp3_44100_128")
+            caplog.clear()
+            mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
+            provider.synthesize("Hello", "voice-id", "eleven_v3", 1.5, "mp3_44100_128")
+
+        assert not any("speed" in r.message.lower() for r in caplog.records)
+
     def test_retry_on_connection_error(self, mock_elevenlabs):
         """ElevenLabs retries on ConnectionError then succeeds."""
         mock_elevenlabs.text_to_speech.convert.side_effect = [
@@ -729,6 +744,12 @@ class TestMoodToInstructions:
 
     def test_custom_mood_returns_instruction(self):
         assert _mood_to_instructions("thoughtful") == "Speak in a thoughtful tone"
+
+    def test_vowel_mood_uses_an(self):
+        assert _mood_to_instructions("excited") == "Speak in an excited tone"
+
+    def test_angry_mood_uses_an(self):
+        assert _mood_to_instructions("angry") == "Speak in an angry tone"
 
 
 # ---------------------------------------------------------------------------

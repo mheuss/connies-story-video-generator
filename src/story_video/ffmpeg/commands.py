@@ -12,12 +12,15 @@ Public items:
     probe_duration: Extract media duration via ffprobe.
 """
 
+import logging
 import subprocess
 from pathlib import Path
 
 from story_video.ffmpeg.filters import blur_background_filter, still_image_filter
 from story_video.ffmpeg.subtitles import subtitle_filter
 from story_video.models import VideoConfig
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "FFmpegError",
@@ -223,7 +226,17 @@ def build_concat_command(
 
     for i in range(n - 1):
         cumulative_dur += segment_durations[i]
-        offset = cumulative_dur - (i + 1) * transition_dur
+        raw_offset = cumulative_dur - (i + 1) * transition_dur
+        offset = max(0.0, raw_offset)
+        if raw_offset < 0:
+            logger.warning(
+                "Segment %d duration (%.2fs) is shorter than transition_duration (%.2fs); "
+                "xfade offset clamped from %.2f to 0.0",
+                i,
+                segment_durations[i],
+                transition_dur,
+                raw_offset,
+            )
         next_video = f"[{i + 1}:v]"
         next_audio = f"[{i + 1}:a]"
 

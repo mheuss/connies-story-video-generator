@@ -36,7 +36,6 @@ video:
 
 subtitles:
   font: Montserrat
-  font_fallback: Arial
   font_size: 48
   color: "#FFFFFF"
   outline_color: "#000000"

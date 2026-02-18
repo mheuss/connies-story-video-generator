@@ -267,6 +267,10 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
 
     Runs on ALL scenes (not just pending ones) because narration_text assets
     are already COMPLETED from the flagging phase.
+
+    Note: Iterates all scenes (not just pending) because narration_text assets
+    are already COMPLETED from the flagging phase. On resume after partial
+    failure, scenes may be re-processed by Claude.
     """
     pronunciation_guide: list[dict[str, str]] = []
     changelog: list[dict] = []
@@ -275,6 +279,10 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
     for scene in state.metadata.scenes:
         text = scene.narration_text or scene.prose
         if not text:
+            logger.warning(
+                "Scene %d has no narration_text or prose — skipping narration prep",
+                scene.scene_number,
+            )
             continue
 
         result = prepare_narration_llm(

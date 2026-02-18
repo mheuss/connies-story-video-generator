@@ -5,7 +5,30 @@ blurred background layers and still-image foreground scaling. These functions
 produce deterministic output -- same inputs always yield the same string.
 """
 
+import re
+
+_RESOLUTION_RE = re.compile(r"^\d+x\d+$")
+
 __all__ = ["blur_background_filter", "still_image_filter"]
+
+
+def _parse_resolution(resolution: str) -> tuple[str, str]:
+    """Parse a ``WIDTHxHEIGHT`` resolution string into (width, height).
+
+    Args:
+        resolution: Resolution string like ``"1920x1080"``.
+
+    Returns:
+        Tuple of ``(width, height)`` as strings.
+
+    Raises:
+        ValueError: If *resolution* is not in ``WIDTHxHEIGHT`` format.
+    """
+    if not _RESOLUTION_RE.match(resolution):
+        msg = f"Invalid resolution format: {resolution!r} (expected 'WIDTHxHEIGHT')"
+        raise ValueError(msg)
+    w, h = resolution.split("x")
+    return w, h
 
 
 def still_image_filter(resolution: str) -> str:
@@ -20,7 +43,7 @@ def still_image_filter(resolution: str) -> str:
     Returns:
         A comma-separated filter chain string ready for FFmpeg ``-vf``.
     """
-    w, h = resolution.split("x")
+    w, h = _parse_resolution(resolution)
     return f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
 
 
@@ -38,7 +61,7 @@ def blur_background_filter(blur_radius: int, resolution: str) -> str:
     Returns:
         A comma-separated filter chain string ready for FFmpeg ``-vf``.
     """
-    w, h = resolution.split("x")
+    w, h = _parse_resolution(resolution)
 
     return (
         f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma={blur_radius}"

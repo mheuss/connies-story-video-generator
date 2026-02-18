@@ -251,11 +251,12 @@ class ProjectState:
                 or if another phase is currently in progress.
         """
         # Guard: cannot start a new phase while one is already in progress
-        is_in_progress = self._metadata.status == PhaseStatus.IN_PROGRESS
-        if is_in_progress and self._metadata.current_phase is not None:
+        if self._metadata.status == PhaseStatus.IN_PROGRESS:
+            current = self._metadata.current_phase
+            phase_name = current.value if current else "unknown"
             msg = (
                 f"Cannot start phase '{phase.value}' while phase "
-                f"'{self._metadata.current_phase.value}' is still in progress."
+                f"'{phase_name}' is still in progress."
             )
             raise ValueError(msg)
 

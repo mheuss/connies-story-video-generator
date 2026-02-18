@@ -4,7 +4,13 @@ TDD: These tests are written first, before the implementation.
 Each test verifies one logical behavior of the filter builder functions.
 """
 
-from story_video.ffmpeg.filters import blur_background_filter, still_image_filter
+import pytest
+
+from story_video.ffmpeg.filters import (
+    _parse_resolution,
+    blur_background_filter,
+    still_image_filter,
+)
 
 # ---------------------------------------------------------------------------
 # Still image — scale and pad to fit resolution
@@ -108,3 +114,40 @@ class TestBlurBackgroundRadius:
         """Blur radius 50 appears in the filter expression."""
         result = blur_background_filter(blur_radius=50, resolution="1920x1080")
         assert "sigma=50" in result
+
+
+# ---------------------------------------------------------------------------
+# _parse_resolution — WIDTHxHEIGHT parsing and validation
+# ---------------------------------------------------------------------------
+
+
+class TestParseResolution:
+    """_parse_resolution parses and validates resolution strings."""
+
+    def test_returns_width_and_height(self):
+        """Standard resolution returns (width, height) tuple."""
+        assert _parse_resolution("1920x1080") == ("1920", "1080")
+
+    def test_returns_different_resolution(self):
+        """Works with non-standard dimensions."""
+        assert _parse_resolution("1280x720") == ("1280", "720")
+
+    def test_rejects_missing_x_separator(self):
+        """Resolution without 'x' raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid resolution"):
+            _parse_resolution("1920:1080")
+
+    def test_rejects_non_numeric(self):
+        """Non-numeric values raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid resolution"):
+            _parse_resolution("widexhigh")
+
+    def test_rejects_empty_string(self):
+        """Empty string raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid resolution"):
+            _parse_resolution("")
+
+    def test_rejects_single_number(self):
+        """Single number without x raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid resolution"):
+            _parse_resolution("1920")

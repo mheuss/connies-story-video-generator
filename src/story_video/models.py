@@ -384,7 +384,6 @@ class SubtitleConfig(BaseModel):
 
     Fields:
         font: Primary font name.
-        font_fallback: Fallback font if primary is unavailable.
         font_size: Font size in pixels at 1080p.
         color: Text color as hex string.
         outline_color: Outline color as hex string.
@@ -397,7 +396,6 @@ class SubtitleConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     font: str = Field(default="Montserrat")
-    font_fallback: str = Field(default="Arial")
     font_size: int = Field(default=48, gt=0)
     color: str = Field(default="#FFFFFF")
     outline_color: str = Field(default="#000000")
@@ -516,8 +514,8 @@ class CaptionWord(BaseModel):
     """A single transcribed word with timing."""
 
     word: str
-    start: float  # seconds
-    end: float  # seconds
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
 
 
 class CaptionSegment(BaseModel):

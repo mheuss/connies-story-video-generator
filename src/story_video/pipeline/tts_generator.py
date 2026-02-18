@@ -13,7 +13,9 @@ import openai
 from story_video.models import AssetType, Scene, SceneStatus, StoryHeader
 from story_video.state import ProjectState
 from story_video.utils.narration_tags import has_narration_tags, parse_narration_segments
-from story_video.utils.retry import OPENAI_TRANSIENT_ERRORS, with_retry
+from story_video.utils.retry import with_retry
+
+_OPENAI_TRANSIENT = (openai.APIConnectionError, openai.RateLimitError, openai.InternalServerError)
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +69,7 @@ class OpenAITTSProvider:
     def __init__(self) -> None:
         self._client = openai.OpenAI()
 
-    @with_retry(max_retries=3, base_delay=2.0, retry_on=OPENAI_TRANSIENT_ERRORS)
+    @with_retry(max_retries=3, base_delay=2.0, retry_on=_OPENAI_TRANSIENT)
     def synthesize(
         self,
         text: str,
@@ -139,6 +141,7 @@ class ElevenLabsTTSProvider:
 
     def __init__(self) -> None:
         self._client = elevenlabs.ElevenLabs()
+        self._speed_warned = False
 
     @with_retry(max_retries=3, base_delay=2.0, retry_on=ELEVENLABS_TRANSIENT_ERRORS)
     def synthesize(
@@ -163,12 +166,12 @@ class ElevenLabsTTSProvider:
         Returns:
             Raw audio bytes from the streaming response.
         """
-        if speed != 1.0:
+        if speed != 1.0 and not self._speed_warned:
             logger.warning(
-                "ElevenLabs does not support speed adjustment (got %.2f). "
-                "Audio will be generated at normal speed.",
+                "ElevenLabs does not support speed parameter (got %.1f); ignoring",
                 speed,
             )
+            self._speed_warned = True
         tagged_text = _mood_to_elevenlabs_text(text, instructions)
         audio_iter = self._client.text_to_speech.convert(
             voice_id=voice,
@@ -187,7 +190,8 @@ def _mood_to_instructions(mood: str | None) -> str | None:
     """
     if mood is None:
         return None
-    return f"Speak in a {mood} tone"
+    article = "an" if mood[0].lower() in "aeiou" else "a"
+    return f"Speak in {article} {mood} tone"
 
 
 def generate_audio(
