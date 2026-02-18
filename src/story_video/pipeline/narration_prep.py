@@ -9,32 +9,18 @@ See design doc: docs/plans/2026-02-17-llm-tts-text-prep-design.md
 
 import json
 import logging
-import re
 from pathlib import Path
 
 from story_video.pipeline.claude_client import ClaudeClient
+from story_video.utils.narration_tags import extract_tags
 
 __all__ = ["NarrationPrepError", "prepare_narration_llm", "write_narration_changelog"]
 
 logger = logging.getLogger(__name__)
 
-_TAG_PATTERN = re.compile(r"\*\*(?:voice|mood):[^*]+\*\*")
-
 
 class NarrationPrepError(Exception):
     """Raised when LLM-based narration preparation fails for a scene."""
-
-
-def _extract_tags(text: str) -> list[str]:
-    """Extract all voice/mood tags from text in order of appearance.
-
-    Args:
-        text: Narration text possibly containing **voice:X** and **mood:X** tags.
-
-    Returns:
-        List of tag strings in order of appearance.
-    """
-    return _TAG_PATTERN.findall(text)
 
 
 def _validate_tags_preserved(original_text: str, modified_text: str) -> bool:
@@ -47,7 +33,7 @@ def _validate_tags_preserved(original_text: str, modified_text: str) -> bool:
     Returns:
         True if tags match exactly (same tags, same order).
     """
-    return _extract_tags(original_text) == _extract_tags(modified_text)
+    return extract_tags(original_text) == extract_tags(modified_text)
 
 
 _SYSTEM_PROMPT = (

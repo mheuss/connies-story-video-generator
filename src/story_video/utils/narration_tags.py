@@ -15,14 +15,42 @@ from pydantic import ValidationError
 
 from story_video.models import NarrationSegment, StoryHeader
 
-__all__ = ["has_narration_tags", "parse_narration_segments", "parse_story_header"]
+__all__ = [
+    "extract_tags",
+    "has_narration_tags",
+    "parse_narration_segments",
+    "parse_story_header",
+    "strip_narration_tags",
+]
 
 _TAG_PATTERN = re.compile(r"\*\*(voice|mood):([^*]+)\*\*")
+_TAG_PATTERN_NON_CAPTURING = re.compile(r"\*\*(?:voice|mood):[^*]+\*\*")
 
 
 def has_narration_tags(text: str) -> bool:
     """Check whether text contains inline voice or mood tags."""
     return bool(_TAG_PATTERN.search(text))
+
+
+def extract_tags(text: str) -> list[str]:
+    """Extract all voice/mood tags from text in order of appearance.
+
+    Args:
+        text: Narration text possibly containing **voice:X** and **mood:X** tags.
+
+    Returns:
+        List of tag strings in order of appearance.
+    """
+    return _TAG_PATTERN_NON_CAPTURING.findall(text)
+
+
+def strip_narration_tags(text: str) -> str:
+    """Remove inline voice/mood tags (and trailing whitespace) from text.
+
+    Tags like ``**voice:narrator**`` and ``**mood:dry**`` are metadata
+    for the TTS pipeline and should be stripped before content analysis.
+    """
+    return re.sub(r"\*\*(?:voice|mood):[^*]+\*\*\s*", "", text)
 
 
 def parse_story_header(text: str) -> tuple[StoryHeader | None, str]:
@@ -45,6 +73,7 @@ def parse_story_header(text: str) -> tuple[StoryHeader | None, str]:
         return None, text
 
     # Find closing delimiter
+    # Known limitation: does not handle --- inside YAML values
     rest = stripped[3:].lstrip("\n")
     closing_idx = rest.find("\n---")
     if closing_idx == -1:
@@ -138,7 +167,7 @@ def parse_narration_segments(
 
         # Apply the tag
         if tag_type == "voice":
-            _resolve_voice(tag_value, voice_map)
+            _resolve_voice(tag_value, voice_map)  # validate label exists in voice_map
             current_voice_label = tag_value
             current_mood = None  # Voice change resets mood
         elif tag_type == "mood":
