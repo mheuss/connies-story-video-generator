@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-02-18
+
 ### Added
 - `--verbose` / `-v` CLI flag for debug logging output
 - Multi-voice narration with inline `**voice:X**` tags and per-story voice mapping via YAML front matter

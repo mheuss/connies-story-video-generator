@@ -20,7 +20,7 @@ The pipeline has three input modes:
 Each mode feeds into a multi-phase pipeline:
 
 1. **Story writing** -- Claude generates (or structures) the narrative
-2. **Narration prep** -- Text is optimized for spoken delivery
+2. **Narration prep** -- Claude API rewrites text for spoken delivery (abbreviations, numbers, punctuation, pronunciation)
 3. **TTS generation** -- OpenAI or ElevenLabs converts text to audio
 4. **Image generation** -- GPT Image 1.5 creates a scene illustration per chapter
 5. **Caption generation** -- Whisper produces word-level timestamps
@@ -39,6 +39,7 @@ The adapt flow works end-to-end. You can give it a story and get back a finished
 ### What's Working
 
 - **Full adapt pipeline** -- 8 phases run sequentially: scene splitting, narration flagging, image prompts, narration prep, TTS, image generation, caption generation, video assembly
+- **LLM-based narration prep** -- Claude API handles abbreviations, numbers, and punctuation contextually instead of brittle regex transforms. Produces a changelog of all modifications.
 - **Multi-voice narration** -- YAML front matter defines voice mappings, inline `**voice:name**` tags switch between voices mid-scene. Works with both OpenAI and ElevenLabs.
 - **Mood tags** -- inline `**mood:thoughtful**` tags add emotional direction. OpenAI uses its `instructions` parameter; ElevenLabs v3 uses freeform audio tags.
 - **Two TTS providers** -- OpenAI (`gpt-4o-mini-tts`) and ElevenLabs (v3). Switch via config file.
@@ -46,7 +47,7 @@ The adapt flow works end-to-end. You can give it a story and get back a finished
 - **Resume from failure** -- pipeline saves state per phase and per scene, picks up where it left off
 - **Semi-automated mode** -- pauses at content phases for human review, or runs straight through in autonomous mode
 - **Cost estimation** -- projected costs before starting, actual costs after completion
-- **767 tests** covering all modules
+- **829 tests** covering all modules
 
 ### Up Next
 
@@ -114,6 +115,7 @@ story-video create --mode adapt --source story.txt --config config_elevenlabs.ya
 ```
 story-video create --mode adapt --source story.txt   # adapt an existing story into a video
 story-video create --mode adapt --source story.txt --autonomous  # skip review checkpoints
+story-video create --mode adapt --source story.txt --verbose     # enable debug logging
 story-video resume                                    # continue the most recent project
 story-video resume --project-id <id>                  # continue a specific project
 story-video estimate --mode adapt --source story.txt  # show cost estimate without starting
