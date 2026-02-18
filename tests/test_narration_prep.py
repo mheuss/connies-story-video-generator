@@ -261,6 +261,15 @@ class TestPrepareNarrationLlm:
         with pytest.raises(NarrationPrepError, match="empty"):
             prepare_narration_llm("Some text.", client)
 
+    def test_tags_only_scene_passes_validation(self):
+        """Scene with only tags and no prose passes tag validation."""
+        from story_video.pipeline.narration_prep import prepare_narration_llm
+
+        tags_only = "**voice:narrator** **mood:calm**"
+        client = self._make_mock_client(modified_text=tags_only)
+        result = prepare_narration_llm(tags_only, client)
+        assert result["modified_text"] == tags_only
+
     def test_calls_generate_structured_with_tool_schema(self):
         from story_video.pipeline.narration_prep import (
             _TOOL_NAME,

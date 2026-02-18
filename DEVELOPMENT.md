@@ -1,0 +1,144 @@
+# Development
+
+## Architectural Decision Records
+
+Significant technical decisions with context and rationale.
+
+### ADR-001: Multi-Phase Pipeline Architecture
+
+**Status:** Accepted
+
+**Context:** Story video generation involves many sequential steps (writing, TTS, image generation, captioning, video assembly). Each step depends on the previous one's output and can fail independently.
+
+**Decision:** Implement a multi-phase pipeline with per-phase state tracking. Each phase saves its output to disk and updates project.json status. The pipeline can pause between phases for human review (semi-automated mode) or run continuously (autonomous mode).
+
+**Consequences:**
+- Enables resume after failure — only re-run from the failed phase
+- Allows human review at critical checkpoints (especially outline phase)
+- Adds complexity in state management (project.json tracking)
+- Per-scene granularity allows partial re-generation
+
+---
+
+### ADR-002: Three Input Modes with Shared Downstream Phases
+
+**Status:** Accepted
+
+**Context:** Users want to generate videos from scratch (original), adapt existing stories (adapt), or create new stories inspired by existing ones (inspired_by). These modes differ in creative phases but share media generation.
+
+**Decision:** Split the pipeline into mode-specific creative flows (Phases 1-5 for original/inspired_by, Phases 1-2 for adapt) that converge at Phase 6 (image prompt generation). Downstream phases (TTS, images, captions, video) are identical across modes.
+
+**Consequences:**
+- Code reuse for media generation phases
+- Mode-specific logic is isolated in story_writer.py
+- The script.json format must accommodate output from all three modes
+- Testing requires covering all three input paths
+
+---
+
+### ADR-003: OpenAI as Primary TTS Provider
+
+**Status:** Superseded by ADR-007
+
+**Context:** Need consistent, affordable narration for 30-120 minute videos. ElevenLabs offers more expressive voices but costs 7-14x more ($22-48 vs $3.24 for 2 hours).
+
+**Decision:** Use OpenAI gpt-4o-mini-tts as the default provider. ElevenLabs is now available as an alternative via `tts.provider: elevenlabs` in config. Both providers implement the `TTSProvider` Protocol with optional `instructions` for emotion direction.
+
+**Consequences:**
+- Cost-effective for long-form content (~$7.41 for 30-minute video)
+- Clean, consistent voice quality with emotion direction via instructions
+- Provider abstraction via Protocol enables both OpenAI and ElevenLabs
+- ElevenLabs available for projects that need more expressive voices
+
+---
+
+### ADR-004: Craft Notes as Style Consistency Anchor
+
+**Status:** Accepted
+
+**Context:** When generating a multi-scene story across many API calls, voice and style can drift. Each scene is generated in a separate Claude call with limited context.
+
+**Decision:** Phase 1 analyzes the style reference to produce explicit "craft notes" — concrete rules about sentence structure, vocabulary, tone, and pacing. These notes are included in every subsequent generation call as a consistency anchor.
+
+**Consequences:**
+- Prevents voice drift across 25+ separate API calls
+- Adds ~500-1000 tokens to every scene generation context
+- Quality of craft notes directly impacts story consistency
+- Works well for original and inspired_by modes; adapt mode skips this
+
+---
+
+### ADR-005: Per-Scene Video Segment Assembly
+
+**Status:** Accepted
+
+**Context:** FFmpeg video assembly for a 30-minute video with 25 scenes is complex. A single monolithic FFmpeg command would be fragile and impossible to debug or resume.
+
+**Decision:** Render each scene as an independent video segment (segment_01.mp4, segment_02.mp4, etc.), then concatenate with crossfade transitions in a final pass.
+
+**Consequences:**
+- Failed scenes only require re-rendering that segment
+- Natural resume capability — skip already-rendered segments
+- Slightly larger intermediate storage (individual segments + final)
+- Crossfade transitions applied during concatenation, not per-segment
+
+---
+
+### ADR-006: Narration Prep as Separate Phase
+
+**Status:** Accepted
+
+**Context:** TTS engines struggle with abbreviations, numbers, and certain punctuation. Raw prose needs transformation for optimal speech output.
+
+**Decision:** Add a dedicated narration prep phase after prose finalization. This produces a parallel `narration_text` field per scene while preserving the original prose. A single Claude API call per scene handles abbreviation expansion, number pronunciation, punctuation smoothing, and contextual decisions. Voice/mood tags are validated after each call (retry once on corruption, then fail). A pronunciation guide accumulates across scenes.
+
+**Consequences:**
+- Original prose preserved for display/review
+- TTS receives optimized text for better audio quality
+- Adds a processing step between writing and audio generation
+- Context-aware decisions (e.g., "Dr." as "Doctor" vs "Drive") handled by LLM
+- Produces a JSON changelog of all modifications for review
+
+---
+
+### ADR-007: Multi-Voice TTS with Inline Tags
+
+**Status:** Accepted
+
+**Context:** Stories with dialogue need different voices for different characters and emotion direction for dramatic effect. The system must support multiple TTS voices per scene while remaining backward compatible with single-voice stories.
+
+**Decision:** Use YAML front matter in the story text to define voice label-to-provider-ID mappings, and inline markdown-bold tags (`**voice:X**`, `**mood:X**`) to switch voice and emotion mid-text. A tag parser splits narration text into `NarrationSegment` objects, each with its own voice and mood. The TTS generator calls `provider.synthesize()` once per segment and concatenates the resulting audio bytes. The `TTSProvider` Protocol gains an optional `instructions` parameter for emotion direction. OpenAI maps this to its native `instructions` field; ElevenLabs translates it to audio tags (`[sorrowful]`, `[excited]`, etc.) prepended to the text.
+
+**Consequences:**
+- Stories without headers work identically to before (backward compatible)
+- Each provider maps mood instructions to its native mechanism (no lowest-common-denominator)
+- MP3/opus byte concatenation works because frames are independently decodable; WAV/FLAC would need FFmpeg concat (deferred)
+- Voice tags reset mood state to avoid stale emotion carrying across characters
+- The `instructions` parameter is a breaking change for custom `TTSProvider` implementations
+
+---
+
+## Technical Notes
+
+### Patterns
+
+- **Provider abstraction:** TTS and image generation use `typing.Protocol` (structural subtyping) for provider interfaces. Each provider implements a `synthesize` / `generate` method. Concrete TTS providers: `OpenAITTSProvider`, `ElevenLabsTTSProvider`. Retry logic lives on the provider method via `@with_retry`, not the public function.
+- **State tracking via project.json:** All phase and scene statuses tracked in a single JSON file. Statuses follow: pending -> in_progress -> completed/awaiting_review/failed.
+- **Running summaries for context management:** Long stories use compressed summaries of prior events to stay within context limits. Each scene generation receives: style reference, craft notes, story bible, outline, previous scene, running summary, and scene beat.
+
+### Gotchas
+
+- Image generation models have no cross-image memory — each image prompt must be fully self-contained with character descriptions
+- GPT Image 1.5 uses different API parameters than DALL-E 3 — `output_format` (png/webp/jpeg) instead of `response_format` (b64_json/url), no `style` parameter, different size options (1024x1024, 1024x1536, 1536x1024, auto). The image generator detects model type via `model.startswith("gpt-image")` to branch parameter construction.
+- OpenAI TTS has a character limit per request — long scenes may need chunking
+- Multi-voice TTS concatenates raw MP3 bytes from multiple `synthesize()` calls. This works because MP3 frames are independently decodable. WAV/FLAC would need FFmpeg concat instead. A format guard in `generate_audio` raises `ValueError` if multi-segment mode is used with a format not in `_CONCAT_SAFE_FORMATS` (mp3, opus).
+- ElevenLabs does not support the `speed` parameter — a warning is logged if speed != 1.0
+- ElevenLabs mood mapping uses audio tags (`[sorrowful]`, `[excited]`) prepended to text. The `MOOD_TO_ELEVENLABS_TAG` dict maps common moods; unknown moods pass through as-is.
+- FFmpeg filter complexity grows with video effects — blur background + still image overlay + subtitle rendering requires careful filter graph construction
+
+### External Integrations
+
+- **Anthropic Claude API** — Story generation (all creative phases). Uses anthropic Python SDK.
+- **OpenAI API** — TTS (gpt-4o-mini-tts model with emotion instructions), image generation (GPT Image 1.5, with DALL-E 3 fallback), caption timing (Whisper). Uses openai Python SDK.
+- **ElevenLabs API** — Alternative TTS provider with audio tag emotion control. Uses elevenlabs Python SDK. Selected via `tts.provider: elevenlabs` in config.
+- **FFmpeg** — Video assembly, filters, transitions, subtitle rendering. Called as subprocess.
