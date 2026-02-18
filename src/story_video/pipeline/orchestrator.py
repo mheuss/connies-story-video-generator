@@ -18,7 +18,14 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from story_video.models import PhaseStatus, PipelinePhase, Scene, StoryHeader
+from story_video.models import (
+    AssetType,
+    PhaseStatus,
+    PipelinePhase,
+    Scene,
+    SceneStatus,
+    StoryHeader,
+)
 from story_video.pipeline.caption_generator import CaptionProvider, generate_captions
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import ImageProvider, generate_image
@@ -308,9 +315,9 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
     a pronunciation guide across scenes (scene 1's entries feed into scene 2's
     prompt). Writes a changelog of all modifications to the project directory.
 
-    Note: Iterates all scenes (not just pending) because narration_text assets
-    are already COMPLETED from the flagging phase. On resume after partial
-    failure, scenes may be re-processed by Claude.
+    Also marks narration_text assets as COMPLETED. In adapt mode this is
+    redundant (flag_narration already set it), but in the creative flow
+    there is no flagging phase, so narration_prep is responsible for it.
     """
     pronunciation_guide: list[dict[str, str]] = []
     changelog: list[dict] = []
@@ -335,6 +342,12 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
         )
 
         scene.narration_text = result["modified_text"]
+        # Mark narration_text COMPLETED if not already set (adapt mode sets it
+        # during NARRATION_FLAGGING; creative flow relies on narration_prep).
+        if scene.asset_status.narration_text != SceneStatus.COMPLETED:
+            state.update_scene_asset(
+                scene.scene_number, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED
+            )
 
         for addition in result["pronunciation_guide_additions"]:
             pronunciation_guide.append(addition)
