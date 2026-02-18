@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** Pending
+**Status:** Completed
 
 **Goal:** Replace regex-based narration prep with Claude API calls for context-aware TTS text preparation.
 

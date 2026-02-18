@@ -24,7 +24,7 @@ Acknowledged items not yet scheduled.
 - [x] [bug] `assemble_video` silently proceeds with zero completed segments — empty segment list passed to `build_concat_command` produces cryptic error. Add explicit guard. (PR-7)
 - [x] [bug] `probe_duration` crashes on empty/non-numeric stdout — `float(result.stdout.strip())` raises bare `ValueError` for corrupt files. Wrap and re-raise as `FFmpegError` with file path context. (PR-8)
 - [x] [bug] `build_concat_command` does not validate `segment_paths` and `segment_durations` have same length — mismatch causes `IndexError` deep in xfade calculation. Add length guard. (PR-9)
-- [ ] [bug] Sentence-ending period lost after abbreviations — `"cats, dogs, etc. She left."` becomes `"...et cetera She left."` missing the period. `_make_replacer` only preserves trailing period at end-of-string or before `\n`. Known limitation — will be superseded by LLM-based TTS text prep feature. (PR-10)
+- [x] [bug] Sentence-ending period lost after abbreviations — superseded by LLM-based TTS text prep (regex code deleted). (PR-10)
 - [x] [test] Orchestrator integration test gap — `test_runs_all_phases_without_pausing` mocks 9 internal functions, can't detect wiring mistakes. Add integration test that only mocks external APIs and exercises actual data flow between phases. (PR-11)
 - [x] [refactor] `_patch_sleep` fixture duplicated in three test files — move to `conftest.py`. (PR-12)
 
@@ -46,7 +46,7 @@ Acknowledged items not yet scheduled.
 
 ---
 
-- [ ] [feature] LLM-based TTS text prep — optional pipeline phase that runs narration text through Claude for context-aware pronunciation preparation. Handles abbreviation expansion, number pronunciation (dates vs quantities), unusual name phonetics, and other contextual decisions that regex rules can't get right. Produces a changelog of all modifications with locations for human review. Supersedes PR-10 and the regex-based `expand_abbreviations` approach. Slots in after narration text finalization, before TTS generation.
+- [x] [feature] LLM-based TTS text prep — replaced regex narration prep with Claude API calls for context-aware pronunciation preparation. Single `generate_structured()` call per scene handles abbreviations, numbers, punctuation, and unusual names. Produces JSON changelog. NARRATION_PREP is now a checkpoint phase. Old regex code deleted. (narration_prep.py, orchestrator.py)
 - [ ] [feature] Implement story writer creative flow — analysis, bible, outline, prose, critique (pipeline/story_writer.py)
 - [ ] [feature] Add marker-based scene splitting as early-exit path in split_scenes (pre-split input support)
 - [ ] [feature] Inline image tags — define image prompts in YAML header, reference with `**image:tag**` in story text. Decouples image transitions from scene boundaries, gives authors direct control over visuals. Requires video assembler refactor for multiple images per scene.
@@ -54,7 +54,7 @@ Acknowledged items not yet scheduled.
 - [ ] [feature] Background music / sound effects — overlay audio tracks at specified points in narration with volume and duration control. Music files supplied by user. FFmpeg amix filter for mixing. Most complex of the three inline tag features.
 - [ ] [feature] FFmpeg concat fallback for non-MP3/opus audio formats — when audio_transition_duration uses WAV, FLAC, or other formats that don't support raw byte concatenation, use `ffmpeg -f concat` to join segment audio files. Low priority: MP3 and opus (the only realistic TTS output formats) support byte concatenation natively.
 - [x] [chore] Add ElevenLabs TTS provider option (merged to main)
-- [ ] [test] Add boundary value tests for `_int_to_words` and `_year_to_words` private helpers (T8)
+- [x] [test] Boundary value tests for `_int_to_words` and `_year_to_words` — no longer applicable, regex code deleted (T8)
 - [ ] [feature] Add async retry support when async API calls are introduced (R4)
 - [ ] [chore] Consider exporting rate constants in cost.py `__all__` if needed by CLI layer (C4)
 - [ ] [docs] Update design.md TTS cost example ($7.41 → $7.42) to match mathematically correct rounding (C5)
@@ -140,6 +140,14 @@ Completed items awaiting migration to VERSION_HISTORY.md at next release.
 - [x] [test] Split multi-assertion tests into focused single-assertion tests (PR-25)
 
 ## Session Notes
+
+### Session — 2026-02-17
+
+**Stopped after:** Completed LLM-based TTS text prep feature (8 tasks). Project review (25 items — all resolved). On branch `feat/llm-tts-text-prep`, pending merge. 777 tests passing.
+
+**What was done:** Replaced regex-based narration prep (`text.py` — 538 lines) with LLM-based `narration_prep.py` using `ClaudeClient.generate_structured()`. Added NARRATION_PREP as checkpoint phase. Pronunciation guide accumulates across scenes. Tag validation with retry-once-then-fail. Deleted old regex code and tests.
+
+**Open questions:** None
 
 ### Session — 2026-02-16
 
