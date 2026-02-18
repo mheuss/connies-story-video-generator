@@ -4,6 +4,7 @@ TDD: These tests are written first, before the implementation.
 Each test verifies one logical behavior of the split_scenes or flag_narration function.
 """
 
+import json
 import logging
 from unittest.mock import MagicMock
 
@@ -16,6 +17,7 @@ from story_video.pipeline.story_writer import (
     SCENE_SPLIT_SCHEMA,
     SCENE_SPLIT_SYSTEM,
     _check_preservation,
+    analyze_source,
     flag_narration,
     split_scenes,
 )
@@ -939,3 +941,180 @@ class TestCheckPreservationEdgeCases:
     def test_whitespace_only_original(self):
         """Whitespace-only original with no scenes passes."""
         _check_preservation("   \n\t  ", [])
+
+
+# ---------------------------------------------------------------------------
+# Analysis phase — test data
+# ---------------------------------------------------------------------------
+
+ANALYSIS_RESPONSE = {
+    "craft_notes": {
+        "sentence_structure": "Short declarative sentences.",
+        "vocabulary": "Simple, concrete nouns.",
+        "tone": "Dry, understated.",
+        "pacing": "Slow openings.",
+        "narrative_voice": "Third person limited, past tense.",
+    },
+    "thematic_brief": {
+        "themes": ["isolation", "duty"],
+        "emotional_arc": "Resignation to acceptance",
+        "central_tension": "Bound to a place",
+        "mood": "Melancholic",
+    },
+    "source_stats": {
+        "word_count": 90,
+        "scene_count_estimate": 3,
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Analysis phase — fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def analysis_client():
+    """Mock ClaudeClient for analysis phase."""
+    client = MagicMock()
+    client.generate_structured.return_value = ANALYSIS_RESPONSE
+    return client
+
+
+@pytest.fixture()
+def inspired_state(tmp_path):
+    """Create a project state in inspired_by mode with source_story.txt."""
+    state = ProjectState.create(
+        project_id="inspired-test",
+        mode=InputMode.INSPIRED_BY,
+        config=AppConfig(),
+        output_dir=tmp_path,
+    )
+    source = tmp_path / "inspired-test" / "source_story.txt"
+    source.write_text(SOURCE_TEXT)
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Analysis phase — tests
+# ---------------------------------------------------------------------------
+
+
+class TestAnalyzeSourceCallsClaude:
+    """analyze_source() sends source material to Claude."""
+
+    def test_source_text_in_user_message(self, inspired_state, analysis_client):
+        """Source material is included in the user message to Claude."""
+        analyze_source(inspired_state, analysis_client)
+
+        call_kwargs = analysis_client.generate_structured.call_args.kwargs
+        assert SOURCE_TEXT in call_kwargs["user_message"]
+
+
+class TestAnalyzeSourceStripsYamlHeader:
+    """analyze_source() strips YAML front matter before sending to Claude."""
+
+    def test_header_stripped_from_user_message(self, tmp_path, analysis_client):
+        """YAML front matter is stripped — Claude receives only the story body."""
+        state = ProjectState.create(
+            project_id="header-analysis-test",
+            mode=InputMode.INSPIRED_BY,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        source = tmp_path / "header-analysis-test" / "source_story.txt"
+        source.write_text(SOURCE_TEXT_WITH_HEADER)
+
+        analyze_source(state, analysis_client)
+
+        call_kwargs = analysis_client.generate_structured.call_args.kwargs
+        user_message = call_kwargs["user_message"]
+        assert "---" not in user_message
+        assert "voices:" not in user_message
+        assert "narrator: alloy" not in user_message
+        assert user_message.startswith("Part one of the story")
+
+
+class TestAnalyzeSourceWritesJson:
+    """analyze_source() writes analysis.json to project directory."""
+
+    def test_analysis_json_written(self, inspired_state, analysis_client):
+        """analysis.json exists after call and contains expected keys."""
+        analyze_source(inspired_state, analysis_client)
+
+        analysis_path = inspired_state.project_dir / "analysis.json"
+        assert analysis_path.exists()
+        data = json.loads(analysis_path.read_text())
+        assert "craft_notes" in data
+        assert "thematic_brief" in data
+        assert "source_stats" in data
+
+
+class TestAnalyzeSourceCraftNotes:
+    """analyze_source() stores craft notes with all required fields."""
+
+    def test_craft_notes_fields(self, inspired_state, analysis_client):
+        """Craft notes contain sentence_structure, vocabulary, tone, pacing, narrative_voice."""
+        analyze_source(inspired_state, analysis_client)
+
+        data = json.loads((inspired_state.project_dir / "analysis.json").read_text())
+        craft = data["craft_notes"]
+        assert "sentence_structure" in craft
+        assert "vocabulary" in craft
+        assert "tone" in craft
+        assert "pacing" in craft
+        assert "narrative_voice" in craft
+
+
+class TestAnalyzeSourceThematicBrief:
+    """analyze_source() stores thematic brief with all required fields."""
+
+    def test_thematic_brief_fields(self, inspired_state, analysis_client):
+        """Thematic brief contains themes, emotional_arc, central_tension, mood."""
+        analyze_source(inspired_state, analysis_client)
+
+        data = json.loads((inspired_state.project_dir / "analysis.json").read_text())
+        brief = data["thematic_brief"]
+        assert "themes" in brief
+        assert "emotional_arc" in brief
+        assert "central_tension" in brief
+        assert "mood" in brief
+
+
+class TestAnalyzeSourceStats:
+    """analyze_source() captures source dimensions."""
+
+    def test_source_stats_present(self, inspired_state, analysis_client):
+        """Source stats contain word_count and scene_count_estimate."""
+        analyze_source(inspired_state, analysis_client)
+
+        data = json.loads((inspired_state.project_dir / "analysis.json").read_text())
+        stats = data["source_stats"]
+        assert "word_count" in stats
+        assert "scene_count_estimate" in stats
+
+
+class TestAnalyzeSourceMissingFile:
+    """analyze_source() raises FileNotFoundError when source_story.txt is missing."""
+
+    def test_missing_source_raises(self, tmp_path, analysis_client):
+        """No source_story.txt raises FileNotFoundError."""
+        state = ProjectState.create(
+            project_id="no-source",
+            mode=InputMode.INSPIRED_BY,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        with pytest.raises(FileNotFoundError, match="source_story.txt"):
+            analyze_source(state, analysis_client)
+
+
+class TestAnalyzeSourceSavesState:
+    """analyze_source() persists state."""
+
+    def test_state_saved(self, inspired_state, analysis_client):
+        """state.save() is called after analysis."""
+        analyze_source(inspired_state, analysis_client)
+
+        reloaded = ProjectState.load(inspired_state.project_dir)
+        assert reloaded.metadata.project_id == "inspired-test"

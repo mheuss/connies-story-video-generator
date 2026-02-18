@@ -5,6 +5,7 @@ Scene splitting divides a source story into scenes at natural boundaries.
 Narration flagging identifies TTS-unfriendly content in scene texts.
 """
 
+import json
 import logging
 
 from story_video.models import AssetType, SceneStatus
@@ -127,6 +128,67 @@ NARRATION_FLAGS_SCHEMA = {
         }
     },
     "required": ["flags"],
+}
+
+ANALYSIS_SYSTEM = (
+    "You are a literary analyst examining a story to extract its writing style"
+    " and thematic essence.\n\n"
+    "Your goal is to capture three things:\n"
+    "1. CRAFT NOTES — How the story is written. Concrete observations about"
+    " sentence structure, vocabulary choices, tone, pacing, and narrative voice."
+    " Be specific: quote patterns, note tendencies, describe rhythms.\n"
+    "2. THEMATIC BRIEF — What the story is about at a deeper level. Themes,"
+    " emotional arc, central tension, overall mood.\n"
+    "3. SOURCE STATS — Word count and estimated number of natural scenes.\n\n"
+    "This analysis will be used to write a NEW, completely different story"
+    " that captures the same feel. Focus on transferable qualities, not"
+    " plot-specific details."
+)
+
+ANALYSIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "craft_notes": {
+            "type": "object",
+            "properties": {
+                "sentence_structure": {"type": "string"},
+                "vocabulary": {"type": "string"},
+                "tone": {"type": "string"},
+                "pacing": {"type": "string"},
+                "narrative_voice": {"type": "string"},
+            },
+            "required": [
+                "sentence_structure",
+                "vocabulary",
+                "tone",
+                "pacing",
+                "narrative_voice",
+            ],
+        },
+        "thematic_brief": {
+            "type": "object",
+            "properties": {
+                "themes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                },
+                "emotional_arc": {"type": "string"},
+                "central_tension": {"type": "string"},
+                "mood": {"type": "string"},
+            },
+            "required": ["themes", "emotional_arc", "central_tension", "mood"],
+        },
+        "source_stats": {
+            "type": "object",
+            "properties": {
+                "word_count": {"type": "integer"},
+                "scene_count_estimate": {"type": "integer"},
+            },
+            "required": ["word_count", "scene_count_estimate"],
+        },
+    },
+    "required": ["craft_notes", "thematic_brief", "source_stats"],
 }
 
 
@@ -325,8 +387,39 @@ def flag_narration(state: ProjectState, client: ClaudeClient) -> None:
 
 
 def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
-    """Analyze source material to extract craft notes and thematic brief."""
-    raise NotImplementedError("analyze_source not yet implemented")
+    """Analyze source material to extract craft notes and thematic brief.
+
+    Reads source_story.txt, sends it to Claude for analysis, and writes
+    the result to analysis.json in the project directory.
+
+    Args:
+        state: Project state (must be in inspired_by mode).
+        client: Claude API client.
+
+    Raises:
+        FileNotFoundError: If source_story.txt doesn't exist.
+    """
+    source_path = state.project_dir / "source_story.txt"
+    if not source_path.exists():
+        msg = f"source_story.txt not found in {state.project_dir}"
+        raise FileNotFoundError(msg)
+    source_text = source_path.read_text(encoding="utf-8")
+
+    # Strip YAML front matter if present
+    _, body_text = parse_story_header(source_text)
+
+    result = client.generate_structured(
+        system=ANALYSIS_SYSTEM,
+        user_message=body_text,
+        tool_name="analyze_source",
+        tool_schema=ANALYSIS_SCHEMA,
+    )
+
+    # Write analysis.json
+    analysis_path = state.project_dir / "analysis.json"
+    analysis_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+
+    state.save()
 
 
 def create_story_bible(state: ProjectState, client: ClaudeClient) -> None:
