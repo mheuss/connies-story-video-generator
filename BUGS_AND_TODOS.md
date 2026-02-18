@@ -12,19 +12,19 @@ Acknowledged items not yet scheduled.
 
 **Test convention violations:**
 
-- [ ] [test] Move 32 inline imports in `test_narration_prep.py` to module level — PR2-6 was marked done but fix did not land (PR3-1)
-- [ ] [test] Split multi-assertion tests in `test_image_generator.py:103,130` — 8 and 5 assertions, PR-25 not applied here (PR3-2)
-- [ ] [test] Split multi-assertion tests in `test_tts_generator.py:114,502` — 5 and 4 assertions, PR-25 not applied here (PR3-3)
-- [ ] [test] Split residual 5-assertion `test_word_count_and_timing` in `test_caption_generator.py:160` — PR2-3 split left this (PR3-4)
+- [x] [test] Move 32 inline imports in `test_narration_prep.py` to module level — PR2-6 was marked done but fix did not land (PR3-1)
+- [x] [test] Split multi-assertion tests in `test_image_generator.py:103,130` — 8 and 5 assertions, PR-25 not applied here (PR3-2)
+- [x] [test] Split multi-assertion tests in `test_tts_generator.py:114,502` — 5 and 4 assertions, PR-25 not applied here (PR3-3)
+- [x] [test] Split residual 5-assertion `test_word_count_and_timing` in `test_caption_generator.py:160` — PR2-3 split left this (PR3-4)
 
 **Validation consistency:**
 
-- [ ] [bug] `CaptionSegment.start/end` missing `ge=0` — inconsistent with `CaptionWord` which has it (models.py) (PR3-5)
+- [x] [bug] `CaptionSegment.start/end` missing `ge=0` — inconsistent with `CaptionWord` which has it (models.py) (PR3-5)
 
 **Duplicated patterns:**
 
-- [ ] [refactor] `_HEX_COLOR_RE` duplicated in `filters.py` and `models.py` — consolidate (PR3-6)
-- [ ] [refactor] Inline resolution regex `r"^\d+x\d+$"` in `models.py` could use `_parse_resolution` from filters.py or shared validator (PR3-7)
+- [x] [refactor] `_HEX_COLOR_RE` duplicated in `filters.py` and `models.py` — consolidate (PR3-6)
+- [x] [refactor] Inline resolution regex `r"^\d+x\d+$"` in `models.py` could use `_parse_resolution` from filters.py or shared validator (PR3-7)
 
 **Missing test coverage:**
 
@@ -37,14 +37,14 @@ Acknowledged items not yet scheduled.
 
 **Error handling:**
 
-- [ ] [bug] `resume` command missing `logger.exception` on pipeline error path (cli.py) (PR3-11)
-- [ ] [bug] `estimate` command catches bare `Exception` instead of specific types (cli.py) (PR3-12)
+- [x] [bug] `resume` command missing `logger.exception` on pipeline error path (cli.py) (PR3-11)
+- [x] [bug] `estimate` command catches bare `Exception` instead of specific types (cli.py) (PR3-12)
 
 **Minor cleanup:**
 
-- [ ] [refactor] `strip_narration_tags` uses inline regex instead of compiled `_TAG_PATTERN` (narration_tags.py) (PR3-13)
-- [ ] [test] `strip_narration_tags` test in `test_story_writer.py` should be in `test_narration_tags.py` (PR3-14)
-- [ ] [refactor] Inline resolution regex in `models.py` could reference shared helper (PR3-15)
+- [x] [refactor] `strip_narration_tags` uses inline regex instead of compiled `_TAG_PATTERN` (narration_tags.py) (PR3-13)
+- [x] [test] `strip_narration_tags` test in `test_story_writer.py` should be in `test_narration_tags.py` (PR3-14)
+- [x] [refactor] Inline resolution regex in `models.py` could reference shared helper (PR3-15)
 
 ### First-Pass Review — 2026-02-18
 
