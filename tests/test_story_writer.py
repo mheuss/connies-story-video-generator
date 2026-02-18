@@ -20,6 +20,7 @@ from story_video.pipeline.story_writer import (
     analyze_source,
     create_outline,
     create_story_bible,
+    critique_and_revise,
     flag_narration,
     split_scenes,
     write_scene_prose,
@@ -1498,3 +1499,168 @@ class TestWriteSceneProseMissingOutline:
         """No outline.json raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError, match="outline.json"):
             write_scene_prose(state_with_bible, prose_client)
+
+
+# ---------------------------------------------------------------------------
+# Critique/revision phase — test data
+# ---------------------------------------------------------------------------
+
+CRITIQUE_RESPONSE_1 = {
+    "revised_prose": "Maren stepped off the ferry onto wet stones. The lighthouse waited.",
+    "changes": ["Shortened the opening — removed redundant description"],
+}
+
+CRITIQUE_RESPONSE_2 = {
+    "revised_prose": "A stranger stood at the door. Rain dripped from his coat.",
+    "changes": ["Split compound sentence for pacing consistency with craft notes"],
+}
+
+CRITIQUE_RESPONSE_3 = {
+    "revised_prose": "The storm shook the windows. They sat without speaking.",
+    "changes": ["Replaced 'rattled' with 'shook' — simpler vocabulary per craft notes"],
+}
+
+
+# ---------------------------------------------------------------------------
+# Critique/revision phase — fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def critique_client():
+    """Mock ClaudeClient for critique phase."""
+    client = MagicMock()
+    client.generate_structured.side_effect = [
+        CRITIQUE_RESPONSE_1,
+        CRITIQUE_RESPONSE_2,
+        CRITIQUE_RESPONSE_3,
+    ]
+    return client
+
+
+@pytest.fixture()
+def state_with_prose(state_with_outline, prose_client):
+    """State with scenes created by write_scene_prose."""
+    write_scene_prose(state_with_outline, prose_client)
+    return state_with_outline
+
+
+# ---------------------------------------------------------------------------
+# Critique/revision phase — tests
+# ---------------------------------------------------------------------------
+
+
+class TestCritiqueAndReviseUpdatesProse:
+    """critique_and_revise() overwrites scene prose with revised version."""
+
+    def test_prose_overwritten(self, state_with_prose, critique_client):
+        """Each scene's prose is replaced with the revised version."""
+        critique_and_revise(state_with_prose, critique_client)
+
+        scenes = state_with_prose.metadata.scenes
+        assert scenes[0].prose == CRITIQUE_RESPONSE_1["revised_prose"]
+        assert scenes[1].prose == CRITIQUE_RESPONSE_2["revised_prose"]
+        assert scenes[2].prose == CRITIQUE_RESPONSE_3["revised_prose"]
+
+
+class TestCritiqueAndReviseCallsPerScene:
+    """critique_and_revise() makes one Claude call per scene."""
+
+    def test_one_call_per_scene(self, state_with_prose, critique_client):
+        """Claude called once per scene."""
+        critique_and_revise(state_with_prose, critique_client)
+
+        assert critique_client.generate_structured.call_count == 3
+
+
+class TestCritiqueAndReviseWritesChangelog:
+    """critique_and_revise() writes change notes to critique/ directory."""
+
+    def test_changelog_files_written(self, state_with_prose, critique_client):
+        """critique/scene_01_changes.md exists with change descriptions."""
+        critique_and_revise(state_with_prose, critique_client)
+
+        critique_dir = state_with_prose.project_dir / "critique"
+        assert (critique_dir / "scene_001_changes.md").exists()
+        content = (critique_dir / "scene_001_changes.md").read_text()
+        assert "Shortened the opening" in content
+
+
+class TestCritiqueAndReviseCraftNotesInContext:
+    """critique_and_revise() includes craft notes in Claude calls."""
+
+    def test_craft_notes_in_user_message(self, state_with_prose, critique_client):
+        """Craft notes are in the user message for consistency checking."""
+        critique_and_revise(state_with_prose, critique_client)
+
+        call_kwargs = critique_client.generate_structured.call_args_list[0].kwargs
+        assert "sentence_structure" in call_kwargs["user_message"]
+
+
+class TestCritiqueAndReviseMissingAnalysis:
+    """critique_and_revise() raises when analysis.json is missing."""
+
+    def test_missing_analysis_raises(self, tmp_path, critique_client):
+        """No analysis.json raises FileNotFoundError."""
+        state = ProjectState.create(
+            project_id="no-analysis",
+            mode=InputMode.INSPIRED_BY,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        state.add_scene(1, "Test", "Some prose.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        with pytest.raises(FileNotFoundError, match="analysis.json"):
+            critique_and_revise(state, critique_client)
+
+
+class TestCritiqueAndReviseNoScenes:
+    """critique_and_revise() raises when no scenes exist."""
+
+    def test_no_scenes_raises(self, inspired_state, critique_client):
+        """Empty scenes list raises ValueError."""
+        # Write analysis.json so that's not the failure point
+        (inspired_state.project_dir / "analysis.json").write_text(json.dumps(ANALYSIS_RESPONSE))
+        with pytest.raises(ValueError, match="No scenes"):
+            critique_and_revise(inspired_state, critique_client)
+
+
+class TestCritiqueAndReviseUpdatesMdFiles:
+    """critique_and_revise() updates the scene .md files with revised prose."""
+
+    def test_md_files_updated(self, state_with_prose, critique_client):
+        """scenes/*.md files contain revised prose after critique."""
+        critique_and_revise(state_with_prose, critique_client)
+
+        scenes_dir = state_with_prose.project_dir / "scenes"
+        content = (scenes_dir / "scene_001.md").read_text()
+        assert CRITIQUE_RESPONSE_1["revised_prose"] in content
+
+
+class TestCritiqueAndReviseResume:
+    """critique_and_revise() skips already-critiqued scenes on resume."""
+
+    def test_resume_skips_critiqued_scenes(self, state_with_prose, critique_client):
+        """Scenes with existing changelog files are skipped on resume."""
+        # Manually create changelog for scene 1 (simulating prior run)
+        critique_dir = state_with_prose.project_dir / "critique"
+        critique_dir.mkdir(exist_ok=True)
+        (critique_dir / "scene_001_changes.md").write_text(
+            "# Scene 1: The Arrival — Changes\n\n- Already revised\n"
+        )
+
+        # Only 2 calls needed (scenes 2 and 3)
+        critique_client.generate_structured.side_effect = [
+            CRITIQUE_RESPONSE_2,
+            CRITIQUE_RESPONSE_3,
+        ]
+
+        critique_and_revise(state_with_prose, critique_client)
+
+        # Scene 1 prose unchanged (not re-critiqued)
+        assert state_with_prose.metadata.scenes[0].prose == PROSE_RESPONSE_1["prose"]
+        # Scenes 2 and 3 revised
+        assert state_with_prose.metadata.scenes[1].prose == CRITIQUE_RESPONSE_2["revised_prose"]
+        assert critique_client.generate_structured.call_count == 2

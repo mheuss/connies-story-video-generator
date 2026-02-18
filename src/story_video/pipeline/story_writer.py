@@ -302,6 +302,34 @@ SCENE_PROSE_SCHEMA = {
     "required": ["prose", "summary"],
 }
 
+CRITIQUE_SYSTEM = (
+    "You are reviewing a scene for quality. Check for:\n"
+    "- Consistency with craft notes (style drift)\n"
+    "- Plot coherence with the story so far\n"
+    "- Pacing issues\n"
+    "- Flat or unnatural dialogue\n"
+    "- Unclear prose\n\n"
+    "Return the full revised text and a brief list of what you changed"
+    " and why. If the scene needs no changes, return the original text"
+    " with an empty changes list."
+)
+
+CRITIQUE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "revised_prose": {
+            "type": "string",
+            "description": "The full revised scene text",
+        },
+        "changes": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of changes made and why",
+        },
+    },
+    "required": ["revised_prose", "changes"],
+}
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -736,8 +764,86 @@ def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
 
 
 def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
-    """Review and revise each scene's prose in a single pass."""
-    raise NotImplementedError("critique_and_revise not yet implemented")
+    """Review and revise each scene's prose in a single pass.
+
+    Reads analysis.json for craft notes and thematic brief. For each scene,
+    sends prose + craft notes to Claude for critique. Overwrites scene.prose
+    with revised version. Writes change notes to critique/ directory.
+
+    Args:
+        state: Project state with populated scenes.
+        client: Claude API client.
+
+    Raises:
+        FileNotFoundError: If analysis.json is missing.
+        ValueError: If no scenes exist.
+    """
+    analysis_path = state.project_dir / "analysis.json"
+    if not analysis_path.exists():
+        msg = f"analysis.json not found in {state.project_dir}"
+        raise FileNotFoundError(msg)
+    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+
+    scenes = state.metadata.scenes
+    if not scenes:
+        msg = "No scenes in project"
+        raise ValueError(msg)
+
+    craft_notes_text = json.dumps(analysis["craft_notes"], indent=2)
+    thematic_brief_text = json.dumps(analysis["thematic_brief"], indent=2)
+
+    critique_dir = state.project_dir / "critique"
+    critique_dir.mkdir(exist_ok=True)
+
+    scenes_dir = state.project_dir / "scenes"
+
+    for scene in scenes:
+        # Resume support: skip scenes that already have a changelog file
+        changes_filename = f"scene_{scene.scene_number:03d}_changes.md"
+        if (critique_dir / changes_filename).exists():
+            logger.info("Scene %d already critiqued — skipping", scene.scene_number)
+            continue
+
+        parts = [
+            "## Craft Notes\n",
+            craft_notes_text,
+            "\n## Thematic Brief\n",
+            thematic_brief_text,
+            f"\n## Scene {scene.scene_number}: {scene.title}\n",
+            scene.prose,
+        ]
+        user_message = "\n".join(parts)
+
+        result = client.generate_structured(
+            system=CRITIQUE_SYSTEM,
+            user_message=user_message,
+            tool_name="critique_scene",
+            tool_schema=CRITIQUE_SCHEMA,
+        )
+
+        # Overwrite prose
+        scene.prose = result["revised_prose"]
+
+        # Write change notes
+        if result["changes"]:
+            change_lines = [f"# Scene {scene.scene_number}: {scene.title} — Changes\n"]
+            for change in result["changes"]:
+                change_lines.append(f"- {change}")
+            (critique_dir / changes_filename).write_text(
+                "\n".join(change_lines) + "\n", encoding="utf-8"
+            )
+        else:
+            (critique_dir / changes_filename).write_text(
+                f"# Scene {scene.scene_number}: {scene.title} — No changes needed.\n",
+                encoding="utf-8",
+            )
+
+        # Update .md file with revised prose
+        md_filename = f"scene_{scene.scene_number:03d}.md"
+        md_content = f"# Scene {scene.scene_number}: {scene.title}\n\n{scene.prose}\n"
+        (scenes_dir / md_filename).write_text(md_content, encoding="utf-8")
+
+    state.save()
 
 
 # ---------------------------------------------------------------------------
