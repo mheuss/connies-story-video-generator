@@ -191,6 +191,58 @@ ANALYSIS_SCHEMA = {
     "required": ["craft_notes", "thematic_brief", "source_stats"],
 }
 
+STORY_BIBLE_SYSTEM = (
+    "You are creating the foundation for a new, original story.\n\n"
+    "Use the thematic brief as inspiration — same emotional territory,"
+    " completely different characters and world. The craft notes describe"
+    " the writing style you will use later.\n\n"
+    "Create:\n"
+    "- Characters: name, role (protagonist/antagonist/supporting),"
+    " physical and personality description (2-3 sentences), emotional arc\n"
+    "- Setting: place, time period, atmosphere\n"
+    "- Premise: one-paragraph story summary\n"
+    "- Rules: world-building constraints (e.g. 'no magic')\n\n"
+    "Keep it compact — this context is included in every subsequent API call."
+)
+
+STORY_BIBLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "characters": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "role": {
+                        "type": "string",
+                        "enum": ["protagonist", "antagonist", "supporting"],
+                    },
+                    "description": {"type": "string"},
+                    "arc": {"type": "string"},
+                },
+                "required": ["name", "role", "description", "arc"],
+            },
+            "minItems": 1,
+        },
+        "setting": {
+            "type": "object",
+            "properties": {
+                "place": {"type": "string"},
+                "time_period": {"type": "string"},
+                "atmosphere": {"type": "string"},
+            },
+            "required": ["place", "time_period", "atmosphere"],
+        },
+        "premise": {"type": "string"},
+        "rules": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["characters", "setting", "premise", "rules"],
+}
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -423,8 +475,52 @@ def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
 
 
 def create_story_bible(state: ProjectState, client: ClaudeClient) -> None:
-    """Create story bible with characters, setting, and world rules."""
-    raise NotImplementedError("create_story_bible not yet implemented")
+    """Create story bible with characters, setting, and world rules.
+
+    Reads analysis.json for craft notes and thematic brief. Optionally
+    reads premise.txt for user creative direction. Writes story_bible.json.
+
+    Args:
+        state: Project state.
+        client: Claude API client.
+
+    Raises:
+        FileNotFoundError: If analysis.json doesn't exist.
+    """
+    analysis_path = state.project_dir / "analysis.json"
+    if not analysis_path.exists():
+        msg = f"analysis.json not found in {state.project_dir}"
+        raise FileNotFoundError(msg)
+    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+
+    # Build user message
+    parts = [
+        "## Craft Notes\n",
+        json.dumps(analysis["craft_notes"], indent=2),
+        "\n## Thematic Brief\n",
+        json.dumps(analysis["thematic_brief"], indent=2),
+    ]
+
+    # Optional premise
+    premise_path = state.project_dir / "premise.txt"
+    if premise_path.exists():
+        premise = premise_path.read_text(encoding="utf-8").strip()
+        if premise:
+            parts.append(f"\n## Author Direction\n\nThe author has requested: '{premise}'")
+
+    user_message = "\n".join(parts)
+
+    result = client.generate_structured(
+        system=STORY_BIBLE_SYSTEM,
+        user_message=user_message,
+        tool_name="create_story_bible",
+        tool_schema=STORY_BIBLE_SCHEMA,
+    )
+
+    bible_path = state.project_dir / "story_bible.json"
+    bible_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+
+    state.save()
 
 
 def create_outline(state: ProjectState, client: ClaudeClient) -> None:

@@ -18,6 +18,7 @@ from story_video.pipeline.story_writer import (
     SCENE_SPLIT_SYSTEM,
     _check_preservation,
     analyze_source,
+    create_story_bible,
     flag_narration,
     split_scenes,
 )
@@ -1118,3 +1119,106 @@ class TestAnalyzeSourceSavesState:
 
         reloaded = ProjectState.load(inspired_state.project_dir)
         assert reloaded.metadata.project_id == "inspired-test"
+
+
+# ---------------------------------------------------------------------------
+# Story bible phase — test data
+# ---------------------------------------------------------------------------
+
+BIBLE_RESPONSE = {
+    "characters": [
+        {
+            "name": "Maren",
+            "role": "protagonist",
+            "description": "A quiet woman in her fifties. Weathered hands, sharp eyes.",
+            "arc": "Resignation to cautious hope",
+        },
+    ],
+    "setting": {
+        "place": "A remote island lighthouse",
+        "time_period": "1970s",
+        "atmosphere": "Grey, salt-weathered, isolated",
+    },
+    "premise": "A lighthouse keeper receives an unexpected visitor.",
+    "rules": ["No magic or supernatural elements"],
+}
+
+
+# ---------------------------------------------------------------------------
+# Story bible phase — fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def bible_client():
+    """Mock ClaudeClient for story bible phase."""
+    client = MagicMock()
+    client.generate_structured.return_value = BIBLE_RESPONSE
+    return client
+
+
+@pytest.fixture()
+def state_with_analysis(inspired_state, analysis_client):
+    """State with analysis.json already written."""
+    analyze_source(inspired_state, analysis_client)
+    return inspired_state
+
+
+# ---------------------------------------------------------------------------
+# Story bible phase — tests
+# ---------------------------------------------------------------------------
+
+
+class TestCreateStoryBibleCallsClaude:
+    """create_story_bible() sends analysis context to Claude."""
+
+    def test_craft_notes_in_context(self, state_with_analysis, bible_client):
+        """Craft notes from analysis are included in the user message."""
+        create_story_bible(state_with_analysis, bible_client)
+
+        call_kwargs = bible_client.generate_structured.call_args.kwargs
+        assert "sentence_structure" in call_kwargs["user_message"]
+        assert "Short declarative" in call_kwargs["user_message"]
+
+
+class TestCreateStoryBibleWritesJson:
+    """create_story_bible() writes story_bible.json."""
+
+    def test_bible_json_written(self, state_with_analysis, bible_client):
+        """story_bible.json exists and contains characters and setting."""
+        create_story_bible(state_with_analysis, bible_client)
+
+        bible_path = state_with_analysis.project_dir / "story_bible.json"
+        assert bible_path.exists()
+        data = json.loads(bible_path.read_text())
+        assert "characters" in data
+        assert "setting" in data
+        assert "premise" in data
+
+
+class TestCreateStoryBibleWithPremise:
+    """create_story_bible() includes premise hint when premise.txt exists."""
+
+    def test_premise_in_user_message(self, state_with_analysis, bible_client):
+        """premise.txt content is included in the user message."""
+        (state_with_analysis.project_dir / "premise.txt").write_text("set it in space")
+        create_story_bible(state_with_analysis, bible_client)
+
+        call_kwargs = bible_client.generate_structured.call_args.kwargs
+        assert "set it in space" in call_kwargs["user_message"]
+
+    def test_no_premise_file_still_works(self, state_with_analysis, bible_client):
+        """Without premise.txt, bible creation still works."""
+        create_story_bible(state_with_analysis, bible_client)
+
+        bible_path = state_with_analysis.project_dir / "story_bible.json"
+        assert bible_path.exists()
+
+
+class TestCreateStoryBibleMissingAnalysis:
+    """create_story_bible() raises when analysis.json is missing."""
+
+    def test_missing_analysis_raises(self, inspired_state, bible_client):
+        """No analysis.json raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError, match="analysis.json"):
+            create_story_bible(inspired_state, bible_client)
