@@ -265,9 +265,6 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
     a pronunciation guide across scenes (scene 1's entries feed into scene 2's
     prompt). Writes a changelog of all modifications to the project directory.
 
-    Runs on ALL scenes (not just pending ones) because narration_text assets
-    are already COMPLETED from the flagging phase.
-
     Note: Iterates all scenes (not just pending) because narration_text assets
     are already COMPLETED from the flagging phase. On resume after partial
     failure, scenes may be re-processed by Claude.

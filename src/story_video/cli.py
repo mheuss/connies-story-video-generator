@@ -404,6 +404,7 @@ def resume(
     try:
         _run_with_providers(state)
     except Exception as exc:
+        logger.exception("Pipeline failed")
         console.print(Panel(str(exc), title="Pipeline Error", border_style="red"))
         raise typer.Exit(1)
 
@@ -437,7 +438,7 @@ def estimate(
     # --- Load config ---
     try:
         app_config = load_config(config_path=config, cli_overrides=cli_overrides)
-    except Exception as exc:
+    except (FileNotFoundError, ValueError, ValidationError) as exc:
         console.print(Panel(str(exc), title="Configuration Error", border_style="red"))
         raise typer.Exit(1)
 

@@ -44,13 +44,16 @@ def extract_tags(text: str) -> list[str]:
     return _TAG_PATTERN_NON_CAPTURING.findall(text)
 
 
+_STRIP_PATTERN = re.compile(r"\*\*(?:voice|mood):[^*]+\*\*\s*")
+
+
 def strip_narration_tags(text: str) -> str:
     """Remove inline voice/mood tags (and trailing whitespace) from text.
 
     Tags like ``**voice:narrator**`` and ``**mood:dry**`` are metadata
     for the TTS pipeline and should be stripped before content analysis.
     """
-    return re.sub(r"\*\*(?:voice|mood):[^*]+\*\*\s*", "", text)
+    return _STRIP_PATTERN.sub("", text)
 
 
 def parse_story_header(text: str) -> tuple[StoryHeader | None, str]:

@@ -5,6 +5,7 @@ Each test verifies one logical behavior of the orchestrator module.
 All pipeline module functions are mocked — no real API calls.
 """
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,6 +25,7 @@ from story_video.pipeline.orchestrator import (
     _determine_start_phase,
     _dispatch_phase,
     _parse_source_header,
+    _run_narration_prep,
     run_pipeline,
 )
 from story_video.state import ProjectState
@@ -553,6 +555,25 @@ class TestRunPipelineNarrationPrep:
 
         # NARRATION_TEXT status still COMPLETED (not changed by narration_prep)
         assert scene.asset_status.narration_text == SceneStatus.COMPLETED
+
+    @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
+    def test_narration_prep_logs_warning_for_empty_text(self, mock_prep, tmp_path, caplog):
+        """Scene with no narration_text or prose logs a warning and is skipped."""
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.TEXT)
+
+        # Clear both narration_text and prose so the scene has no text.
+        # Bypass Pydantic's min_length=1 validator on prose by writing to
+        # __dict__ directly — this simulates a corrupted/incomplete scene.
+        scene = state.metadata.scenes[0]
+        scene.narration_text = None
+        scene.__dict__["prose"] = ""
+
+        with caplog.at_level(logging.WARNING, logger="story_video.pipeline.orchestrator"):
+            _run_narration_prep(state, MagicMock())
+
+        assert "Scene 1 has no narration_text or prose" in caplog.text
+        mock_prep.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

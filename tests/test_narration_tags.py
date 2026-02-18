@@ -6,6 +6,7 @@ from story_video.utils.narration_tags import (
     has_narration_tags,
     parse_narration_segments,
     parse_story_header,
+    strip_narration_tags,
 )
 
 
@@ -186,3 +187,28 @@ class TestParseNarrationSegmentsEdgeCases:
         """Empty string produces no segments."""
         result = parse_narration_segments("", self.VOICE_MAP, "narrator", scene_number=1)
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Strip narration tags
+# ---------------------------------------------------------------------------
+
+
+class TestStripNarrationTags:
+    """strip_narration_tags() removes voice/mood tags from text."""
+
+    def test_strips_voice_tags(self):
+        text = "**voice:narrator** Hello. **voice:villain** Goodbye."
+        assert strip_narration_tags(text) == "Hello. Goodbye."
+
+    def test_strips_mood_tags(self):
+        text = '**mood:angry** "Never!" he cried.'
+        assert strip_narration_tags(text) == '"Never!" he cried.'
+
+    def test_strips_combined_tags(self):
+        text = '**voice:old_man** **mood:dry** "Black or white?"'
+        assert strip_narration_tags(text) == '"Black or white?"'
+
+    def test_no_tags_unchanged(self):
+        text = "The hero spoke plainly."
+        assert strip_narration_tags(text) == text

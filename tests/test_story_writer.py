@@ -20,7 +20,6 @@ from story_video.pipeline.story_writer import (
     split_scenes,
 )
 from story_video.state import ProjectState
-from story_video.utils.narration_tags import strip_narration_tags
 
 # ---------------------------------------------------------------------------
 # Test data
@@ -671,31 +670,6 @@ class TestFlagNarrationStripsVoiceTags:
         # Voice tags preserved
         assert "**voice:narrator**" in scene.narration_text
         assert "**voice:old_man**" in scene.narration_text
-
-
-# ---------------------------------------------------------------------------
-# Strip narration tags helper
-# ---------------------------------------------------------------------------
-
-
-class TestStripNarrationTags:
-    """strip_narration_tags() removes voice/mood tags from text."""
-
-    def test_strips_voice_tags(self):
-        text = "**voice:narrator** Hello. **voice:villain** Goodbye."
-        assert strip_narration_tags(text) == "Hello. Goodbye."
-
-    def test_strips_mood_tags(self):
-        text = '**mood:angry** "Never!" he cried.'
-        assert strip_narration_tags(text) == '"Never!" he cried.'
-
-    def test_strips_combined_tags(self):
-        text = '**voice:old_man** **mood:dry** "Black or white?"'
-        assert strip_narration_tags(text) == '"Black or white?"'
-
-    def test_no_tags_unchanged(self):
-        text = "The hero spoke plainly."
-        assert strip_narration_tags(text) == text
 
 
 # ---------------------------------------------------------------------------
