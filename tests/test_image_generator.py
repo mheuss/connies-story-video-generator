@@ -97,11 +97,12 @@ class TestOpenAIImageProviderReturnsDecodedBytes:
 # ---------------------------------------------------------------------------
 
 
-class TestOpenAIImageProviderPassesParams:
-    """OpenAIImageProvider.generate() passes correct parameters to the SDK."""
+class TestDallePassesParams:
+    """OpenAIImageProvider.generate() passes correct parameters for DALL-E models."""
 
-    def test_dalle_uses_response_format(self, mock_openai):
-        """DALL-E models use response_format=b64_json."""
+    @pytest.fixture()
+    def dalle_call_kwargs(self, mock_openai):
+        """Call generate() with DALL-E params and return the SDK call kwargs."""
         image_data = MagicMock()
         image_data.b64_json = FAKE_B64
         response = MagicMock()
@@ -117,18 +118,47 @@ class TestOpenAIImageProviderPassesParams:
             style="natural",
         )
 
-        call_kwargs = mock_openai.images.generate.call_args.kwargs
-        assert call_kwargs["model"] == "dall-e-3"
-        assert call_kwargs["prompt"] == "A castle on a hill"
-        assert call_kwargs["size"] == "1536x1024"
-        assert call_kwargs["quality"] == "hd"
-        assert call_kwargs["style"] == "natural"
-        assert call_kwargs["response_format"] == "b64_json"
-        assert "output_format" not in call_kwargs
-        assert call_kwargs["n"] == 1
+        return mock_openai.images.generate.call_args.kwargs
 
-    def test_gpt_image_uses_output_format(self, mock_openai):
-        """GPT Image models use output_format=png (no response_format, no style)."""
+    def test_dalle_passes_model(self, dalle_call_kwargs):
+        """DALL-E model name is forwarded to the SDK."""
+        assert dalle_call_kwargs["model"] == "dall-e-3"
+
+    def test_dalle_passes_prompt(self, dalle_call_kwargs):
+        """Prompt text is forwarded to the SDK."""
+        assert dalle_call_kwargs["prompt"] == "A castle on a hill"
+
+    def test_dalle_passes_size(self, dalle_call_kwargs):
+        """Size is forwarded to the SDK."""
+        assert dalle_call_kwargs["size"] == "1536x1024"
+
+    def test_dalle_passes_quality(self, dalle_call_kwargs):
+        """Quality is forwarded to the SDK."""
+        assert dalle_call_kwargs["quality"] == "hd"
+
+    def test_dalle_passes_style(self, dalle_call_kwargs):
+        """Style is forwarded to the SDK."""
+        assert dalle_call_kwargs["style"] == "natural"
+
+    def test_dalle_uses_response_format_b64_json(self, dalle_call_kwargs):
+        """DALL-E models use response_format=b64_json."""
+        assert dalle_call_kwargs["response_format"] == "b64_json"
+
+    def test_dalle_excludes_output_format(self, dalle_call_kwargs):
+        """DALL-E models do not send output_format."""
+        assert "output_format" not in dalle_call_kwargs
+
+    def test_dalle_requests_single_image(self, dalle_call_kwargs):
+        """DALL-E models request exactly one image."""
+        assert dalle_call_kwargs["n"] == 1
+
+
+class TestGptImagePassesParams:
+    """OpenAIImageProvider.generate() passes correct parameters for GPT Image models."""
+
+    @pytest.fixture()
+    def gpt_image_call_kwargs(self, mock_openai):
+        """Call generate() with GPT Image params and return the SDK call kwargs."""
         image_data = MagicMock()
         image_data.b64_json = FAKE_B64
         response = MagicMock()
@@ -143,12 +173,27 @@ class TestOpenAIImageProviderPassesParams:
             quality="medium",
         )
 
-        call_kwargs = mock_openai.images.generate.call_args.kwargs
-        assert call_kwargs["output_format"] == "png"
-        assert "response_format" not in call_kwargs
-        assert "style" not in call_kwargs
-        assert call_kwargs["model"] == "gpt-image-1.5"
-        assert call_kwargs["quality"] == "medium"
+        return mock_openai.images.generate.call_args.kwargs
+
+    def test_gpt_image_passes_model(self, gpt_image_call_kwargs):
+        """GPT Image model name is forwarded to the SDK."""
+        assert gpt_image_call_kwargs["model"] == "gpt-image-1.5"
+
+    def test_gpt_image_passes_prompt(self, gpt_image_call_kwargs):
+        """Prompt text is forwarded to the SDK."""
+        assert gpt_image_call_kwargs["prompt"] == "A castle on a hill"
+
+    def test_gpt_image_passes_size(self, gpt_image_call_kwargs):
+        """Size is forwarded to the SDK."""
+        assert gpt_image_call_kwargs["size"] == "1536x1024"
+
+    def test_gpt_image_passes_quality(self, gpt_image_call_kwargs):
+        """Quality is forwarded to the SDK."""
+        assert gpt_image_call_kwargs["quality"] == "medium"
+
+    def test_gpt_image_uses_output_format_webp(self, gpt_image_call_kwargs):
+        """GPT Image models use output_format=png."""
+        assert gpt_image_call_kwargs["output_format"] == "png"
 
 
 # ---------------------------------------------------------------------------

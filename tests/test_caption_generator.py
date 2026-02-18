@@ -157,12 +157,21 @@ class TestTranscribeReturnsCaptionResult:
         assert seg.start == 0.0
         assert seg.end == 2.5
 
-    def test_word_count_and_timing(self, caption_result):
-        """Word count and representative word timings match the Whisper response."""
+    def test_word_count(self, caption_result):
+        """Result contains the expected number of words."""
         assert len(caption_result.words) == 4
+
+    def test_first_word_text(self, caption_result):
+        """First word text matches the Whisper response."""
         assert caption_result.words[0].word == "The"
+
+    def test_first_word_timing(self, caption_result):
+        """First word start and end times match the Whisper response."""
         assert caption_result.words[0].start == 0.0
         assert caption_result.words[0].end == 0.3
+
+    def test_last_word_text(self, caption_result):
+        """Last word text matches the Whisper response."""
         assert caption_result.words[3].word == "on."
 
     def test_language(self, caption_result):

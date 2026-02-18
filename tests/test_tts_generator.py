@@ -111,8 +111,9 @@ class TestOpenAITTSProviderReturnsBytes:
 class TestOpenAITTSProviderPassesParams:
     """OpenAITTSProvider.synthesize() passes correct parameters to the SDK."""
 
-    def test_synthesize_passes_params_to_sdk(self, mock_openai):
-        """synthesize() forwards all parameters to audio.speech.create."""
+    @pytest.fixture()
+    def synthesize_call_kwargs(self, mock_openai):
+        """Call synthesize() and return the SDK call kwargs."""
         response = MagicMock()
         response.content = b"audio-bytes"
         mock_openai.audio.speech.create.return_value = response
@@ -126,12 +127,27 @@ class TestOpenAITTSProviderPassesParams:
             output_format="opus",
         )
 
-        call_kwargs = mock_openai.audio.speech.create.call_args.kwargs
-        assert call_kwargs["model"] == "tts-1"
-        assert call_kwargs["voice"] == "echo"
-        assert call_kwargs["input"] == "Once upon a time"
-        assert call_kwargs["speed"] == 1.5
-        assert call_kwargs["response_format"] == "opus"
+        return mock_openai.audio.speech.create.call_args.kwargs
+
+    def test_synthesize_passes_model(self, synthesize_call_kwargs):
+        """synthesize() forwards model to audio.speech.create."""
+        assert synthesize_call_kwargs["model"] == "tts-1"
+
+    def test_synthesize_passes_voice(self, synthesize_call_kwargs):
+        """synthesize() forwards voice to audio.speech.create."""
+        assert synthesize_call_kwargs["voice"] == "echo"
+
+    def test_synthesize_passes_input_text(self, synthesize_call_kwargs):
+        """synthesize() forwards text as input to audio.speech.create."""
+        assert synthesize_call_kwargs["input"] == "Once upon a time"
+
+    def test_synthesize_passes_speed(self, synthesize_call_kwargs):
+        """synthesize() forwards speed to audio.speech.create."""
+        assert synthesize_call_kwargs["speed"] == 1.5
+
+    def test_synthesize_passes_response_format(self, synthesize_call_kwargs):
+        """synthesize() forwards output_format as response_format to audio.speech.create."""
+        assert synthesize_call_kwargs["response_format"] == "opus"
 
 
 # ---------------------------------------------------------------------------
@@ -499,8 +515,9 @@ class TestGenerateAudioConfigOutputFormat:
 class TestGenerateAudioConfigParamsPassedToProvider:
     """generate_audio() passes TTS config values to the provider."""
 
-    def test_generate_audio_passes_config_to_provider(self, tmp_path, mock_provider):
-        """voice, model, speed, output_format from config are passed to synthesize."""
+    @pytest.fixture()
+    def config_call_kwargs(self, tmp_path, mock_provider):
+        """Generate audio with custom config and return the synthesize call kwargs."""
         config = AppConfig(
             tts=TTSConfig(voice="echo", model="tts-1", speed=1.5, output_format="aac")
         )
@@ -517,11 +534,23 @@ class TestGenerateAudioConfigParamsPassedToProvider:
         scene = state.metadata.scenes[0]
         generate_audio(scene, state, mock_provider)
 
-        call_kwargs = mock_provider.synthesize.call_args.kwargs
-        assert call_kwargs["voice"] == "echo"
-        assert call_kwargs["model"] == "tts-1"
-        assert call_kwargs["speed"] == 1.5
-        assert call_kwargs["output_format"] == "aac"
+        return mock_provider.synthesize.call_args.kwargs
+
+    def test_generate_audio_passes_voice(self, config_call_kwargs):
+        """voice from config is passed to synthesize."""
+        assert config_call_kwargs["voice"] == "echo"
+
+    def test_generate_audio_passes_model(self, config_call_kwargs):
+        """model from config is passed to synthesize."""
+        assert config_call_kwargs["model"] == "tts-1"
+
+    def test_generate_audio_passes_speed(self, config_call_kwargs):
+        """speed from config is passed to synthesize."""
+        assert config_call_kwargs["speed"] == 1.5
+
+    def test_generate_audio_passes_output_format(self, config_call_kwargs):
+        """output_format from config is passed to synthesize."""
+        assert config_call_kwargs["output_format"] == "aac"
 
 
 # ---------------------------------------------------------------------------
