@@ -48,7 +48,7 @@ The adapt and inspired_by flows work end-to-end. You can give it a story and get
 - **Resume from failure** -- pipeline saves state per phase and per scene, picks up where it left off
 - **Semi-automated mode** -- pauses at content phases for human review, or runs straight through in autonomous mode
 - **Cost estimation** -- projected costs before starting, actual costs after completion
-- **877 tests** covering all modules
+- **879 tests** covering all modules
 
 ### Up Next
 
@@ -109,21 +109,20 @@ tts:
 Then pass it with `--config`:
 
 ```
-story-video create --mode adapt --source story.txt --config config_elevenlabs.yaml
+story-video create --mode adapt --source-material story.txt --config config_elevenlabs.yaml
 ```
 
 ### Commands
 
 ```
-story-video create --mode adapt --source story.txt   # adapt an existing story into a video
-story-video create --mode inspired_by --source story.txt           # new story inspired by the source
-story-video create --mode inspired_by --source story.txt --premise "set it in space"  # with creative direction
-story-video create --mode adapt --source story.txt --autonomous  # skip review checkpoints
-story-video create --mode adapt --source story.txt --verbose     # enable debug logging
+story-video create --mode adapt --source-material story.txt                         # adapt an existing story
+story-video create --mode inspired_by --source-material story.txt                   # new story inspired by source
+story-video create --mode inspired_by --source-material story.txt --premise "..."   # with creative direction
+story-video create --mode adapt --source-material story.txt --autonomous            # skip review checkpoints
 story-video resume                                    # continue the most recent project
-story-video resume --project-id <id>                  # continue a specific project
-story-video estimate --mode adapt --source story.txt  # show cost estimate without starting
-story-video status --project-id <id>                  # show current state of a project
+story-video resume <project-id>                       # continue a specific project
+story-video estimate --mode adapt --source-material story.txt  # show cost estimate without starting
+story-video status <project-id>                       # show current state of a project
 story-video list                                      # list all projects
 ```
 
