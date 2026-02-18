@@ -1664,3 +1664,100 @@ class TestCritiqueAndReviseResume:
         # Scenes 2 and 3 revised
         assert state_with_prose.metadata.scenes[1].prose == CRITIQUE_RESPONSE_2["revised_prose"]
         assert critique_client.generate_structured.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Integration test — full inspired_by creative flow
+# ---------------------------------------------------------------------------
+
+
+class TestInspiredByIntegration:
+    """Full inspired_by creative flow integration test."""
+
+    def test_full_creative_flow(self, tmp_path):
+        """All 5 creative phases run end-to-end with mocked Claude."""
+        # --- Setup ---
+        state = ProjectState.create(
+            project_id="integration-test",
+            mode=InputMode.INSPIRED_BY,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        source = tmp_path / "integration-test" / "source_story.txt"
+        source.write_text("A short story about a cat who learns to fly.")
+
+        client = MagicMock()
+
+        # Configure mock responses for each phase
+        client.generate_structured.side_effect = [
+            # Phase 1: analyze_source
+            ANALYSIS_RESPONSE,
+            # Phase 2: create_story_bible
+            BIBLE_RESPONSE,
+            # Phase 3: create_outline (2 scenes for simplicity)
+            {
+                "scenes": [
+                    {
+                        "scene_number": 1,
+                        "title": "The Discovery",
+                        "beat": "Cat finds wings.",
+                        "target_words": 200,
+                    },
+                    {
+                        "scene_number": 2,
+                        "title": "First Flight",
+                        "beat": "Cat takes off.",
+                        "target_words": 200,
+                    },
+                ],
+                "total_target_words": 400,
+            },
+            # Phase 4: write_scene_prose (one per scene)
+            {
+                "prose": "The cat found wings in the attic.",
+                "summary": "Cat finds mysterious wings.",
+            },
+            {
+                "prose": "She leaped from the windowsill and soared.",
+                "summary": "Cat flies for the first time.",
+            },
+            # Phase 5: critique_and_revise (one per scene)
+            {
+                "revised_prose": "The cat discovered wings in the dusty attic.",
+                "changes": ["Added sensory detail"],
+            },
+            {
+                "revised_prose": "She launched from the sill and caught the wind.",
+                "changes": ["Stronger verb choice"],
+            },
+        ]
+
+        # --- Execute all 5 phases ---
+        analyze_source(state, client)
+        create_story_bible(state, client)
+        create_outline(state, client)
+        write_scene_prose(state, client)
+        critique_and_revise(state, client)
+
+        # --- Verify end state ---
+        # All artifact files exist
+        project_dir = state.project_dir
+        assert (project_dir / "analysis.json").exists()
+        assert (project_dir / "story_bible.json").exists()
+        assert (project_dir / "outline.json").exists()
+        assert (project_dir / "scenes" / "scene_001.md").exists()
+        assert (project_dir / "scenes" / "scene_002.md").exists()
+        assert (project_dir / "critique" / "scene_001_changes.md").exists()
+
+        # Scenes have revised prose (from critique, not original prose)
+        scenes = state.metadata.scenes
+        assert len(scenes) == 2
+        assert "dusty attic" in scenes[0].prose
+        assert "caught the wind" in scenes[1].prose
+
+        # TEXT asset is COMPLETED for all scenes
+        for scene in scenes:
+            assert scene.asset_status.text == SceneStatus.COMPLETED
+
+        # 7 total Claude calls: 1 analysis + 1 bible + 1 outline + 2 prose + 2 critique
+        assert client.generate_structured.call_count == 7
