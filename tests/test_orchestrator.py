@@ -563,11 +563,11 @@ class TestRunPipelineNarrationPrep:
         _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.TEXT)
 
         # Clear both narration_text and prose so the scene has no text.
-        # Bypass Pydantic's min_length=1 validator on prose by writing to
-        # __dict__ directly — this simulates a corrupted/incomplete scene.
+        # Bypass Pydantic's min_length=1 validator on prose via
+        # object.__setattr__ — this simulates a corrupted/incomplete scene.
         scene = state.metadata.scenes[0]
         scene.narration_text = None
-        scene.__dict__["prose"] = ""
+        object.__setattr__(scene, "prose", "")
 
         with caplog.at_level(logging.WARNING, logger="story_video.pipeline.orchestrator"):
             _run_narration_prep(state, MagicMock())
