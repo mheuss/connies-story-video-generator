@@ -395,9 +395,6 @@ def split_scenes(state: ProjectState, client: ClaudeClient) -> None:
         scene_number = i + 1
         state.add_scene(scene_number=scene_number, title=scene["title"], prose=scene["text"])
         state.update_scene_asset(
-            scene_number=scene_number, asset=AssetType.TEXT, status=SceneStatus.IN_PROGRESS
-        )
-        state.update_scene_asset(
             scene_number=scene_number, asset=AssetType.TEXT, status=SceneStatus.COMPLETED
         )
 
@@ -557,6 +554,7 @@ def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
     # Write analysis.json
     analysis_path = state.project_dir / "analysis.json"
     analysis_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    logger.info("Analysis complete — wrote analysis.json")
 
     state.save()
 
@@ -606,6 +604,7 @@ def create_story_bible(state: ProjectState, client: ClaudeClient) -> None:
 
     bible_path = state.project_dir / "story_bible.json"
     bible_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    logger.info("Story bible complete — wrote story_bible.json")
 
     state.save()
 
@@ -649,6 +648,14 @@ def create_outline(state: ProjectState, client: ClaudeClient) -> None:
         "\n## Length Target\n",
         f"Target approximately {word_count} total words across approximately {scene_count} scenes.",
     ]
+
+    # Optional premise — may have structural implications for the outline
+    premise_path = state.project_dir / "premise.txt"
+    if premise_path.exists():
+        premise = premise_path.read_text(encoding="utf-8").strip()
+        if premise:
+            parts.append(f"\n## Author Direction\n\nThe author has requested: '{premise}'")
+
     user_message = "\n".join(parts)
 
     result = client.generate_structured(
@@ -660,6 +667,7 @@ def create_outline(state: ProjectState, client: ClaudeClient) -> None:
 
     outline_path = state.project_dir / "outline.json"
     outline_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    logger.info("Outline complete — %d scenes, wrote outline.json", len(result.get("scenes", [])))
 
     state.save()
 
@@ -749,7 +757,6 @@ def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
 
         # Create scene in state
         state.add_scene(scene_num, beat["title"], result["prose"])
-        state.update_scene_asset(scene_num, AssetType.TEXT, SceneStatus.IN_PROGRESS)
         state.update_scene_asset(scene_num, AssetType.TEXT, SceneStatus.COMPLETED)
 
         # Write .md file
@@ -759,7 +766,9 @@ def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
 
         # Add summary for next scene's context
         running_summary.append(f"Scene {scene_num} ({beat['title']}): {result['summary']}")
+        logger.info("Wrote scene %d: %s", scene_num, beat["title"])
 
+    logger.info("Scene prose complete — %d scenes written", len(outline["scenes"]))
     state.save()
 
 
@@ -796,9 +805,12 @@ def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
     critique_dir.mkdir(exist_ok=True)
 
     scenes_dir = state.project_dir / "scenes"
+    scenes_dir.mkdir(exist_ok=True)
 
     for scene in scenes:
-        # Resume support: skip scenes that already have a changelog file
+        # Resume support: skip scenes that already have a changelog file.
+        # Assumes changelog write and .md write happen atomically enough that
+        # if the changelog exists, the .md was also written in the same iteration.
         changes_filename = f"scene_{scene.scene_number:03d}_changes.md"
         if (critique_dir / changes_filename).exists():
             logger.info("Scene %d already critiqued — skipping", scene.scene_number)
@@ -842,7 +854,9 @@ def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
         md_filename = f"scene_{scene.scene_number:03d}.md"
         md_content = f"# Scene {scene.scene_number}: {scene.title}\n\n{scene.prose}\n"
         (scenes_dir / md_filename).write_text(md_content, encoding="utf-8")
+        logger.info("Critiqued scene %d: %s", scene.scene_number, scene.title)
 
+    logger.info("Critique complete — %d scenes reviewed", len(scenes))
     state.save()
 
 

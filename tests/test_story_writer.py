@@ -1344,6 +1344,25 @@ class TestCreateOutlineMissingBible:
             create_outline(state_with_analysis, outline_client)
 
 
+class TestCreateOutlineIncludesPremise:
+    """create_outline() passes premise.txt content to Claude when it exists."""
+
+    def test_premise_in_user_message(self, state_with_bible, outline_client):
+        """Premise text appears in user message sent to Claude."""
+        (state_with_bible.project_dir / "premise.txt").write_text("set it in space")
+
+        create_outline(state_with_bible, outline_client)
+
+        call_kwargs = outline_client.generate_structured.call_args_list[0].kwargs
+        assert "set it in space" in call_kwargs["user_message"]
+
+    def test_no_premise_file_still_works(self, state_with_bible, outline_client):
+        """Outline proceeds without error when premise.txt doesn't exist."""
+        create_outline(state_with_bible, outline_client)
+
+        assert outline_client.generate_structured.call_count == 1
+
+
 # ---------------------------------------------------------------------------
 # Scene prose phase — test data
 # ---------------------------------------------------------------------------
@@ -1473,7 +1492,6 @@ class TestWriteSceneProseResume:
         """With scene 1 already added, only scenes 2 and 3 are processed."""
         # Manually add scene 1
         state_with_outline.add_scene(1, "The Arrival", "Pre-existing prose.")
-        state_with_outline.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
         state_with_outline.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
 
         # Only 2 calls needed now
@@ -1609,7 +1627,6 @@ class TestCritiqueAndReviseMissingAnalysis:
             output_dir=tmp_path,
         )
         state.add_scene(1, "Test", "Some prose.")
-        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
         state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
 
         with pytest.raises(FileNotFoundError, match="analysis.json"):
@@ -1664,6 +1681,25 @@ class TestCritiqueAndReviseResume:
         # Scenes 2 and 3 revised
         assert state_with_prose.metadata.scenes[1].prose == CRITIQUE_RESPONSE_2["revised_prose"]
         assert critique_client.generate_structured.call_count == 2
+
+
+class TestCritiqueAndReviseEmptyChanges:
+    """critique_and_revise() handles scenes with no changes needed."""
+
+    def test_empty_changes_writes_no_changes_file(self, state_with_prose):
+        """When Claude returns empty changes list, changelog says 'No changes needed'."""
+        client = MagicMock()
+        client.generate_structured.side_effect = [
+            {"revised_prose": "Same prose scene 1.", "changes": []},
+            CRITIQUE_RESPONSE_2,
+            CRITIQUE_RESPONSE_3,
+        ]
+
+        critique_and_revise(state_with_prose, client)
+
+        critique_dir = state_with_prose.project_dir / "critique"
+        content = (critique_dir / "scene_001_changes.md").read_text()
+        assert "No changes needed" in content
 
 
 # ---------------------------------------------------------------------------

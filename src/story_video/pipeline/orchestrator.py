@@ -1,7 +1,8 @@
-"""Pipeline orchestrator for the adapt flow.
+"""Pipeline orchestrator.
 
-Drives the 8-phase adapt flow sequentially, delegating all work to existing
-pipeline modules. Supports fresh runs and resumes from any state.
+Drives the adapt flow (8 phases) and inspired_by creative flow (13 phases)
+sequentially, delegating all work to existing pipeline modules. Supports
+fresh runs and resumes from any state.
 
 The orchestrator is the single entry point for running a pipeline. It:
 - Determines the starting phase (fresh or resume)
@@ -67,15 +68,14 @@ def run_pipeline(
     image_provider: ImageProvider | None = None,
     caption_provider: CaptionProvider | None = None,
 ) -> None:
-    """Run the adapt flow pipeline from current state to completion or checkpoint.
+    """Run the pipeline from current state to completion or checkpoint.
 
     Drives phases sequentially, delegating to pipeline modules. Supports
     resume from any state -- completed scenes are automatically skipped
     by each module's use of ``get_scenes_for_processing()``.
 
-    Semi-auto mode (default) pauses at checkpoint phases (scene splitting,
-    narration flagging, image prompts) for human review. Autonomous mode
-    runs straight through all phases.
+    Semi-auto mode (default) pauses at checkpoint phases for human review.
+    Autonomous mode runs straight through all phases.
 
     Args:
         state: Project state to drive.

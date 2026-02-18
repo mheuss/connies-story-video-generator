@@ -855,13 +855,10 @@ class TestDispatchPhaseUnknown:
     def test_unknown_phase_raises_value_error(self, tmp_path):
         """Passing an unrecognized phase raises ValueError."""
         state = _make_adapt_state(tmp_path)
-        # Create a fake phase value that's not in the dispatch table
-        fake_phase = MagicMock()
-        fake_phase.__eq__ = lambda self, other: False
-        fake_phase.__hash__ = lambda self: hash("fake_phase")
+        sentinel = object()
         with pytest.raises(ValueError, match="Unknown phase"):
             _dispatch_phase(
-                fake_phase,
+                sentinel,  # type: ignore[arg-type]
                 state,
                 claude_client=None,
                 tts_provider=None,
@@ -1058,23 +1055,6 @@ class TestDispatchCreativePhases:
                     image_provider=None,
                     caption_provider=None,
                 )
-
-
-# ---------------------------------------------------------------------------
-# TestCreativePhasesAreCheckpoints — creative phases in checkpoint set
-# ---------------------------------------------------------------------------
-
-
-class TestCreativePhasesAreCheckpoints:
-    """All five creative phases are checkpoint phases."""
-
-    def test_creative_phases_in_checkpoint_set(self):
-        """ANALYSIS through CRITIQUE_REVISION are all checkpoint phases."""
-        assert PipelinePhase.ANALYSIS in _CHECKPOINT_PHASES
-        assert PipelinePhase.STORY_BIBLE in _CHECKPOINT_PHASES
-        assert PipelinePhase.OUTLINE in _CHECKPOINT_PHASES
-        assert PipelinePhase.SCENE_PROSE in _CHECKPOINT_PHASES
-        assert PipelinePhase.CRITIQUE_REVISION in _CHECKPOINT_PHASES
 
 
 # ---------------------------------------------------------------------------

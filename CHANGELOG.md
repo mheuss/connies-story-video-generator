@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Inspired_by creative flow — 5-phase pipeline (source analysis, story bible, outline, scene prose with running summaries, critique/revision) that creates original stories inspired by existing source material. Includes `--premise` flag for creative direction and semi-auto checkpoints at each creative phase.
+
 ## [0.4.0] — 2026-02-18
 
 ### Added
