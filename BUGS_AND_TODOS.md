@@ -8,6 +8,47 @@ Items committed to the current sprint/cycle.
 
 Acknowledged items not yet scheduled.
 
+### Project Review — 2026-02-18
+
+**Test quality:**
+
+- [x] [test] Delete redundant `_patch_sleep` fixture in `test_claude_client.py:67-70` — missed by PR-12 cleanup (PR2-1)
+- [x] [test] Fix global subprocess patches in `test_commands.py:311,320` — use module-level patch like rest of file (PR2-2)
+- [x] [test] Split 12-assertion `test_maps_response_to_caption_result` in `test_caption_generator.py:133-156` — missed by PR-25 (PR2-3)
+- [x] [test] Add `start_phase` after `fail_phase` retry test in `test_state.py` (PR2-4a)
+- [x] [test] Add `get_next_phase` ValueError fallback branch test in `test_state.py` (PR2-4b)
+- [x] [test] Add `_display_outcome` else branch (PENDING/IN_PROGRESS) test in `test_cli.py` (PR2-4c)
+- [x] [test] Add direct unit tests for `_group_words_into_events` boundary cases in `test_subtitles.py` (PR2-5)
+- [x] [test] Move inline imports in `test_narration_prep.py` to module level to match convention (PR2-6)
+
+**Duplicated logic:**
+
+- [x] [refactor] Consolidate 3 independent tag regex patterns into `narration_tags.py` — export `strip_narration_tags()`, import in `narration_prep.py` and `story_writer.py` (PR2-7)
+- [x] [refactor] Extract `_parse_resolution()` helper — `resolution.split("x")` duplicated in `filters.py:23,41` and `subtitles.py:167` (PR2-8)
+
+**Fail-fast / error handling:**
+
+- [x] [bug] `_run_narration_prep` silently skips scenes with no text — should warn or raise (orchestrator.py:276-278) (PR2-9)
+- [x] [bug] Negative xfade offset when segment duration < transition_duration — FFmpeg rejects with cryptic error (commands.py:224-226) (PR2-10)
+- [x] [refactor] Simplify `start_phase` guard — doesn't catch impossible states like IN_PROGRESS with no phase (state.py:254) (PR2-11)
+- [x] [refactor] Narrow bare `Exception` catches in CLI `create` command to documented exception types (cli.py:332-343) — extends CLI-S7 (PR2-12)
+
+**Coupling / consistency:**
+
+- [x] [refactor] Move `OPENAI_TRANSIENT_ERRORS` out of generic `retry.py` into consuming pipeline modules (PR2-13)
+- [x] [refactor] Remove model type re-exports from `caption_generator.py` `__all__` — no other pipeline module does this (PR2-14)
+- [x] [docs] `_run_narration_prep` processes ALL scenes instead of using `get_scenes_for_processing()` — add documenting comment or track prepped scenes (orchestrator.py:270-298) (PR2-15)
+
+**Small fixes:**
+
+- [x] [bug] `_mood_to_instructions` grammar — "a excited" should be "an excited" for vowel moods (tts_generator.py:190) (PR2-16)
+- [x] [chore] ElevenLabs speed warning logged on every call — should log once (tts_generator.py:166-170) (PR2-17)
+- [x] [chore] `font_fallback` field in `SubtitleConfig` is never used — remove or wire into ASS output (models.py) (PR2-18)
+- [x] [chore] Dead CLI parameters `topic` and `style_reference` — remove until original/inspired_by modes implemented (PR2-19)
+- [x] [chore] `_resolve_voice` return value discarded without comment — add `_` assignment or comment (narration_tags.py:141) (PR2-20)
+- [x] [docs] `parse_story_header` closing `---` delimiter fragile with YAML containing `---` — add comment noting limitation (narration_tags.py:48-49) (PR2-21)
+- [x] [bug] `_format_ass_time` produces garbage for negative timestamps — add `ge=0` validators on `CaptionWord.start/end` (models.py, subtitles.py) (PR2-22)
+
 ### Project Review — 2026-02-17
 
 **High priority:**
@@ -73,7 +114,7 @@ Acknowledged items not yet scheduled.
 - [ ] [chore] `_find_most_recent_project` compares ISO 8601 timestamp strings lexicographically — fragile if hand-edited project.json uses non-ISO format (CLI-S2)
 - [ ] [chore] Add `exists=True` to `--config` Typer option in create and estimate commands for immediate path validation (CLI-S4)
 - [ ] [test] Add direct unit tests for `_status_icon` covering all 4 statuses and fallback path (CLI-S5)
-- [ ] [refactor] Narrow `create` command exception handler from bare `Exception` to `FileExistsError` for `ProjectState.create()` (CLI-S7)
+- [x] [refactor] Narrow `create` command exception handler from bare `Exception` to `FileExistsError` for `ProjectState.create()` (CLI-S7)
 - [ ] [chore] Verify GPT Image 1.5 pricing — current rates (low: $0.011, medium: $0.050, high: $0.167) are from early documentation and may have changed (CR-8)
 - [ ] [refactor] Cost rate table key collision risk — IMAGE_COST_PER_IMAGE dict merges GPT Image tiers (low/medium/high) and DALL-E tiers (standard/hd) in one flat dict; if a future model reuses a tier name, values would collide. Consider nested dict keyed by model family. (CR-9)
 
