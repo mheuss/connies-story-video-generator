@@ -243,6 +243,41 @@ STORY_BIBLE_SCHEMA = {
     "required": ["characters", "setting", "premise", "rules"],
 }
 
+OUTLINE_SYSTEM = (
+    "You are a story architect creating a scene-by-scene outline.\n\n"
+    "Based on the story bible and craft notes, design the structure of"
+    " the story. Each scene beat should be 1-2 sentences describing"
+    " what happens — not how it's written.\n\n"
+    "Rules:\n"
+    "- Target the specified total word count and scene count\n"
+    "- Word targets per scene are advisory — use proportion to convey"
+    " importance (climactic scenes get more words, transitions get fewer)\n"
+    "- Each beat describes WHAT happens, not HOW it's written\n"
+    "- Scene titles should be short (3-6 words)"
+)
+
+OUTLINE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "scenes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "scene_number": {"type": "integer"},
+                    "title": {"type": "string"},
+                    "beat": {"type": "string"},
+                    "target_words": {"type": "integer"},
+                },
+                "required": ["scene_number", "title", "beat", "target_words"],
+            },
+            "minItems": 1,
+        },
+        "total_target_words": {"type": "integer"},
+    },
+    "required": ["scenes", "total_target_words"],
+}
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -524,8 +559,57 @@ def create_story_bible(state: ProjectState, client: ClaudeClient) -> None:
 
 
 def create_outline(state: ProjectState, client: ClaudeClient) -> None:
-    """Create scene-by-scene outline with beats and word targets."""
-    raise NotImplementedError("create_outline not yet implemented")
+    """Create scene-by-scene outline with beats and word targets.
+
+    Reads analysis.json and story_bible.json. Uses source_stats to
+    target matching length. Writes outline.json.
+
+    Args:
+        state: Project state.
+        client: Claude API client.
+
+    Raises:
+        FileNotFoundError: If analysis.json or story_bible.json is missing.
+    """
+    analysis_path = state.project_dir / "analysis.json"
+    if not analysis_path.exists():
+        msg = f"analysis.json not found in {state.project_dir}"
+        raise FileNotFoundError(msg)
+    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+
+    bible_path = state.project_dir / "story_bible.json"
+    if not bible_path.exists():
+        msg = f"story_bible.json not found in {state.project_dir}"
+        raise FileNotFoundError(msg)
+    bible = json.loads(bible_path.read_text(encoding="utf-8"))
+
+    source_stats = analysis["source_stats"]
+    word_count = source_stats["word_count"]
+    scene_count = source_stats["scene_count_estimate"]
+
+    parts = [
+        "## Craft Notes\n",
+        json.dumps(analysis["craft_notes"], indent=2),
+        "\n## Thematic Brief\n",
+        json.dumps(analysis["thematic_brief"], indent=2),
+        "\n## Story Bible\n",
+        json.dumps(bible, indent=2),
+        "\n## Length Target\n",
+        f"Target approximately {word_count} total words across approximately {scene_count} scenes.",
+    ]
+    user_message = "\n".join(parts)
+
+    result = client.generate_structured(
+        system=OUTLINE_SYSTEM,
+        user_message=user_message,
+        tool_name="create_outline",
+        tool_schema=OUTLINE_SCHEMA,
+    )
+
+    outline_path = state.project_dir / "outline.json"
+    outline_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+
+    state.save()
 
 
 def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:

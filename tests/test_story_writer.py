@@ -18,6 +18,7 @@ from story_video.pipeline.story_writer import (
     SCENE_SPLIT_SYSTEM,
     _check_preservation,
     analyze_source,
+    create_outline,
     create_story_bible,
     flag_narration,
     split_scenes,
@@ -1222,3 +1223,120 @@ class TestCreateStoryBibleMissingAnalysis:
         """No analysis.json raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError, match="analysis.json"):
             create_story_bible(inspired_state, bible_client)
+
+
+# ---------------------------------------------------------------------------
+# Outline phase — test data
+# ---------------------------------------------------------------------------
+
+OUTLINE_RESPONSE = {
+    "scenes": [
+        {
+            "scene_number": 1,
+            "title": "The Arrival",
+            "beat": "Maren steps off the ferry.",
+            "target_words": 300,
+        },
+        {
+            "scene_number": 2,
+            "title": "The Stranger",
+            "beat": "A visitor appears.",
+            "target_words": 350,
+        },
+        {
+            "scene_number": 3,
+            "title": "The Storm",
+            "beat": "A storm forces them together.",
+            "target_words": 250,
+        },
+    ],
+    "total_target_words": 900,
+}
+
+
+# ---------------------------------------------------------------------------
+# Outline phase — fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def outline_client():
+    """Mock ClaudeClient for outline phase."""
+    client = MagicMock()
+    client.generate_structured.return_value = OUTLINE_RESPONSE
+    return client
+
+
+@pytest.fixture()
+def state_with_bible(state_with_analysis, bible_client):
+    """State with both analysis.json and story_bible.json."""
+    create_story_bible(state_with_analysis, bible_client)
+    return state_with_analysis
+
+
+# ---------------------------------------------------------------------------
+# Outline phase — tests
+# ---------------------------------------------------------------------------
+
+
+class TestCreateOutlineCallsClaude:
+    """create_outline() sends bible and analysis to Claude."""
+
+    def test_bible_in_context(self, state_with_bible, outline_client):
+        """Story bible is included in the user message."""
+        create_outline(state_with_bible, outline_client)
+
+        call_kwargs = outline_client.generate_structured.call_args.kwargs
+        assert "Maren" in call_kwargs["user_message"]
+
+
+class TestCreateOutlineWritesJson:
+    """create_outline() writes outline.json."""
+
+    def test_outline_json_written(self, state_with_bible, outline_client):
+        """outline.json exists and contains scenes array."""
+        create_outline(state_with_bible, outline_client)
+
+        outline_path = state_with_bible.project_dir / "outline.json"
+        assert outline_path.exists()
+        data = json.loads(outline_path.read_text())
+        assert "scenes" in data
+        assert len(data["scenes"]) == 3
+        assert "total_target_words" in data
+
+
+class TestCreateOutlineSceneBeats:
+    """create_outline() scenes have required fields."""
+
+    def test_scene_beat_fields(self, state_with_bible, outline_client):
+        """Each scene beat has scene_number, title, beat, target_words."""
+        create_outline(state_with_bible, outline_client)
+
+        data = json.loads((state_with_bible.project_dir / "outline.json").read_text())
+        scene = data["scenes"][0]
+        assert "scene_number" in scene
+        assert "title" in scene
+        assert "beat" in scene
+        assert "target_words" in scene
+
+
+class TestCreateOutlineSourceStats:
+    """create_outline() includes source stats for length targeting."""
+
+    def test_source_stats_in_context(self, state_with_bible, outline_client):
+        """Source word count and scene estimate are in the user message."""
+        create_outline(state_with_bible, outline_client)
+
+        call_kwargs = outline_client.generate_structured.call_args.kwargs
+        # source_stats from ANALYSIS_RESPONSE: word_count=90, scene_count_estimate=3
+        assert "90" in call_kwargs["user_message"]
+
+
+class TestCreateOutlineMissingBible:
+    """create_outline() raises when story_bible.json is missing."""
+
+    def test_missing_bible_raises(self, state_with_analysis, outline_client):
+        """No story_bible.json raises FileNotFoundError."""
+        # state_with_analysis has analysis.json but not story_bible.json
+        with pytest.raises(FileNotFoundError, match="story_bible.json"):
+            create_outline(state_with_analysis, outline_client)
