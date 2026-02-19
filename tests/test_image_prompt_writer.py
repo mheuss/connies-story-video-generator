@@ -4,6 +4,7 @@ TDD: These tests are written first, before the implementation.
 Each test verifies one logical behavior of the generate_image_prompts function.
 """
 
+import json
 import logging
 from unittest.mock import MagicMock
 
@@ -227,3 +228,92 @@ class TestGenerateImagePromptsSceneMissingFromResponse:
             generate_image_prompts(state_with_scenes, mock_client)
 
         assert "Claude did not return prompts for scenes: [2]" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Character reference from analysis.json
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateImagePromptsCharacterReference:
+    """generate_image_prompts() includes character reference from analysis.json."""
+
+    def test_character_reference_in_user_message(self, state_with_scenes, mock_client):
+        """Character descriptions from analysis.json are prepended to user message."""
+        analysis = {
+            "characters": [
+                {
+                    "name": "Elara",
+                    "visual_description": "A tall woman with silver hair and green eyes.",
+                },
+                {
+                    "name": "Borin",
+                    "visual_description": "A stocky dwarf with a braided red beard.",
+                },
+            ]
+        }
+        analysis_path = state_with_scenes.project_dir / "analysis.json"
+        analysis_path.write_text(json.dumps(analysis), encoding="utf-8")
+
+        generate_image_prompts(state_with_scenes, mock_client)
+
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+        assert "=== Character Reference ===" in user_msg
+        assert "Elara: A tall woman with silver hair" in user_msg
+        assert "Borin: A stocky dwarf with a braided red beard" in user_msg
+
+    def test_character_reference_before_scenes(self, state_with_scenes, mock_client):
+        """Character reference block appears before the first scene."""
+        analysis = {
+            "characters": [
+                {
+                    "name": "Elara",
+                    "visual_description": "A tall woman with silver hair.",
+                },
+            ]
+        }
+        analysis_path = state_with_scenes.project_dir / "analysis.json"
+        analysis_path.write_text(json.dumps(analysis), encoding="utf-8")
+
+        generate_image_prompts(state_with_scenes, mock_client)
+
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+        char_pos = user_msg.index("=== Character Reference ===")
+        scene_pos = user_msg.index("=== Scene 1:")
+        assert char_pos < scene_pos
+
+    def test_no_analysis_file_works(self, state_with_scenes, mock_client):
+        """No analysis.json — function works without character block."""
+        generate_image_prompts(state_with_scenes, mock_client)
+
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+        assert "Character Reference" not in user_msg
+        assert "=== Scene 1:" in user_msg
+
+    def test_empty_characters_no_block(self, state_with_scenes, mock_client):
+        """Empty characters array — no character block in message."""
+        analysis = {"characters": []}
+        analysis_path = state_with_scenes.project_dir / "analysis.json"
+        analysis_path.write_text(json.dumps(analysis), encoding="utf-8")
+
+        generate_image_prompts(state_with_scenes, mock_client)
+
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+        assert "Character Reference" not in user_msg
+
+    def test_analysis_without_characters_key(self, state_with_scenes, mock_client):
+        """Backward compat: analysis.json without characters key works."""
+        analysis = {"craft_notes": {}, "thematic_brief": {}, "source_stats": {}}
+        analysis_path = state_with_scenes.project_dir / "analysis.json"
+        analysis_path.write_text(json.dumps(analysis), encoding="utf-8")
+
+        generate_image_prompts(state_with_scenes, mock_client)
+
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+        assert "Character Reference" not in user_msg
+        assert "=== Scene 1:" in user_msg

@@ -4,6 +4,7 @@ Generates image prompts for all scenes in a single Claude call.
 Each prompt describes the key visual moment of its scene for illustration.
 """
 
+import json
 import logging
 
 from story_video.models import AssetType, SceneStatus
@@ -23,8 +24,9 @@ IMAGE_PROMPT_SYSTEM = (
     "For each scene, write a single detailed image prompt that captures the key "
     "visual moment. The prompt should be:\n"
     "- Visually specific: describe setting, lighting, composition, mood\n"
-    "- Self-contained: include all character descriptions (image models have no memory "
-    "between images)\n"
+    "- Character-consistent: use the character reference (when provided) to"
+    " describe characters accurately. Include visual details in every prompt"
+    " — image models have no memory between images\n"
     "- Cinematic: frame it like a movie still or painting\n"
     "- 1-3 sentences long\n\n"
     "Do NOT include text overlays, watermarks, or UI elements in prompts.\n\n"
@@ -53,6 +55,34 @@ IMAGE_PROMPT_SCHEMA = {
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_characters(state: ProjectState) -> list[dict]:
+    """Load character descriptions from analysis.json if available.
+
+    Returns an empty list if analysis.json doesn't exist or has no
+    characters key. This provides backward compatibility with projects
+    created before character extraction was added.
+    """
+    analysis_path = state.project_dir / "analysis.json"
+    if not analysis_path.exists():
+        return []
+    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    return analysis.get("characters", [])
+
+
+def _format_character_reference(characters: list[dict]) -> str:
+    """Format character list into a text block for the image prompt context."""
+    lines = ["=== Character Reference ==="]
+    for char in characters:
+        lines.append(f"{char['name']}: {char['visual_description']}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -76,8 +106,13 @@ def generate_image_prompts(state: ProjectState, client: ClaudeClient) -> None:
         msg = "No scenes in project"
         raise ValueError(msg)
 
-    # Build user message with numbered scenes
+    # Load character descriptions from analysis (if available)
+    characters = _load_characters(state)
+
+    # Build user message with optional character reference and numbered scenes
     parts = []
+    if characters:
+        parts.append(_format_character_reference(characters))
     for scene in scenes:
         parts.append(f"=== Scene {scene.scene_number}: {scene.title} ===")
         parts.append(scene.prose)
