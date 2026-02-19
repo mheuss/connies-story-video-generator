@@ -34,11 +34,12 @@ Python 3.14, Claude API (writing), OpenAI TTS or ElevenLabs v3 (narration), GPT 
 
 ## Current Status
 
-The adapt and inspired_by flows work end-to-end. You can give it a story and get back a finished video with narration, illustrations, timed captions, and crossfade transitions. The original mode (write from a topic) is not yet implemented.
+All three modes work end-to-end. You can give it a story, a creative brief, or source material and get back a finished video with narration, illustrations, timed captions, and crossfade transitions.
 
 ### What's Working
 
 - **Full adapt pipeline** -- 8 phases run sequentially: scene splitting, narration flagging, image prompts, narration prep, TTS, image generation, caption generation, video assembly
+- **Original creative flow** -- Provide a topic, premise, or detailed brief. The AI interprets your creative direction, builds characters and setting, outlines the story, writes prose, and revises it before handing off to the media pipeline.
 - **Inspired_by creative flow** -- 5 phases: source analysis (craft notes + thematic brief), story bible (characters, setting, rules), outline (scene beats with word targets), scene prose (with running summary), critique/revision (single-pass polish). Feed into the shared media pipeline.
 - **LLM-based narration prep** -- Claude API handles abbreviations, numbers, and punctuation contextually instead of brittle regex transforms. Produces a changelog of all modifications.
 - **Multi-voice narration** -- YAML front matter defines voice mappings, inline `**voice:name**` tags switch between voices mid-scene. Works with both OpenAI and ElevenLabs.
@@ -48,11 +49,7 @@ The adapt and inspired_by flows work end-to-end. You can give it a story and get
 - **Resume from failure** -- pipeline saves state per phase and per scene, picks up where it left off
 - **Semi-automated mode** -- pauses at content phases for human review, or runs straight through in autonomous mode
 - **Cost estimation** -- projected costs before starting, actual costs after completion
-- **879 tests** covering all modules
-
-### Up Next
-
-- Original input mode -- same creative flow as inspired_by but with topic/premise input instead of source material
+- **897 tests** covering all modules
 
 ### Pie in the Sky
 
@@ -109,19 +106,20 @@ tts:
 Then pass it with `--config`:
 
 ```
-story-video create --mode adapt --source-material story.txt --config config_elevenlabs.yaml
+story-video create --mode adapt --input story.txt --config config_elevenlabs.yaml
 ```
 
 ### Commands
 
 ```
-story-video create --mode adapt --source-material story.txt                         # adapt an existing story
-story-video create --mode inspired_by --source-material story.txt                   # new story inspired by source
-story-video create --mode inspired_by --source-material story.txt --premise "..."   # with creative direction
-story-video create --mode adapt --source-material story.txt --autonomous            # skip review checkpoints
+story-video create --mode adapt --input story.txt                         # adapt an existing story
+story-video create --mode original --input "A love story set in 1920s Paris"  # AI writes from a brief
+story-video create --mode inspired_by --input story.txt                   # new story inspired by source
+story-video create --mode inspired_by --input story.txt --premise "..."   # with creative direction
+story-video create --mode adapt --input story.txt --autonomous            # skip review checkpoints
 story-video resume                                    # continue the most recent project
 story-video resume <project-id>                       # continue a specific project
-story-video estimate --mode adapt --source-material story.txt  # show cost estimate without starting
+story-video estimate --mode adapt --input story.txt  # show cost estimate without starting
 story-video status <project-id>                       # show current state of a project
 story-video list                                      # list all projects
 ```
