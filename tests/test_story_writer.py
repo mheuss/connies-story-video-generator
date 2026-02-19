@@ -969,6 +969,15 @@ ANALYSIS_RESPONSE = {
         "word_count": 90,
         "scene_count_estimate": 3,
     },
+    "characters": [
+        {
+            "name": "The Keeper",
+            "visual_description": (
+                "A weathered man in his sixties with grey stubble"
+                " and deep-set eyes. Wears a faded navy peacoat."
+            ),
+        },
+    ],
 }
 
 
@@ -1136,6 +1145,20 @@ class TestAnalyzeSourceSavesState:
 
         reloaded = ProjectState.load(inspired_state.project_dir)
         assert reloaded.metadata.project_id == "inspired-test"
+
+
+class TestAnalyzeSourceCharacters:
+    """analyze_source() stores character descriptions."""
+
+    def test_characters_present_in_analysis(self, inspired_state, analysis_client):
+        """analysis.json contains characters array."""
+        analyze_source(inspired_state, analysis_client)
+
+        data = json.loads((inspired_state.project_dir / "analysis.json").read_text())
+        assert "characters" in data
+        assert len(data["characters"]) == 1
+        assert data["characters"][0]["name"] == "The Keeper"
+        assert "visual_description" in data["characters"][0]
 
 
 class TestAnalyzeSourceOriginalMode:

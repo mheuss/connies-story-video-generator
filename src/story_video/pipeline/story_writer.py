@@ -133,13 +133,17 @@ NARRATION_FLAGS_SCHEMA = {
 ANALYSIS_SYSTEM = (
     "You are a literary analyst examining a story to extract its writing style"
     " and thematic essence.\n\n"
-    "Your goal is to capture three things:\n"
+    "Your goal is to capture four things:\n"
     "1. CRAFT NOTES — How the story is written. Concrete observations about"
     " sentence structure, vocabulary choices, tone, pacing, and narrative voice."
     " Be specific: quote patterns, note tendencies, describe rhythms.\n"
     "2. THEMATIC BRIEF — What the story is about at a deeper level. Themes,"
     " emotional arc, central tension, overall mood.\n"
-    "3. SOURCE STATS — Word count and estimated number of natural scenes.\n\n"
+    "3. SOURCE STATS — Word count and estimated number of natural scenes.\n"
+    "4. CHARACTERS — Every named or significant character. For each, provide"
+    " a visual description based on what the text says or implies: appearance,"
+    " clothing, distinguishing features. Only include details present in or"
+    " reasonably inferred from the text.\n\n"
     "This analysis will be used to write a NEW, completely different story"
     " that captures the same feel. Focus on transferable qualities, not"
     " plot-specific details."
@@ -187,15 +191,26 @@ ANALYSIS_SCHEMA = {
             },
             "required": ["word_count", "scene_count_estimate"],
         },
+        "characters": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "visual_description": {"type": "string"},
+                },
+                "required": ["name", "visual_description"],
+            },
+        },
     },
-    "required": ["craft_notes", "thematic_brief", "source_stats"],
+    "required": ["craft_notes", "thematic_brief", "source_stats", "characters"],
 }
 
 BRIEF_ANALYSIS_SYSTEM = (
     "You are a creative writing consultant interpreting a story brief.\n\n"
     "The user has provided a creative brief — it could be anything from a single"
     " sentence to a detailed outline with characters and plot structure.\n\n"
-    "Your goal is to extract or infer three things:\n"
+    "Your goal is to extract or infer four things:\n"
     "1. CRAFT NOTES — What writing style fits this story? If the brief specifies"
     " a style or tone, capture it faithfully. If not, infer an appropriate style"
     " from the subject matter. Be specific: describe sentence rhythms, vocabulary"
@@ -203,7 +218,11 @@ BRIEF_ANALYSIS_SYSTEM = (
     "2. THEMATIC BRIEF — What is this story about at a deeper level? Extract"
     " explicit themes from the brief and infer implied ones. Define the emotional"
     " arc, central tension, and overall mood.\n"
-    "3. SOURCE STATS — Will be provided separately. Return them as-is.\n\n"
+    "3. SOURCE STATS — Will be provided separately. Return them as-is.\n"
+    "4. CHARACTERS — Every named or significant character mentioned in the brief."
+    " For each, provide a visual description based on what the brief says or"
+    " implies. If the brief doesn't describe characters, infer reasonable"
+    " visual details from the subject matter.\n\n"
     "This analysis will be used to write a complete story. Focus on giving"
     " the writer a clear creative direction."
 )
