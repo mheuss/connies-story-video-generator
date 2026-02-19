@@ -17,14 +17,19 @@ The pipeline has three input modes:
 - **Inspired by** -- You provide an existing story as inspiration. The AI writes something new that captures similar themes and mood.
 - **Adapt** -- You provide a finished story. The AI narrates it word for word and handles structure and visuals.
 
-Each mode feeds into a multi-phase pipeline:
+### Creative Flow (Original & Inspired By)
 
-1. **Story writing** -- Claude generates (or structures) the narrative
-2. **Narration prep** -- Claude API rewrites text for spoken delivery (abbreviations, numbers, punctuation, pronunciation)
-3. **TTS generation** -- OpenAI or ElevenLabs converts text to audio
-4. **Image generation** -- GPT Image 1.5 creates a scene illustration per chapter
-5. **Caption generation** -- Whisper produces word-level timestamps
-6. **Video assembly** -- FFmpeg composites everything into the final video
+Original and inspired_by share the same 11-phase pipeline. The difference is the input: original takes a topic or premise, inspired_by takes a source story. Both go through analysis, story bible, outline, prose, critique, then into the shared media pipeline.
+
+![Creative Flow](docs/diagrams/creative-flow.png)
+
+### Adapt Flow
+
+Adapt mode skips the creative phases. It splits the source text into scenes, flags narration issues, then feeds into the shared media pipeline.
+
+![Adapt Flow](docs/diagrams/adapt-flow.png)
+
+### Resume
 
 The pipeline saves state between phases. If something fails, you resume from where it stopped instead of starting over.
 
@@ -49,7 +54,7 @@ All three modes work end-to-end. You can give it a story, a creative brief, or s
 - **Resume from failure** -- pipeline saves state per phase and per scene, picks up where it left off
 - **Semi-automated mode** -- pauses at content phases for human review, or runs straight through in autonomous mode
 - **Cost estimation** -- projected costs before starting, actual costs after completion
-- **897 tests** covering all modules
+- **920 tests** covering all modules
 
 ### Pie in the Sky
 

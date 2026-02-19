@@ -13,7 +13,6 @@ venv/
 # Environment variables
 .env
 .env.*
-!.env.example
 
 # IDE
 .idea/
@@ -27,7 +26,6 @@ output/
 # OS
 .DS_Store
 Thumbs.db
-
 # Secrets and credentials
 credentials.json
 secrets.yaml
@@ -57,4 +55,3 @@ CHANGELOG.md
 CLAUDE.md
 DEVELOPMENT.md
 VERSION_HISTORY.md
-docs/

@@ -1,0 +1,91 @@
+@startuml creative-flow
+!theme plain
+
+title Creative Flow (Original & Inspired By)
+
+actor "User / CLI" as User
+participant "Orchestrator" as Orch
+participant "Claude API" as Claude
+participant "TTS Provider" as TTS
+participant "Image Provider" as Image
+participant "Whisper" as Whisper
+participant "FFmpeg" as FFmpeg
+
+note over User
+  **Original:** user provides a topic or premise
+  **Inspired by:** user provides a source story
+end note
+
+User -> Orch: create(mode, input)
+
+== Analysis ==
+Orch -> Claude: Analyze source material
+Claude --> Orch: craft_notes, thematic_brief,\nsource_stats, characters
+Orch -> Orch: Write analysis.json
+
+== Story Bible ==
+Orch -> Claude: Create characters, setting, rules
+Claude --> Orch: story_bible
+Orch -> Orch: Write story_bible.json
+
+== Outline ==
+Orch -> Claude: Plan scene beats + word targets
+Claude --> Orch: outline (scene list)
+Orch -> Orch: Write outline.json
+
+== Scene Prose ==
+loop for each scene
+  Orch -> Claude: Write scene prose\n(craft_notes + bible + outline + running summary)
+  Claude --> Orch: scene prose
+  Orch -> Orch: Write scene_NNN.md
+end
+
+== Critique & Revision ==
+loop for each scene
+  Orch -> Claude: Critique scene quality
+  Claude --> Orch: revision (if needed)
+end
+
+== Image Prompts ==
+Orch -> Claude: Generate image prompts\n(character reference + all scene prose)
+Claude --> Orch: image prompt per scene
+
+== Narration Prep ==
+loop for each scene
+  Orch -> Claude: Prepare text for spoken delivery
+  Claude --> Orch: modified text + changelog
+end
+
+== TTS Generation ==
+loop for each scene
+  Orch -> TTS: Synthesize narration audio
+  TTS --> Orch: audio bytes
+  Orch -> Orch: Write scene_NNN.mp3
+end
+
+== Image Generation ==
+loop for each scene
+  Orch -> Image: Generate illustration\n(style_prefix + image_prompt)
+  Image --> Orch: PNG image
+  Orch -> Orch: Write scene_NNN.png
+end
+
+== Caption Generation ==
+loop for each scene
+  Orch -> Whisper: Transcribe audio
+  Whisper --> Orch: word-level timestamps
+  Orch -> Orch: Reconcile punctuation from prose
+  Orch -> Orch: Write scene_NNN.json + .ass
+end
+
+== Video Assembly ==
+loop for each scene
+  Orch -> FFmpeg: Composite image + audio + captions
+  FFmpeg --> Orch: scene_NNN.mp4
+end
+Orch -> FFmpeg: Concatenate with crossfades
+FFmpeg --> Orch: final.mp4
+
+Orch --> User: Done — final.mp4
+
+@enduml
