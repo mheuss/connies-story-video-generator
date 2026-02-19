@@ -7,8 +7,8 @@ Each test verifies one logical behavior of the filter builder functions.
 import pytest
 
 from story_video.ffmpeg.filters import (
-    _parse_resolution,
     blur_background_filter,
+    parse_resolution,
     still_image_filter,
 )
 
@@ -117,37 +117,37 @@ class TestBlurBackgroundRadius:
 
 
 # ---------------------------------------------------------------------------
-# _parse_resolution — WIDTHxHEIGHT parsing and validation
+# parse_resolution — WIDTHxHEIGHT parsing and validation
 # ---------------------------------------------------------------------------
 
 
 class TestParseResolution:
-    """_parse_resolution parses and validates resolution strings."""
+    """parse_resolution parses and validates resolution strings."""
 
     def test_returns_width_and_height(self):
         """Standard resolution returns (width, height) tuple."""
-        assert _parse_resolution("1920x1080") == ("1920", "1080")
+        assert parse_resolution("1920x1080") == ("1920", "1080")
 
     def test_returns_different_resolution(self):
         """Works with non-standard dimensions."""
-        assert _parse_resolution("1280x720") == ("1280", "720")
+        assert parse_resolution("1280x720") == ("1280", "720")
 
     def test_rejects_missing_x_separator(self):
         """Resolution without 'x' raises ValueError."""
         with pytest.raises(ValueError, match="Invalid resolution"):
-            _parse_resolution("1920:1080")
+            parse_resolution("1920:1080")
 
     def test_rejects_non_numeric(self):
         """Non-numeric values raise ValueError."""
         with pytest.raises(ValueError, match="Invalid resolution"):
-            _parse_resolution("widexhigh")
+            parse_resolution("widexhigh")
 
     def test_rejects_empty_string(self):
         """Empty string raises ValueError."""
         with pytest.raises(ValueError, match="Invalid resolution"):
-            _parse_resolution("")
+            parse_resolution("")
 
     def test_rejects_single_number(self):
         """Single number without x raises ValueError."""
         with pytest.raises(ValueError, match="Invalid resolution"):
-            _parse_resolution("1920")
+            parse_resolution("1920")

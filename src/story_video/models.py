@@ -15,8 +15,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
-_RESOLUTION_RE = re.compile(r"^\d+x\d+$")
+HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+RESOLUTION_RE = re.compile(r"^\d+x\d+$")
 
 __all__ = [
     "ADAPT_FLOW_PHASES",
@@ -328,7 +328,7 @@ class ImageConfig(BaseModel):
     @classmethod
     def validate_size(cls, v: str) -> str:
         """Validate size is in WIDTHxHEIGHT format."""
-        if not _RESOLUTION_RE.match(v):
+        if not RESOLUTION_RE.match(v):
             msg = f"Size must be 'WIDTHxHEIGHT', got '{v}'"
             raise ValueError(msg)
         return v
@@ -372,7 +372,7 @@ class VideoConfig(BaseModel):
     @classmethod
     def validate_resolution(cls, v: str) -> str:
         """Validate resolution is in WIDTHxHEIGHT format."""
-        if not _RESOLUTION_RE.match(v):
+        if not RESOLUTION_RE.match(v):
             msg = f"Resolution must be 'WIDTHxHEIGHT', got '{v}'"
             raise ValueError(msg)
         return v
@@ -408,7 +408,7 @@ class SubtitleConfig(BaseModel):
     @field_validator("color", "outline_color")
     @classmethod
     def _validate_hex_color(cls, v: str) -> str:
-        if not _HEX_COLOR_RE.match(v):
+        if not HEX_COLOR_RE.match(v):
             msg = f"Invalid hex color: {v!r} (expected #RRGGBB format)"
             raise ValueError(msg)
         return v
@@ -417,22 +417,15 @@ class SubtitleConfig(BaseModel):
 class PipelineConfig(BaseModel):
     """Pipeline behavior parameters.
 
-    Controls whether the pipeline runs autonomously or pauses for review,
-    retry behavior, and whether originals are preserved during revision.
+    Controls whether the pipeline runs autonomously or pauses for review.
 
     Fields:
         autonomous: If True, skip human review checkpoints.
-        max_retries: Maximum retry attempts for failed API calls.
-        retry_base_delay: Base delay in seconds for exponential backoff.
-        save_originals_on_revision: If True, save original files before revision.
     """
 
     model_config = ConfigDict(frozen=True)
 
     autonomous: bool = Field(default=False)
-    max_retries: int = Field(default=3, ge=0)
-    retry_base_delay: float = Field(default=2.0, gt=0)
-    save_originals_on_revision: bool = Field(default=True)
 
 
 class OutputConfig(BaseModel):
@@ -533,7 +526,7 @@ class CaptionResult(BaseModel):
     segments: list[CaptionSegment]
     words: list[CaptionWord]
     language: str
-    duration: float
+    duration: float = Field(ge=0)
 
 
 class Scene(BaseModel):

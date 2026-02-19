@@ -15,6 +15,9 @@ from story_video.models import (
     CREATIVE_FLOW_PHASES,
     AppConfig,
     AssetType,
+    CaptionResult,
+    CaptionSegment,
+    CaptionWord,
     ImageConfig,
     InputMode,
     NarrationSegment,
@@ -436,32 +439,16 @@ class TestPipelineConfig:
     def test_defaults(self):
         config = PipelineConfig()
         assert config.autonomous is False
-        assert config.max_retries == 3
-        assert config.retry_base_delay == 2
-        assert config.save_originals_on_revision is True
 
     def test_autonomous_mode(self):
         config = PipelineConfig(autonomous=True)
         assert config.autonomous is True
 
-    def test_rejects_negative_retries(self):
-        with pytest.raises(ValidationError):
-            PipelineConfig(max_retries=-1)
-
     def test_serialization_roundtrip(self):
-        config = PipelineConfig(autonomous=True, max_retries=5)
+        config = PipelineConfig(autonomous=True)
         data = config.model_dump()
         restored = PipelineConfig(**data)
         assert restored == config
-
-
-class TestPipelineConfigRetryBaseDelay:
-    """PipelineConfig.retry_base_delay accepts float values."""
-
-    def test_retry_base_delay_accepts_float(self):
-        """Sub-second delays are valid."""
-        config = PipelineConfig(retry_base_delay=0.5)
-        assert config.retry_base_delay == 0.5
 
 
 class TestOutputConfig:
@@ -792,7 +779,6 @@ class TestCaptionModels:
 
     def test_caption_word_fields(self):
         """CaptionWord has word, start, end fields."""
-        from story_video.models import CaptionWord
 
         word = CaptionWord(word="hello", start=0.0, end=0.5)
         assert word.word == "hello"
@@ -801,14 +787,12 @@ class TestCaptionModels:
 
     def test_caption_segment_fields(self):
         """CaptionSegment has text, start, end fields."""
-        from story_video.models import CaptionSegment
 
         seg = CaptionSegment(text="hello world", start=0.0, end=1.0)
         assert seg.text == "hello world"
 
     def test_caption_result_fields(self):
         """CaptionResult has segments, words, language, duration fields."""
-        from story_video.models import CaptionResult
 
         result = CaptionResult(segments=[], words=[], language="en", duration=1.0)
         assert result.language == "en"
@@ -825,25 +809,43 @@ class TestCaptionWordTimestampValidation:
 
     def test_rejects_negative_start(self):
         """Negative start timestamp is rejected."""
-        from story_video.models import CaptionWord
 
         with pytest.raises(ValidationError):
             CaptionWord(word="hello", start=-0.1, end=0.5)
 
     def test_rejects_negative_end(self):
         """Negative end timestamp is rejected."""
-        from story_video.models import CaptionWord
 
         with pytest.raises(ValidationError):
             CaptionWord(word="hello", start=0.0, end=-0.5)
 
     def test_accepts_zero_timestamps(self):
         """Zero timestamps are valid."""
-        from story_video.models import CaptionWord
 
         word = CaptionWord(word="hello", start=0.0, end=0.0)
         assert word.start == 0.0
         assert word.end == 0.0
+
+
+class TestCaptionResultDurationValidation:
+    """CaptionResult.duration rejects negative values."""
+
+    def test_rejects_negative_duration(self):
+        """Negative duration is rejected."""
+
+        with pytest.raises(ValidationError):
+            CaptionResult(
+                segments=[CaptionSegment(text="hi", start=0.0, end=1.0)],
+                words=[CaptionWord(word="hi", start=0.0, end=1.0)],
+                language="en",
+                duration=-1.0,
+            )
+
+    def test_accepts_zero_duration(self):
+        """Zero duration is valid (empty transcription)."""
+
+        result = CaptionResult(segments=[], words=[], language="en", duration=0.0)
+        assert result.duration == 0.0
 
 
 # ---------------------------------------------------------------------------

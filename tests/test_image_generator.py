@@ -225,11 +225,7 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
 
     def test_generate_retries_on_rate_limit(self, mock_openai):
         """generate() retries on RateLimitError then succeeds."""
-        from openai import RateLimitError
-
-        response_429 = MagicMock()
-        response_429.status_code = 429
-        response_429.json.return_value = {"error": {"message": "rate limited"}}
+        from tests.error_factories import make_openai_rate_limit_error
 
         image_data = MagicMock()
         image_data.b64_json = FAKE_B64
@@ -237,11 +233,7 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
         success_response.data = [image_data]
 
         mock_openai.images.generate.side_effect = [
-            RateLimitError(
-                message="rate limited",
-                response=response_429,
-                body={"error": {"message": "rate limited"}},
-            ),
+            make_openai_rate_limit_error(),
             success_response,
         ]
 
@@ -258,7 +250,7 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
 
     def test_generate_retries_on_connection_error(self, mock_openai):
         """generate() retries on APIConnectionError then succeeds."""
-        from openai import APIConnectionError
+        from tests.error_factories import make_openai_connection_error
 
         image_data = MagicMock()
         image_data.b64_json = FAKE_B64
@@ -266,7 +258,7 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
         success_response.data = [image_data]
 
         mock_openai.images.generate.side_effect = [
-            APIConnectionError(request=MagicMock()),
+            make_openai_connection_error(),
             success_response,
         ]
 
@@ -283,11 +275,7 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
 
     def test_generate_retries_on_server_error(self, mock_openai):
         """generate() retries on InternalServerError then succeeds."""
-        from openai import InternalServerError
-
-        response_500 = MagicMock()
-        response_500.status_code = 500
-        response_500.json.return_value = {"error": {"message": "server error"}}
+        from tests.error_factories import make_openai_server_error
 
         image_data = MagicMock()
         image_data.b64_json = FAKE_B64
@@ -295,11 +283,7 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
         success_response.data = [image_data]
 
         mock_openai.images.generate.side_effect = [
-            InternalServerError(
-                message="server error",
-                response=response_500,
-                body={"error": {"message": "server error"}},
-            ),
+            make_openai_server_error(),
             success_response,
         ]
 

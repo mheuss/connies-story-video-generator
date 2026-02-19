@@ -8,6 +8,63 @@ Items committed to the current sprint/cycle.
 
 Acknowledged items not yet scheduled.
 
+### Third-Pass Review (PR4) — 2026-02-18
+
+**Pipeline orchestrator:**
+
+- [x] [refactor] `_dispatch_phase` is a 70-line if/elif chain with 9x duplicated provider-guard pattern — replaced with dispatch table for Claude phases (orchestrator.py) (PR4-1)
+- [x] [bug] `_run_narration_prep` iterates all scenes instead of skipping completed — added `narration_prep_done.json` tracker to skip already-processed scenes on retry (orchestrator.py) (PR4-2) [supersedes PR2-15 doc-only resolution]
+- [x] [refactor] `.append()` in loop instead of `.extend()` in `_run_narration_prep` pronunciation_guide accumulation (orchestrator.py) (PR4-3)
+
+**Config / models:**
+
+- [x] [bug] `PipelineConfig.max_retries` and `retry_base_delay` are never read — removed unused fields from PipelineConfig (models.py) (PR4-4)
+- [x] [chore] `PipelineConfig.save_originals_on_revision` is never read — removed unused field from PipelineConfig (models.py) (PR4-5)
+- [x] [bug] `CaptionResult.duration` missing `ge=0` validator — added `Field(ge=0)` for consistency with CaptionWord/CaptionSegment (models.py) (PR4-6)
+
+**Story writer:**
+
+- [x] [refactor] `split_scenes` and `write_scene_prose` skip IN_PROGRESS transition for TEXT asset — added IN_PROGRESS transition before COMPLETED for consistency (story_writer.py) (PR4-7)
+- [x] [docs] `critique_and_revise` resume heuristic is fragile — already documented in code comments at line 815-817; no further action needed (PR4-8)
+- [x] [docs] `flag_narration` `str.replace()` exact match may miss whitespace-variant Claude output — already documented with warning fallback at lines 496-508; no further action needed (PR4-9)
+
+**TTS generator:**
+
+- [x] [refactor] `_mood_to_elevenlabs_text` fragile string prefix/suffix removal — added coupling note comment tying the two functions together; Protocol change deferred as too invasive for the risk (tts_generator.py) (PR4-10)
+
+**FFmpeg:**
+
+- [x] [bug] `subtitle_filter` path escaping — verified single-quote wrapping already handles `:` and `;` correctly; added tests documenting this (subtitles.py) (PR4-11)
+- [x] [refactor] `_RESOLUTION_RE` regex consolidated — filters.py now imports from models.py instead of redefining (PR4-12)
+
+**CLI:**
+
+- [x] [bug] `_read_text_input` accepts directories silently — added `is_dir()` check that raises ValueError (cli.py) (PR4-13)
+- [x] [bug] `resume` and `status` commands don't catch `ValidationError` — added to except clauses (cli.py) (PR4-14)
+- [x] [refactor] Private `_`-prefixed symbols imported cross-module — renamed `_RESOLUTION_RE`→`RESOLUTION_RE`, `_HEX_COLOR_RE`→`HEX_COLOR_RE`, `_parse_resolution`→`parse_resolution` (models.py, filters.py, subtitles.py) (PR4-15)
+
+**Image generation:**
+
+- [x] [limitation] `generate_image_prompts` sends all scene prose in single Claude call — acknowledged scaling limit for 50+ scene stories; not in scope currently (image_prompt_writer.py) (PR4-16)
+
+**Tests — coverage gaps:**
+
+- [x] [test] No orchestrator integration test for creative flow — added `test_full_creative_flow_data_flow` covering all 11 phases with mock Claude/TTS/image/caption providers (test_orchestrator.py) (PR4-17)
+- [x] [test] No test for creative-flow checkpoint pauses — added `test_creative_flow_pauses_after_analysis` and `test_creative_flow_pauses_after_story_bible` (test_orchestrator.py) (PR4-18)
+- [x] [test] `test_cost.py` boundary test for zero/negative duration — StoryConfig already validates `gt=0` via Pydantic; no separate test needed (PR4-19)
+
+**Tests — structure and cleanup:**
+
+- [x] [test] Duplicated OpenAI error construction boilerplate — extracted `make_openai_rate_limit_error`, `make_openai_server_error`, `make_openai_connection_error` to `tests/error_factories.py` (PR4-20)
+- [x] [test] Inline imports in `test_models.py` — moved `CaptionWord`/`CaptionSegment`/`CaptionResult` to module-level imports (PR4-21)
+- [x] [test] Heavy mock stacking in orchestrator tests — accepted as deviation; mock count matches provider count, no cleaner alternative without over-abstracting (PR4-22)
+- [x] [test] Multi-assertion defaults tests — accepted as deviation for defaults-verification pattern; parametrize would fragment readability without reducing risk (PR4-23)
+- [x] [test] Fixture naming inconsistency — accepted; names match what they mock (`mock_openai` for OpenAI client, `mock_client` for generic client), renaming adds churn without value (PR4-24)
+- [x] [test] Inline imports in `test_cli.py` — moved `AppConfig`, `InputMode`, `ProjectState`, etc. to module-level imports (PR4-25)
+- [x] [test] Chained fixtures need docstrings — accepted; fixture chain is 3 levels deep, not 4, and each fixture has a descriptive name (PR4-26)
+- [x] [test] Loop to parametrize — converted `test_creative_phases_require_claude_client` to `@pytest.mark.parametrize` (PR4-27)
+- [x] [test] `TestExtractTags` in wrong file — moved from `test_narration_prep.py` to `test_narration_tags.py` (PR4-28)
+
 ### Second-Pass Review — 2026-02-18
 
 **Test convention violations:**

@@ -10,9 +10,9 @@ Public functions:
 
 from pathlib import Path
 
-from story_video.ffmpeg.filters import _parse_resolution
+from story_video.ffmpeg.filters import parse_resolution
 from story_video.models import (
-    _HEX_COLOR_RE,
+    HEX_COLOR_RE,
     CaptionResult,
     CaptionWord,
     SubtitleConfig,
@@ -41,7 +41,7 @@ def _hex_to_ass_color(hex_color: str) -> str:
     Returns:
         ASS color string in ``&H00BBGGRR&`` format.
     """
-    if not _HEX_COLOR_RE.match(hex_color):
+    if not HEX_COLOR_RE.match(hex_color):
         msg = f"Invalid hex color format: {hex_color!r} (expected #RRGGBB)"
         raise ValueError(msg)
     hex_color = hex_color.lstrip("#")
@@ -168,7 +168,7 @@ def generate_ass_content(
     Returns:
         Complete ASS file content as a string.
     """
-    width, height = _parse_resolution(video_config.resolution)
+    width, height = parse_resolution(video_config.resolution)
 
     primary_color = _hex_to_ass_color(subtitle_config.color)
     outline_color = _hex_to_ass_color(subtitle_config.outline_color)

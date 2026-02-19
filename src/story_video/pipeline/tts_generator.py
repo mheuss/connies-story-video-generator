@@ -112,6 +112,10 @@ def _mood_to_elevenlabs_text(text: str, instructions: str | None) -> str:
     ``[whispers]``, ``[excited]``. The mood keyword is extracted from
     the ``instructions`` string and passed through directly as a tag —
     no mapping table needed.
+
+    COUPLING NOTE: This function reverse-parses the format produced by
+    ``_mood_to_instructions`` ("Speak in a/an {mood} tone"). If that
+    format changes, update the prefix/suffix stripping here to match.
     """
     if instructions is None:
         return text

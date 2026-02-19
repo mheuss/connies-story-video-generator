@@ -93,6 +93,9 @@ def _read_text_input(value: str) -> str:
         The file content if *value* pointed to a file, or *value* itself.
     """
     path = Path(value)
+    if path.is_dir():
+        msg = f"'{value}' is a directory, not a file. Provide a file path or inline text."
+        raise ValueError(msg)
     if path.is_file():
         return path.read_text(encoding="utf-8")
     return value
@@ -405,7 +408,7 @@ def resume(
     # --- Load project state ---
     try:
         state = ProjectState.load(project_dir)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, ValidationError) as exc:
         console.print(Panel(str(exc), title="Load Error", border_style="red"))
         raise typer.Exit(1)
 
@@ -485,7 +488,7 @@ def status(
     # --- Load project state ---
     try:
         state = ProjectState.load(project_dir)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, ValidationError) as exc:
         console.print(Panel(str(exc), title="Load Error", border_style="red"))
         raise typer.Exit(1)
 

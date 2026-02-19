@@ -14,9 +14,19 @@ from story_video.cli import (
     _find_most_recent_project,
     _generate_project_id,
     _read_text_input,
+    _run_with_providers,
     app,
 )
-from story_video.models import PhaseStatus, PipelinePhase
+from story_video.models import (
+    AppConfig,
+    AssetType,
+    InputMode,
+    PhaseStatus,
+    PipelinePhase,
+    SceneStatus,
+    TTSConfig,
+)
+from story_video.state import ProjectState
 
 runner = CliRunner()
 
@@ -87,6 +97,13 @@ class TestReadTextInput:
         """When value looks like a path but file doesn't exist, returns as-is."""
         result = _read_text_input("/tmp/nonexistent_file_abc123.txt")
         assert result == "/tmp/nonexistent_file_abc123.txt"
+
+    def test_raises_when_path_is_directory(self, tmp_path: Path) -> None:
+        """Directory path raises ValueError instead of silently treating as text."""
+        import pytest
+
+        with pytest.raises(ValueError, match="is a directory"):
+            _read_text_input(str(tmp_path))
 
 
 class TestFindMostRecentProject:
@@ -437,8 +454,6 @@ class TestResumeCommand:
         self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
     ):
         """Loads specified project and calls run_pipeline."""
-        from story_video.models import AppConfig, InputMode
-        from story_video.state import ProjectState
 
         ProjectState.create(
             project_id="test-project",
@@ -459,8 +474,6 @@ class TestResumeCommand:
         self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
     ):
         """No project ID → resumes most recent project."""
-        from story_video.models import AppConfig, InputMode
-        from story_video.state import ProjectState
 
         ProjectState.create(
             project_id="my-latest",
@@ -487,6 +500,15 @@ class TestResumeCommand:
         )
         assert result.exit_code != 0
         assert "not found" in result.output.lower()
+
+    def test_resume_corrupted_project_json_shows_load_error(self, tmp_path):
+        """Corrupted project.json with invalid schema shows user-friendly error, not stack trace."""
+        project_dir = tmp_path / "bad-project"
+        project_dir.mkdir()
+        (project_dir / "project.json").write_text('{"project_id": "bad"}', encoding="utf-8")
+        result = runner.invoke(app, ["resume", "bad-project", "--output-dir", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "load error" in result.output.lower()
 
 
 class TestEstimateCommand:
@@ -542,8 +564,6 @@ class TestStatusCommand:
 
     def test_status_with_project_id(self, tmp_path):
         """Displays project metadata and scene status."""
-        from story_video.models import AppConfig, AssetType, InputMode, SceneStatus
-        from story_video.state import ProjectState
 
         state = ProjectState.create(
             project_id="status-test",
@@ -563,8 +583,6 @@ class TestStatusCommand:
 
     def test_status_no_id_uses_most_recent(self, tmp_path):
         """No project ID → shows most recent."""
-        from story_video.models import AppConfig, InputMode
-        from story_video.state import ProjectState
 
         ProjectState.create(
             project_id="latest-project",
@@ -583,14 +601,21 @@ class TestStatusCommand:
         assert result.exit_code != 0
         assert "no project" in result.output.lower()
 
+    def test_status_corrupted_project_json_shows_load_error(self, tmp_path):
+        """Corrupted project.json with invalid schema shows user-friendly error, not stack trace."""
+        project_dir = tmp_path / "bad-project"
+        project_dir.mkdir()
+        (project_dir / "project.json").write_text('{"project_id": "bad"}', encoding="utf-8")
+        result = runner.invoke(app, ["status", "bad-project", "--output-dir", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "load error" in result.output.lower()
+
 
 class TestListCommand:
     """Tests for the list CLI command — project listing display."""
 
     def test_list_shows_projects(self, tmp_path):
         """Lists all projects with metadata."""
-        from story_video.models import AppConfig, InputMode
-        from story_video.state import ProjectState
 
         ProjectState.create(
             project_id="project-a",
@@ -618,8 +643,6 @@ class TestListCommand:
 
     def test_list_skips_corrupted(self, tmp_path):
         """Corrupted project.json skipped."""
-        from story_video.models import AppConfig, InputMode
-        from story_video.state import ProjectState
 
         ProjectState.create(
             project_id="good-project",
@@ -736,8 +759,6 @@ class TestProviderSelection:
         tmp_path,
     ):
         """Resume with provider='elevenlabs' in stored config creates ElevenLabsTTSProvider."""
-        from story_video.models import AppConfig, InputMode, TTSConfig
-        from story_video.state import ProjectState
 
         config = AppConfig(tts=TTSConfig(provider="elevenlabs"))
         ProjectState.create(
@@ -791,8 +812,6 @@ class TestRunWithProviders:
 
         state = MagicMock()
         state.metadata.config.tts.provider = "openai"
-
-        from story_video.cli import _run_with_providers
 
         _run_with_providers(state)
 
@@ -956,8 +975,6 @@ class TestDisplayOutcomeSuccessPath:
 
     def test_success_message_contains_final_mp4(self, tmp_path, capsys):
         """Success panel mentions 'final.mp4' not 'video' directory."""
-        from story_video.models import AppConfig, InputMode, PhaseStatus
-        from story_video.state import ProjectState
 
         state = ProjectState.create("test-proj", InputMode.ADAPT, AppConfig(), tmp_path)
         state.metadata.status = PhaseStatus.COMPLETED

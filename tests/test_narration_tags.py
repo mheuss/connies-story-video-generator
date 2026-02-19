@@ -3,6 +3,7 @@
 import pytest
 
 from story_video.utils.narration_tags import (
+    extract_tags,
     has_narration_tags,
     parse_narration_segments,
     parse_story_header,
@@ -212,3 +213,26 @@ class TestStripNarrationTags:
     def test_no_tags_unchanged(self):
         text = "The hero spoke plainly."
         assert strip_narration_tags(text) == text
+
+
+class TestExtractTags:
+    """extract_tags returns all voice/mood tags in order."""
+
+    def test_no_tags(self):
+        assert extract_tags("Plain text with no tags.") == []
+
+    def test_single_voice_tag(self):
+        text = "**voice:narrator** He spoke softly."
+        assert extract_tags(text) == ["**voice:narrator**"]
+
+    def test_multiple_tags(self):
+        text = '**voice:old_man** "I\'ve seen worse," **voice:narrator** he muttered.'
+        assert extract_tags(text) == ["**voice:old_man**", "**voice:narrator**"]
+
+    def test_mood_tag(self):
+        text = "**mood:somber** The rain fell."
+        assert extract_tags(text) == ["**mood:somber**"]
+
+    def test_mixed_voice_and_mood(self):
+        text = "**voice:jane** **mood:excited** She laughed."
+        assert extract_tags(text) == ["**voice:jane**", "**mood:excited**"]

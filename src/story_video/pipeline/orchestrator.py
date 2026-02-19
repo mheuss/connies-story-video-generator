@@ -15,6 +15,7 @@ See ADR-001 in DEVELOPMENT.md for architectural rationale.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 
@@ -212,6 +213,10 @@ def _dispatch_phase(
 ) -> None:
     """Route a phase to the appropriate pipeline module.
 
+    Claude-dependent phases are dispatched via a lookup table. Media phases
+    (TTS, image, caption, video) have distinct calling patterns and are
+    handled explicitly.
+
     Args:
         phase: The pipeline phase to execute.
         state: Project state.
@@ -224,59 +229,24 @@ def _dispatch_phase(
     Raises:
         ValueError: If the phase is unknown or a required provider is None.
     """
-    if phase == PipelinePhase.ANALYSIS:
-        if claude_client is None:
-            msg = "claude_client is required for ANALYSIS phase"
-            raise ValueError(msg)
-        analyze_source(state, claude_client)
+    # All phases that require claude_client and call fn(state, claude_client).
+    claude_handlers: dict[PipelinePhase, Callable[[ProjectState, ClaudeClient], None]] = {
+        PipelinePhase.ANALYSIS: analyze_source,
+        PipelinePhase.STORY_BIBLE: create_story_bible,
+        PipelinePhase.OUTLINE: create_outline,
+        PipelinePhase.SCENE_PROSE: write_scene_prose,
+        PipelinePhase.CRITIQUE_REVISION: critique_and_revise,
+        PipelinePhase.SCENE_SPLITTING: split_scenes,
+        PipelinePhase.NARRATION_FLAGGING: flag_narration,
+        PipelinePhase.IMAGE_PROMPTS: generate_image_prompts,
+        PipelinePhase.NARRATION_PREP: _run_narration_prep,
+    }
 
-    elif phase == PipelinePhase.STORY_BIBLE:
+    if phase in claude_handlers:
         if claude_client is None:
-            msg = "claude_client is required for STORY_BIBLE phase"
+            msg = f"claude_client is required for {phase.name} phase"
             raise ValueError(msg)
-        create_story_bible(state, claude_client)
-
-    elif phase == PipelinePhase.OUTLINE:
-        if claude_client is None:
-            msg = "claude_client is required for OUTLINE phase"
-            raise ValueError(msg)
-        create_outline(state, claude_client)
-
-    elif phase == PipelinePhase.SCENE_PROSE:
-        if claude_client is None:
-            msg = "claude_client is required for SCENE_PROSE phase"
-            raise ValueError(msg)
-        write_scene_prose(state, claude_client)
-
-    elif phase == PipelinePhase.CRITIQUE_REVISION:
-        if claude_client is None:
-            msg = "claude_client is required for CRITIQUE_REVISION phase"
-            raise ValueError(msg)
-        critique_and_revise(state, claude_client)
-
-    elif phase == PipelinePhase.SCENE_SPLITTING:
-        if claude_client is None:
-            msg = "claude_client is required for SCENE_SPLITTING phase"
-            raise ValueError(msg)
-        split_scenes(state, claude_client)
-
-    elif phase == PipelinePhase.NARRATION_FLAGGING:
-        if claude_client is None:
-            msg = "claude_client is required for NARRATION_FLAGGING phase"
-            raise ValueError(msg)
-        flag_narration(state, claude_client)
-
-    elif phase == PipelinePhase.IMAGE_PROMPTS:
-        if claude_client is None:
-            msg = "claude_client is required for IMAGE_PROMPTS phase"
-            raise ValueError(msg)
-        generate_image_prompts(state, claude_client)
-
-    elif phase == PipelinePhase.NARRATION_PREP:
-        if claude_client is None:
-            msg = "claude_client is required for NARRATION_PREP phase"
-            raise ValueError(msg)
-        _run_narration_prep(state, claude_client)
+        claude_handlers[phase](state, claude_client)
 
     elif phase == PipelinePhase.TTS_GENERATION:
         if tts_provider is None:
@@ -309,7 +279,7 @@ def _dispatch_phase(
 
 
 def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> None:
-    """Apply LLM-based narration preparation to all scenes.
+    """Apply LLM-based narration preparation to pending scenes.
 
     Calls Claude once per scene to rewrite narration text for TTS. Accumulates
     a pronunciation guide across scenes (scene 1's entries feed into scene 2's
@@ -318,12 +288,32 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
     Also marks narration_text assets as COMPLETED. In adapt mode this is
     redundant (flag_narration already set it), but in the creative flow
     there is no flagging phase, so narration_prep is responsible for it.
+
+    On retry after mid-phase failure, already-processed scenes are skipped
+    using a ``narration_prep_done.json`` tracker file. The pronunciation guide
+    for skipped scenes is lost (it was only in memory during the original run),
+    so later scenes may get slightly different pronunciation suggestions. This
+    is acceptable — the guide is a quality optimization, not a correctness
+    requirement.
     """
+    # Load tracker of scenes already processed (for retry support).
+    done_path = state.project_dir / "narration_prep_done.json"
+    done_scenes: set[int] = set()
+    if done_path.exists():
+        done_scenes = set(json.loads(done_path.read_text(encoding="utf-8")))
+
     pronunciation_guide: list[dict[str, str]] = []
     changelog: list[dict] = []
     total_scenes = len(state.metadata.scenes)
 
     for scene in state.metadata.scenes:
+        if scene.scene_number in done_scenes:
+            logger.info(
+                "Scene %d already prepped — skipping",
+                scene.scene_number,
+            )
+            continue
+
         text = scene.narration_text or scene.prose
         if not text:
             logger.warning(
@@ -349,11 +339,14 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
                 scene.scene_number, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED
             )
 
-        for addition in result["pronunciation_guide_additions"]:
-            pronunciation_guide.append(addition)
+        pronunciation_guide.extend(result["pronunciation_guide_additions"])
 
         for change in result["changes"]:
             changelog.append({"scene": scene.scene_number, **change})
+
+        # Persist tracker after each scene so mid-phase failures don't re-process.
+        done_scenes.add(scene.scene_number)
+        done_path.write_text(json.dumps(sorted(done_scenes)), encoding="utf-8")
 
     if changelog:
         write_narration_changelog(changelog, state.project_dir)

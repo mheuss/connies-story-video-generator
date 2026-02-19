@@ -435,6 +435,16 @@ class TestSubtitleFilter:
         result = subtitle_filter(Path("/tmp/subs.ass"))
         assert result == "ass='/tmp/subs.ass'"
 
+    def test_colon_in_path_safe_inside_single_quotes(self):
+        """Colons (FFmpeg option separators) are safe inside single-quoted values."""
+        result = subtitle_filter(Path("/tmp/project:v2/scene.ass"))
+        assert result == "ass='/tmp/project:v2/scene.ass'"
+
+    def test_semicolon_in_path_safe_inside_single_quotes(self):
+        """Semicolons (FFmpeg chain separators) are safe inside single-quoted values."""
+        result = subtitle_filter(Path("/tmp/dir;name/scene.ass"))
+        assert result == "ass='/tmp/dir;name/scene.ass'"
+
 
 # ---------------------------------------------------------------------------
 # Empty words — no Dialogue lines produced
