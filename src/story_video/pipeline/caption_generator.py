@@ -102,69 +102,119 @@ class OpenAIWhisperProvider:
 # ---------------------------------------------------------------------------
 
 
-def _reconcile_punctuation(result: CaptionResult) -> CaptionResult:
-    """Restore punctuation from segment text to word timestamps.
+def _tokenize_prose(prose: str) -> list[tuple[str, str, str]]:
+    """Split prose into tokens of (leading_punct, bare_word, trailing_punct).
 
-    Whisper word-level timestamps strip punctuation, but segment text
-    preserves it. This function walks each segment's text with a cursor,
-    matching words by position, and appends any trailing non-alphanumeric
-    characters to the word.
-
-    Fails gracefully — unmatched words are left unchanged.
+    Each whitespace-delimited word is decomposed into:
+    - leading: non-alphanumeric characters before the word
+    - bare: the alphanumeric core
+    - trailing: non-alphanumeric characters after the word
 
     Args:
-        result: CaptionResult with segments (punctuated) and words (bare).
+        prose: The prose text to tokenize.
+
+    Returns:
+        List of (leading, bare, trailing) tuples. Words that are entirely
+        punctuation (e.g. ``—``) are skipped.
+    """
+    tokens: list[tuple[str, str, str]] = []
+    for raw_word in prose.split():
+        # Strip leading punctuation
+        i = 0
+        while i < len(raw_word) and not raw_word[i].isalnum():
+            i += 1
+        leading = raw_word[:i]
+
+        # Strip trailing punctuation
+        j = len(raw_word)
+        while j > i and not raw_word[j - 1].isalnum():
+            j -= 1
+        trailing = raw_word[j:]
+
+        bare = raw_word[i:j]
+        if bare:
+            tokens.append((leading, bare, trailing))
+
+    return tokens
+
+
+def _reconcile_punctuation(result: CaptionResult, prose: str) -> CaptionResult:
+    """Restore punctuation from prose text to caption word timestamps.
+
+    Whisper strips punctuation from word-level timestamps. This function
+    aligns caption words against the original prose using a two-pointer
+    walk, transferring leading and trailing punctuation (including
+    quotation marks) from prose tokens to caption words.
+
+    Falls back gracefully — unmatched words keep their existing text.
+    The lookahead window is 3 tokens. If Whisper output drifts more than
+    3 tokens from the prose (e.g. due to hallucination), subsequent words
+    in that passage will not receive punctuation.
+
+    Args:
+        result: CaptionResult with words (possibly missing punctuation).
+        prose: The original prose text with correct punctuation.
 
     Returns:
         A new CaptionResult with punctuation restored on words.
     """
-    if not result.words:
+    if not result.words or not prose:
+        return result
+
+    tokens = _tokenize_prose(prose)
+    if not tokens:
         return result
 
     new_words = list(result.words)
+    token_idx = 0
+    lookahead = 3  # How far ahead to search for a match on mismatch
 
-    for segment in result.segments:
-        seg_text = segment.text.strip()
-        cursor = 0
+    for word_idx in range(len(new_words)):
+        if token_idx >= len(tokens):
+            break
 
-        for i, word in enumerate(new_words):
-            # Only process words within this segment's time range
-            if word.start < segment.start - 0.01 or word.start > segment.end + 0.01:
-                continue
+        word = new_words[word_idx]
+        # Strip leading/trailing punctuation using same logic as _tokenize_prose
+        # (walk from each end until alphanumeric). This preserves internal
+        # apostrophes in contractions like "don't".
+        raw = word.word
+        ci = 0
+        while ci < len(raw) and not raw[ci].isalnum():
+            ci += 1
+        cj = len(raw)
+        while cj > ci and not raw[cj - 1].isalnum():
+            cj -= 1
+        bare_caption = raw[ci:cj]
+        if not bare_caption:
+            continue
 
-            # Strip any existing punctuation from the word for matching
-            bare_word = word.word.rstrip(".,!?;:\u2014\"'\u201c\u201d\u2018\u2019\u2026-")
-            if not bare_word:
-                continue
+        bare_caption_lower = bare_caption.lower()
 
-            # Find the word in segment text starting from cursor
-            pos = seg_text.find(bare_word, cursor)
-            if pos == -1:
-                # Try case-insensitive match
-                pos = seg_text.lower().find(bare_word.lower(), cursor)
-            if pos == -1:
-                continue
+        # Try to match at current token position, then lookahead
+        matched_offset = None
+        for offset in range(min(lookahead + 1, len(tokens) - token_idx)):
+            _, prose_bare, _ = tokens[token_idx + offset]
+            if prose_bare.lower() == bare_caption_lower:
+                matched_offset = offset
+                break
 
-            # Advance past the word
-            end_of_word = pos + len(bare_word)
+        if matched_offset is None:
+            # No match found in lookahead window — skip this caption word
+            continue
 
-            # Grab trailing non-alphanumeric, non-space characters
-            trailing = ""
-            j = end_of_word
-            while j < len(seg_text) and not seg_text[j].isalnum() and seg_text[j] != " ":
-                trailing += seg_text[j]
-                j += 1
+        # Apply punctuation from matched prose token
+        leading, prose_bare, trailing = tokens[token_idx + matched_offset]
+        new_word_text = leading + bare_caption + trailing
 
-            # Update word with punctuation if it doesn't already have it
-            if trailing and not word.word.endswith(trailing):
-                new_words[i] = CaptionWord(
-                    word=bare_word + trailing,
-                    start=word.start,
-                    end=word.end,
-                )
+        if new_word_text != word.word:
+            new_words[word_idx] = CaptionWord(
+                word=new_word_text,
+                start=word.start,
+                end=word.end,
+            )
 
-            # Advance cursor past matched content
-            cursor = j
+        # Advance token pointer past the match
+        token_idx = token_idx + matched_offset + 1
 
     return CaptionResult(
         segments=result.segments,
@@ -203,7 +253,7 @@ def generate_captions(scene: Scene, state: ProjectState, provider: CaptionProvid
         raise FileNotFoundError(msg)
 
     result = provider.transcribe(audio_path)
-    result = _reconcile_punctuation(result)
+    result = _reconcile_punctuation(result, scene.prose)
 
     captions_dir = state.project_dir / "captions"
     captions_dir.mkdir(exist_ok=True)

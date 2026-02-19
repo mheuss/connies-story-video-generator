@@ -17,6 +17,7 @@ from story_video.pipeline.caption_generator import (
     CaptionWord,
     OpenAIWhisperProvider,
     _reconcile_punctuation,
+    _tokenize_prose,
     generate_captions,
 )
 from story_video.state import ProjectState
@@ -570,7 +571,7 @@ class TestReconcilePunctuation:
             language="en",
             duration=2.5,
         )
-        reconciled = _reconcile_punctuation(result)
+        reconciled = _reconcile_punctuation(result, "The storm raged on.")
         assert reconciled.words[3].word == "on."
 
     def test_appends_comma(self):
@@ -584,7 +585,7 @@ class TestReconcilePunctuation:
             language="en",
             duration=1.5,
         )
-        reconciled = _reconcile_punctuation(result)
+        reconciled = _reconcile_punctuation(result, "Hello, world.")
         assert reconciled.words[0].word == "Hello,"
         assert reconciled.words[1].word == "world."
 
@@ -601,7 +602,7 @@ class TestReconcilePunctuation:
             language="en",
             duration=2.5,
         )
-        reconciled = _reconcile_punctuation(result)
+        reconciled = _reconcile_punctuation(result, "The storm raged on.")
         assert reconciled.words[3].word == "on."
 
     def test_multiple_segments(self):
@@ -621,7 +622,7 @@ class TestReconcilePunctuation:
             language="en",
             duration=3.5,
         )
-        reconciled = _reconcile_punctuation(result)
+        reconciled = _reconcile_punctuation(result, "Hello, world. How are you?")
         assert reconciled.words[0].word == "Hello,"
         assert reconciled.words[1].word == "world."
         assert reconciled.words[4].word == "you?"
@@ -637,7 +638,7 @@ class TestReconcilePunctuation:
             language="en",
             duration=1.5,
         )
-        reconciled = _reconcile_punctuation(result)
+        reconciled = _reconcile_punctuation(result, "The storm.")
         assert reconciled.words[0].word == "Da"
 
     def test_empty_words_returns_unchanged(self):
@@ -648,7 +649,7 @@ class TestReconcilePunctuation:
             language="en",
             duration=1.0,
         )
-        reconciled = _reconcile_punctuation(result)
+        reconciled = _reconcile_punctuation(result, "Hello.")
         assert reconciled.words == []
 
     def test_exclamation_mark(self):
@@ -659,11 +660,11 @@ class TestReconcilePunctuation:
             language="en",
             duration=0.5,
         )
-        reconciled = _reconcile_punctuation(result)
+        reconciled = _reconcile_punctuation(result, "Run!")
         assert reconciled.words[0].word == "Run!"
 
-    def test_em_dash_and_quotes(self):
-        """Trailing punctuation like comma after 'said' is appended."""
+    def test_appends_comma_to_dialogue_tag(self):
+        """Comma after dialogue tag 'said' is appended from prose."""
         result = CaptionResult(
             segments=[CaptionSegment(text='She said, "hello" \u2014', start=0.0, end=2.0)],
             words=[
@@ -674,5 +675,299 @@ class TestReconcilePunctuation:
             language="en",
             duration=2.0,
         )
-        reconciled = _reconcile_punctuation(result)
+        reconciled = _reconcile_punctuation(result, 'She said, "hello" \u2014')
         assert reconciled.words[1].word == "said,"
+
+
+# ---------------------------------------------------------------------------
+# _tokenize_prose — splits prose into (leading, bare, trailing) tuples
+# ---------------------------------------------------------------------------
+
+
+class TestTokenizeProse:
+    """_tokenize_prose splits prose words into (leading, bare, trailing) tuples."""
+
+    def test_plain_word(self):
+        """Word with no punctuation returns empty leading and trailing."""
+        tokens = _tokenize_prose("hello")
+        assert tokens == [("", "hello", "")]
+
+    def test_trailing_period(self):
+        """Trailing period is captured."""
+        tokens = _tokenize_prose("hello.")
+        assert tokens == [("", "hello", ".")]
+
+    def test_trailing_comma(self):
+        """Trailing comma is captured."""
+        tokens = _tokenize_prose("hello,")
+        assert tokens == [("", "hello", ",")]
+
+    def test_leading_double_quote(self):
+        """Leading double quote is captured."""
+        tokens = _tokenize_prose('"Hello')
+        assert tokens == [('"', "Hello", "")]
+
+    def test_trailing_double_quote(self):
+        """Trailing double quote is captured."""
+        tokens = _tokenize_prose('world"')
+        assert tokens == [("", "world", '"')]
+
+    def test_both_leading_and_trailing(self):
+        """Leading quote and trailing comma are both captured."""
+        tokens = _tokenize_prose('"Hello, world."')
+        assert tokens == [('"', "Hello", ","), ("", "world", '."')]
+
+    def test_curly_quotes(self):
+        """Curly quotes are captured."""
+        tokens = _tokenize_prose("\u201cHello\u201d")
+        assert tokens == [("\u201c", "Hello", "\u201d")]
+
+    def test_em_dash_trailing(self):
+        """Em dash as trailing punctuation is captured."""
+        tokens = _tokenize_prose("wait\u2014")
+        assert tokens == [("", "wait", "\u2014")]
+
+    def test_multiple_trailing(self):
+        """Multiple trailing punctuation characters are captured together."""
+        tokens = _tokenize_prose('said."')
+        assert tokens == [("", "said", '."')]
+
+    def test_empty_string(self):
+        """Empty string returns empty list."""
+        tokens = _tokenize_prose("")
+        assert tokens == []
+
+    def test_full_sentence(self):
+        """Full sentence with mixed punctuation."""
+        tokens = _tokenize_prose('He said "hello" to her.')
+        assert tokens == [
+            ("", "He", ""),
+            ("", "said", ""),
+            ('"', "hello", '"'),
+            ("", "to", ""),
+            ("", "her", "."),
+        ]
+
+
+# ---------------------------------------------------------------------------
+# _reconcile_punctuation (prose-based) — quote restoration
+# ---------------------------------------------------------------------------
+
+
+class TestReconcilePunctuationQuotes:
+    """_reconcile_punctuation restores quotation marks from prose."""
+
+    def test_restores_opening_and_closing_double_quotes(self):
+        """Double quotes around dialogue are restored from prose."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="She said hello.", start=0.0, end=2.0)],
+            words=[
+                CaptionWord(word="She", start=0.0, end=0.3),
+                CaptionWord(word="said", start=0.4, end=0.7),
+                CaptionWord(word="hello", start=0.8, end=1.5),
+            ],
+            language="en",
+            duration=2.0,
+        )
+        prose = 'She said "hello."'
+        reconciled = _reconcile_punctuation(result, prose)
+        assert reconciled.words[2].word == '"hello."'
+
+    def test_restores_quotes_on_multi_word_dialogue(self):
+        """Quotes around multi-word dialogue span correct words."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="He said I need to leave now.", start=0.0, end=3.0)],
+            words=[
+                CaptionWord(word="He", start=0.0, end=0.2),
+                CaptionWord(word="said", start=0.3, end=0.5),
+                CaptionWord(word="I", start=0.6, end=0.7),
+                CaptionWord(word="need", start=0.8, end=1.0),
+                CaptionWord(word="to", start=1.1, end=1.2),
+                CaptionWord(word="leave", start=1.3, end=1.6),
+                CaptionWord(word="now", start=1.7, end=2.0),
+            ],
+            language="en",
+            duration=3.0,
+        )
+        prose = 'He said "I need to leave now."'
+        reconciled = _reconcile_punctuation(result, prose)
+        assert reconciled.words[2].word == '"I'
+        assert reconciled.words[6].word == 'now."'
+
+    def test_restores_curly_quotes(self):
+        """Curly quotes are restored from prose."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="She whispered hello.", start=0.0, end=1.5)],
+            words=[
+                CaptionWord(word="She", start=0.0, end=0.3),
+                CaptionWord(word="whispered", start=0.4, end=0.8),
+                CaptionWord(word="hello", start=0.9, end=1.5),
+            ],
+            language="en",
+            duration=1.5,
+        )
+        prose = "She whispered \u201chello.\u201d"
+        reconciled = _reconcile_punctuation(result, prose)
+        assert reconciled.words[2].word == "\u201chello.\u201d"
+
+    def test_inline_dialogue_with_comma(self):
+        """Inline dialogue: 'said, "hello,"' gets comma and quotes."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="She said hello and left.", start=0.0, end=3.0)],
+            words=[
+                CaptionWord(word="She", start=0.0, end=0.3),
+                CaptionWord(word="said", start=0.4, end=0.6),
+                CaptionWord(word="hello", start=0.7, end=1.0),
+                CaptionWord(word="and", start=1.1, end=1.3),
+                CaptionWord(word="left", start=1.4, end=1.8),
+            ],
+            language="en",
+            duration=3.0,
+        )
+        prose = 'She said, "hello," and left.'
+        reconciled = _reconcile_punctuation(result, prose)
+        assert reconciled.words[1].word == "said,"
+        assert reconciled.words[2].word == '"hello,"'
+        assert reconciled.words[4].word == "left."
+
+    def test_no_prose_returns_unchanged(self):
+        """Empty prose string returns result unchanged."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="Hello.", start=0.0, end=1.0)],
+            words=[CaptionWord(word="Hello", start=0.0, end=1.0)],
+            language="en",
+            duration=1.0,
+        )
+        reconciled = _reconcile_punctuation(result, "")
+        assert reconciled.words[0].word == "Hello"
+
+    def test_standalone_dialogue_line(self):
+        """Full dialogue line starting with quote."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="I need to leave she said.", start=0.0, end=3.0)],
+            words=[
+                CaptionWord(word="I", start=0.0, end=0.2),
+                CaptionWord(word="need", start=0.3, end=0.5),
+                CaptionWord(word="to", start=0.6, end=0.7),
+                CaptionWord(word="leave", start=0.8, end=1.2),
+                CaptionWord(word="she", start=1.3, end=1.5),
+                CaptionWord(word="said", start=1.6, end=2.0),
+            ],
+            language="en",
+            duration=3.0,
+        )
+        prose = '"I need to leave," she said.'
+        reconciled = _reconcile_punctuation(result, prose)
+        assert reconciled.words[0].word == '"I'
+        assert reconciled.words[3].word == 'leave,"'
+        assert reconciled.words[5].word == "said."
+
+
+# ---------------------------------------------------------------------------
+# _reconcile_punctuation — alignment edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestReconcilePunctuationAlignment:
+    """_reconcile_punctuation handles word mismatches from narration prep."""
+
+    def test_skipped_prose_word_resyncs(self):
+        """Prose has extra word that Whisper didn't hear — alignment resyncs."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="The cat sat.", start=0.0, end=2.0)],
+            words=[
+                CaptionWord(word="The", start=0.0, end=0.3),
+                CaptionWord(word="cat", start=0.4, end=0.8),
+                CaptionWord(word="sat", start=0.9, end=2.0),
+            ],
+            language="en",
+            duration=2.0,
+        )
+        # Prose has an extra adjective that narration prep removed
+        prose = "The big cat sat."
+        reconciled = _reconcile_punctuation(result, prose)
+        assert reconciled.words[2].word == "sat."
+
+    def test_case_insensitive_matching(self):
+        """Matching is case-insensitive."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="the storm.", start=0.0, end=1.5)],
+            words=[
+                CaptionWord(word="the", start=0.0, end=0.3),
+                CaptionWord(word="storm", start=0.4, end=1.5),
+            ],
+            language="en",
+            duration=1.5,
+        )
+        prose = "The storm."
+        reconciled = _reconcile_punctuation(result, prose)
+        assert reconciled.words[1].word == "storm."
+
+    def test_preserves_word_timing(self):
+        """Punctuation restoration does not alter word timestamps."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="Hello world.", start=0.0, end=1.5)],
+            words=[
+                CaptionWord(word="Hello", start=0.0, end=0.5),
+                CaptionWord(word="world", start=0.6, end=1.5),
+            ],
+            language="en",
+            duration=1.5,
+        )
+        reconciled = _reconcile_punctuation(result, "Hello, world.")
+        assert reconciled.words[0].start == 0.0
+        assert reconciled.words[0].end == 0.5
+        assert reconciled.words[1].start == 0.6
+        assert reconciled.words[1].end == 1.5
+
+    def test_multiple_quoted_sections(self):
+        """Multiple dialogue sections in one scene are all restored."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="Hi he said. Bye she replied.", start=0.0, end=4.0)],
+            words=[
+                CaptionWord(word="Hi", start=0.0, end=0.3),
+                CaptionWord(word="he", start=0.4, end=0.5),
+                CaptionWord(word="said", start=0.6, end=0.9),
+                CaptionWord(word="Bye", start=1.0, end=1.3),
+                CaptionWord(word="she", start=1.4, end=1.6),
+                CaptionWord(word="replied", start=1.7, end=2.5),
+            ],
+            language="en",
+            duration=4.0,
+        )
+        prose = '"Hi," he said. "Bye," she replied.'
+        reconciled = _reconcile_punctuation(result, prose)
+        assert reconciled.words[0].word == '"Hi,"'
+        assert reconciled.words[2].word == "said."
+        assert reconciled.words[3].word == '"Bye,"'
+        assert reconciled.words[5].word == "replied."
+
+    def test_empty_words_with_prose(self):
+        """Empty word list returns unchanged even with prose."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="Hello.", start=0.0, end=1.0)],
+            words=[],
+            language="en",
+            duration=1.0,
+        )
+        reconciled = _reconcile_punctuation(result, "Hello.")
+        assert reconciled.words == []
+
+    def test_lookahead_boundary_4_skipped_words_degrades_gracefully(self):
+        """Beyond 3 skipped prose words, punctuation is not applied (documented limit)."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="The cat sat.", start=0.0, end=2.0)],
+            words=[
+                CaptionWord(word="The", start=0.0, end=0.3),
+                CaptionWord(word="cat", start=0.4, end=0.8),
+                CaptionWord(word="sat", start=0.9, end=2.0),
+            ],
+            language="en",
+            duration=2.0,
+        )
+        # 4 extra words between "The" and "cat" — exceeds lookahead of 3
+        prose = "The very big old grey cat sat."
+        reconciled = _reconcile_punctuation(result, prose)
+        # "cat" and "sat" lose punctuation because alignment drifted past lookahead
+        assert reconciled.words[1].word == "cat"
+        assert reconciled.words[2].word == "sat"
