@@ -191,6 +191,7 @@ Acknowledged items not yet scheduled.
 - [ ] [feature] Inline image tags — define image prompts in YAML header, reference with `**image:tag**` in story text. Decouples image transitions from scene boundaries, gives authors direct control over visuals. Requires video assembler refactor for multiple images per scene.
 - [ ] [feature] Pause tags — `**pause:0.5**` inserts silence into narration audio. Useful for pacing and poetry. Inject silent audio bytes between TTS segments. Caption timing must account for gaps.
 - [ ] [feature] Background music / sound effects — overlay audio tracks at specified points in narration with volume and duration control. Music files supplied by user. FFmpeg amix filter for mixing. Most complex of the three inline tag features.
+- [ ] [bug] Captions missing quotation marks around spoken dialogue — Whisper transcription drops `"` from TTS audio, so dialogue lines appear without quotes in the final subtitles. May need post-processing to re-inject quotes by comparing caption text against narration_text. (pipeline/caption_generator.py)
 - [ ] [feature] FFmpeg concat fallback for non-MP3/opus audio formats — when audio_transition_duration uses WAV, FLAC, or other formats that don't support raw byte concatenation, use `ffmpeg -f concat` to join segment audio files. Low priority: MP3 and opus (the only realistic TTS output formats) support byte concatenation natively.
 - [x] [chore] Add ElevenLabs TTS provider option (merged to main)
 - [x] [test] Boundary value tests for `_int_to_words` and `_year_to_words` — no longer applicable, regex code deleted (T8)
@@ -279,6 +280,16 @@ Completed items awaiting migration to VERSION_HISTORY.md at next release.
 - [x] [test] Split multi-assertion tests into focused single-assertion tests (PR-25)
 
 ## Session Notes
+
+### Session — 2026-02-18
+
+**Stopped after:** Implemented ORIGINAL mode (6 tasks via subagent-driven development). Ran full end-to-end pipeline with `original-story.txt` — produced `output/original-2026-02-18/final.mp4`. Completed 4th whole-codebase review (PR4, 28 findings — all resolved). 897 tests passing.
+
+**What was done:** Built ORIGINAL mode as minimal delta from INSPIRED_BY — same 11-phase creative flow, only ANALYSIS prompt and source_stats computation differ. Renamed `--source-material` to `--input` (clean break). Removed ORIGINAL guard in CLI. Added integration test covering full data flow. Updated README and backlog. Also resolved all 28 PR4 findings (dispatch table, narration prep tracker, unused config fields, etc.).
+
+**Next up:** No blocking work. Backlog items of interest: caption quotation marks bug, image prompt character consistency, marker-based scene splitting, inline image tags.
+
+**Open questions:** None
 
 ### Session — 2026-02-17
 

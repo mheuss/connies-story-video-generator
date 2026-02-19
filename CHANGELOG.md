@@ -8,7 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Original creative flow — generates stories from a creative brief or prompt using the same 5-phase pipeline as inspired_by mode. ANALYSIS phase uses a dedicated brief interpretation prompt; story length derived from config defaults.
 - Inspired_by creative flow — 5-phase pipeline (source analysis, story bible, outline, scene prose with running summaries, critique/revision) that creates original stories inspired by existing source material. Includes `--premise` flag for creative direction and semi-auto checkpoints at each creative phase.
+
+### Changed
+- CLI flag `--source-material` renamed to `--input` — applies to all three modes (adapt, inspired_by, original). Clean break, no deprecated alias.
 
 ## [0.4.0] — 2026-02-18
 
