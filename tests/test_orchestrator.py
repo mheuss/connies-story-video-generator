@@ -1714,3 +1714,212 @@ class TestPipelineIntegration:
         reloaded = ProjectState.load(pd)
         assert reloaded.metadata.status == PhaseStatus.COMPLETED
         assert len(reloaded.metadata.scenes) == 2
+
+    def test_full_original_mode_data_flow(self, tmp_path, monkeypatch):
+        """Full creative flow (original) uses brief prompt and config-derived source_stats."""
+        import json
+        import subprocess as _subprocess
+
+        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
+
+        scene1_prose = "The old woman sat alone in the empty theater, listening to silence."
+        scene2_prose = "She rose from her seat and walked toward the stage, footsteps echoing."
+
+        # --- Mock Claude client ---
+        def _claude_dispatch(**kwargs):
+            tool_name = kwargs.get("tool_name", "")
+            if tool_name == "analyze_source":
+                return {
+                    "craft_notes": {"style": "literary fiction", "tone": "melancholic"},
+                    "thematic_brief": {"themes": ["solitude", "memory"]},
+                    "source_stats": {"word_count": 200, "scene_count_estimate": 2},
+                }
+            if tool_name == "create_story_bible":
+                return {
+                    "characters": [{"name": "The Old Woman", "role": "protagonist"}],
+                    "setting": "An abandoned theater",
+                    "world_rules": [],
+                }
+            if tool_name == "create_outline":
+                return {
+                    "scenes": [
+                        {
+                            "scene_number": 1,
+                            "title": "The Silence",
+                            "beat": "Introduction",
+                            "target_words": 100,
+                        },
+                        {
+                            "scene_number": 2,
+                            "title": "The Stage",
+                            "beat": "Rising action",
+                            "target_words": 100,
+                        },
+                    ]
+                }
+            if tool_name == "write_scene":
+                user_msg = kwargs.get("user_message", "")
+                if "## Current Scene: The Silence" in user_msg:
+                    return {"prose": scene1_prose, "summary": "Old woman sits in theater."}
+                return {"prose": scene2_prose, "summary": "She walks to the stage."}
+            if tool_name == "critique_scene":
+                user_msg = kwargs.get("user_message", "")
+                # Return prose unchanged (no revisions needed)
+                if "theater" in user_msg and "listening" in user_msg:
+                    return {"revised_prose": scene1_prose, "changes": []}
+                return {"revised_prose": scene2_prose, "changes": []}
+            if tool_name == "generate_image_prompts":
+                return {
+                    "prompts": [
+                        {"scene_number": 1, "image_prompt": "Empty theater with one person."},
+                        {"scene_number": 2, "image_prompt": "Woman walking toward lit stage."},
+                    ]
+                }
+            if tool_name == "tts_text_prep":
+                user_msg = kwargs.get("user_message", "")
+                lines = user_msg.split("\n")
+                text_start = None
+                for i, line in enumerate(lines):
+                    if line.startswith("Narration text to prepare for TTS:"):
+                        text_start = i + 2
+                        break
+                narration_text = "\n".join(lines[text_start:]) if text_start else ""
+                return {
+                    "modified_text": narration_text,
+                    "changes": [],
+                    "pronunciation_guide_additions": [],
+                }
+            msg = f"Unexpected tool_name: {tool_name}"
+            raise ValueError(msg)
+
+        mock_claude = MagicMock()
+        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+
+        # --- Mock TTS provider ---
+        mock_tts = MagicMock()
+        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
+
+        # --- Mock image provider ---
+        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+        mock_image = MagicMock()
+        mock_image.generate = MagicMock(return_value=fake_png)
+
+        # --- Mock caption provider ---
+        def _make_caption_result(text):
+            words = text.split()
+            duration = len(words) * 0.5
+            return CaptionResult(
+                segments=[CaptionSegment(text=text, start=0.0, end=duration)],
+                words=[
+                    CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5)
+                    for i, w in enumerate(words)
+                ],
+                language="en",
+                duration=duration,
+            )
+
+        mock_caption = MagicMock()
+        mock_caption.transcribe = MagicMock(
+            side_effect=lambda path: _make_caption_result("Transcribed narration text.")
+        )
+
+        # --- Mock subprocess.run (FFmpeg/ffprobe) ---
+        real_subprocess_run = _subprocess.run
+
+        def _mock_subprocess_run(cmd, **kwargs):
+            cmd_str = cmd[0] if cmd else ""
+            if "ffprobe" in cmd_str:
+                return _subprocess.CompletedProcess(
+                    args=cmd, returncode=0, stdout="5.0\n", stderr=""
+                )
+            if "ffmpeg" in cmd_str:
+                from pathlib import Path as P
+
+                output_path = P(cmd[-1])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"\x00" * 50)
+                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+            return real_subprocess_run(cmd, **kwargs)
+
+        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+
+        # --- Create project state (ORIGINAL mode) ---
+        config = AppConfig(pipeline=PipelineConfig(autonomous=True))
+        state = ProjectState.create("original-test", InputMode.ORIGINAL, config, tmp_path)
+
+        # Write creative brief (not a full story)
+        source_path = state.project_dir / "source_story.txt"
+        source_path.write_text(
+            "A story about love and sacrifice between a married couple.",
+            encoding="utf-8",
+        )
+
+        # --- Run the full pipeline ---
+        run_pipeline(
+            state,
+            claude_client=mock_claude,
+            tts_provider=mock_tts,
+            image_provider=mock_image,
+            caption_provider=mock_caption,
+        )
+
+        # --- Verify final state ---
+        assert state.metadata.status == PhaseStatus.COMPLETED
+        assert state.metadata.current_phase == PipelinePhase.VIDEO_ASSEMBLY
+        assert len(state.metadata.scenes) == 2
+
+        # --- Verify creative flow artifacts ---
+        pd = state.project_dir
+        assert (pd / "analysis.json").exists()
+        assert (pd / "story_bible.json").exists()
+        assert (pd / "outline.json").exists()
+        assert (pd / "critique" / "scene_001_changes.md").exists()
+        assert (pd / "critique" / "scene_002_changes.md").exists()
+
+        # --- Verify scene data ---
+        scene1 = state.metadata.scenes[0]
+        scene2 = state.metadata.scenes[1]
+        assert "theater" in scene1.prose.lower()
+        assert "stage" in scene2.prose.lower()
+
+        # --- Verify all asset statuses are COMPLETED ---
+        for scene in state.metadata.scenes:
+            s = scene.asset_status
+            assert s.text == SceneStatus.COMPLETED
+            assert s.narration_text == SceneStatus.COMPLETED
+            assert s.image_prompt == SceneStatus.COMPLETED
+            assert s.audio == SceneStatus.COMPLETED
+            assert s.image == SceneStatus.COMPLETED
+            assert s.captions == SceneStatus.COMPLETED
+            assert s.video_segment == SceneStatus.COMPLETED
+
+        # --- Verify expected files exist on disk ---
+        assert (pd / "scenes" / "scene_001.md").exists()
+        assert (pd / "scenes" / "scene_002.md").exists()
+        assert (pd / "audio" / "scene_001.mp3").exists()
+        assert (pd / "audio" / "scene_002.mp3").exists()
+        assert (pd / "images" / "scene_001.png").exists()
+        assert (pd / "images" / "scene_002.png").exists()
+        assert (pd / "final.mp4").exists()
+
+        # --- Verify external APIs were called ---
+        # analyze + bible + outline + 2 prose + 2 critique + prompts + 2 narration prep = 10
+        assert mock_claude.generate_structured.call_count == 10
+        assert mock_tts.synthesize.call_count == 2
+        assert mock_image.generate.call_count == 2
+        assert mock_caption.transcribe.call_count == 2
+
+        # --- Verify state was persisted to disk ---
+        reloaded = ProjectState.load(pd)
+        assert reloaded.metadata.status == PhaseStatus.COMPLETED
+        assert len(reloaded.metadata.scenes) == 2
+
+        # --- Verify ORIGINAL mode specifics ---
+        # First Claude call should use BRIEF_ANALYSIS_SYSTEM prompt
+        first_call_kwargs = mock_claude.generate_structured.call_args_list[0].kwargs
+        assert "creative brief" in first_call_kwargs["system"].lower()
+
+        # source_stats should be config-derived, not from Claude
+        analysis = json.loads((pd / "analysis.json").read_text(encoding="utf-8"))
+        assert analysis["source_stats"]["word_count"] == 4500
+        assert analysis["source_stats"]["scene_count_estimate"] == 7
