@@ -102,6 +102,42 @@ class OpenAIWhisperProvider:
 # ---------------------------------------------------------------------------
 
 
+def _tokenize_prose(prose: str) -> list[tuple[str, str, str]]:
+    """Split prose into tokens of (leading_punct, bare_word, trailing_punct).
+
+    Each whitespace-delimited word is decomposed into:
+    - leading: non-alphanumeric characters before the word
+    - bare: the alphanumeric core
+    - trailing: non-alphanumeric characters after the word
+
+    Args:
+        prose: The prose text to tokenize.
+
+    Returns:
+        List of (leading, bare, trailing) tuples. Words that are entirely
+        punctuation (e.g. ``—``) are skipped.
+    """
+    tokens: list[tuple[str, str, str]] = []
+    for raw_word in prose.split():
+        # Strip leading punctuation
+        i = 0
+        while i < len(raw_word) and not raw_word[i].isalnum():
+            i += 1
+        leading = raw_word[:i]
+
+        # Strip trailing punctuation
+        j = len(raw_word)
+        while j > i and not raw_word[j - 1].isalnum():
+            j -= 1
+        trailing = raw_word[j:]
+
+        bare = raw_word[i:j]
+        if bare:
+            tokens.append((leading, bare, trailing))
+
+    return tokens
+
+
 def _reconcile_punctuation(result: CaptionResult) -> CaptionResult:
     """Restore punctuation from segment text to word timestamps.
 

@@ -17,6 +17,7 @@ from story_video.pipeline.caption_generator import (
     CaptionWord,
     OpenAIWhisperProvider,
     _reconcile_punctuation,
+    _tokenize_prose,
     generate_captions,
 )
 from story_video.state import ProjectState
@@ -676,3 +677,73 @@ class TestReconcilePunctuation:
         )
         reconciled = _reconcile_punctuation(result)
         assert reconciled.words[1].word == "said,"
+
+
+# ---------------------------------------------------------------------------
+# _tokenize_prose — splits prose into (leading, bare, trailing) tuples
+# ---------------------------------------------------------------------------
+
+
+class TestTokenizeProse:
+    """_tokenize_prose splits prose words into (leading, bare, trailing) tuples."""
+
+    def test_plain_word(self):
+        """Word with no punctuation returns empty leading and trailing."""
+        tokens = _tokenize_prose("hello")
+        assert tokens == [("", "hello", "")]
+
+    def test_trailing_period(self):
+        """Trailing period is captured."""
+        tokens = _tokenize_prose("hello.")
+        assert tokens == [("", "hello", ".")]
+
+    def test_trailing_comma(self):
+        """Trailing comma is captured."""
+        tokens = _tokenize_prose("hello,")
+        assert tokens == [("", "hello", ",")]
+
+    def test_leading_double_quote(self):
+        """Leading double quote is captured."""
+        tokens = _tokenize_prose('"Hello')
+        assert tokens == [('"', "Hello", "")]
+
+    def test_trailing_double_quote(self):
+        """Trailing double quote is captured."""
+        tokens = _tokenize_prose('world"')
+        assert tokens == [("", "world", '"')]
+
+    def test_both_leading_and_trailing(self):
+        """Leading quote and trailing comma are both captured."""
+        tokens = _tokenize_prose('"Hello, world."')
+        assert tokens == [('"', "Hello", ","), ("", "world", '."')]
+
+    def test_curly_quotes(self):
+        """Curly quotes are captured."""
+        tokens = _tokenize_prose("\u201cHello\u201d")
+        assert tokens == [("\u201c", "Hello", "\u201d")]
+
+    def test_em_dash_trailing(self):
+        """Em dash as trailing punctuation is captured."""
+        tokens = _tokenize_prose("wait\u2014")
+        assert tokens == [("", "wait", "\u2014")]
+
+    def test_multiple_trailing(self):
+        """Multiple trailing punctuation characters are captured together."""
+        tokens = _tokenize_prose('said."')
+        assert tokens == [("", "said", '."')]
+
+    def test_empty_string(self):
+        """Empty string returns empty list."""
+        tokens = _tokenize_prose("")
+        assert tokens == []
+
+    def test_full_sentence(self):
+        """Full sentence with mixed punctuation."""
+        tokens = _tokenize_prose('He said "hello" to her.')
+        assert tokens == [
+            ("", "He", ""),
+            ("", "said", ""),
+            ('"', "hello", '"'),
+            ("", "to", ""),
+            ("", "her", "."),
+        ]
