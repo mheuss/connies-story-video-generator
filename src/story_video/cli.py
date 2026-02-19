@@ -303,17 +303,6 @@ def create(
         )
         raise typer.Exit(1)
 
-    if input_mode == InputMode.ORIGINAL:
-        console.print(
-            Panel(
-                f"Mode '{mode}' is not yet implemented."
-                " Only 'adapt' and 'inspired_by' are currently supported.",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
-
     # --- Validate input required ---
     if input is None:
         console.print(

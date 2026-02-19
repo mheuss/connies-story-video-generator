@@ -310,20 +310,31 @@ class TestCreateCommand:
         assert result.exit_code != 0
         assert "input" in result.output.lower()
 
-    def test_create_original_mode_not_implemented(self, tmp_path):
-        """Original mode -> 'not yet implemented'."""
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_create_original_mode_accepted(
+        self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
+    ):
+        """Original mode with --input creates a project and runs pipeline."""
         result = runner.invoke(
             app,
             [
                 "create",
                 "--mode",
                 "original",
+                "--input",
+                "A story about love and sacrifice.",
                 "--output-dir",
                 str(tmp_path / "output"),
             ],
         )
-        assert result.exit_code != 0
-        assert "not yet implemented" in result.output.lower()
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        call_state = mock_run.call_args[0][0]
+        assert call_state.metadata.mode.value == "original"
 
     @patch("story_video.cli.run_pipeline")
     @patch("story_video.cli.OpenAIWhisperProvider")
@@ -860,21 +871,6 @@ class TestCreateInspiredByModeAccepted:
         assert result.exit_code == 0
         assert "not yet implemented" not in result.output.lower()
         mock_run.assert_called_once()
-
-    def test_original_mode_still_blocked(self, tmp_path):
-        """original mode still shows 'not yet implemented'."""
-        result = runner.invoke(
-            app,
-            [
-                "create",
-                "--mode",
-                "original",
-                "--output-dir",
-                str(tmp_path / "output"),
-            ],
-        )
-        assert result.exit_code != 0
-        assert "not yet implemented" in result.output.lower()
 
 
 class TestCreatePremiseFlag:
