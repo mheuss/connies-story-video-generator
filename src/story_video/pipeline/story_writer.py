@@ -13,6 +13,7 @@ from story_video.state import ProjectState
 from story_video.utils.narration_tags import parse_story_header, strip_narration_tags
 
 __all__ = [
+    "BRIEF_ANALYSIS_SYSTEM",
     "analyze_source",
     "create_outline",
     "create_story_bible",
@@ -189,6 +190,23 @@ ANALYSIS_SCHEMA = {
     },
     "required": ["craft_notes", "thematic_brief", "source_stats"],
 }
+
+BRIEF_ANALYSIS_SYSTEM = (
+    "You are a creative writing consultant interpreting a story brief.\n\n"
+    "The user has provided a creative brief — it could be anything from a single"
+    " sentence to a detailed outline with characters and plot structure.\n\n"
+    "Your goal is to extract or infer three things:\n"
+    "1. CRAFT NOTES — What writing style fits this story? If the brief specifies"
+    " a style or tone, capture it faithfully. If not, infer an appropriate style"
+    " from the subject matter. Be specific: describe sentence rhythms, vocabulary"
+    " level, narrative voice, pacing.\n"
+    "2. THEMATIC BRIEF — What is this story about at a deeper level? Extract"
+    " explicit themes from the brief and infer implied ones. Define the emotional"
+    " arc, central tension, and overall mood.\n"
+    "3. SOURCE STATS — Will be provided separately. Return them as-is.\n\n"
+    "This analysis will be used to write a complete story. Focus on giving"
+    " the writer a clear creative direction."
+)
 
 STORY_BIBLE_SYSTEM = (
     "You are creating the foundation for a new, original story.\n\n"

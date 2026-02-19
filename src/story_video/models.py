@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 RESOLUTION_RE = re.compile(r"^\d+x\d+$")
+SCENE_WORD_TARGET_DEFAULT = 600
 
 __all__ = [
     "ADAPT_FLOW_PHASES",
@@ -34,6 +35,7 @@ __all__ = [
     "PipelineConfig",
     "PipelinePhase",
     "ProjectMetadata",
+    "SCENE_WORD_TARGET_DEFAULT",
     "Scene",
     "SceneAssetStatus",
     "SceneStatus",
