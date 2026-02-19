@@ -952,3 +952,22 @@ class TestReconcilePunctuationAlignment:
         )
         reconciled = _reconcile_punctuation(result, "Hello.")
         assert reconciled.words == []
+
+    def test_lookahead_boundary_4_skipped_words_degrades_gracefully(self):
+        """Beyond 3 skipped prose words, punctuation is not applied (documented limit)."""
+        result = CaptionResult(
+            segments=[CaptionSegment(text="The cat sat.", start=0.0, end=2.0)],
+            words=[
+                CaptionWord(word="The", start=0.0, end=0.3),
+                CaptionWord(word="cat", start=0.4, end=0.8),
+                CaptionWord(word="sat", start=0.9, end=2.0),
+            ],
+            language="en",
+            duration=2.0,
+        )
+        # 4 extra words between "The" and "cat" — exceeds lookahead of 3
+        prose = "The very big old grey cat sat."
+        reconciled = _reconcile_punctuation(result, prose)
+        # "cat" and "sat" lose punctuation because alignment drifted past lookahead
+        assert reconciled.words[1].word == "cat"
+        assert reconciled.words[2].word == "sat"
