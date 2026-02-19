@@ -7,7 +7,7 @@ Inspired_by mode: analysis, story bible, outline, scene prose, critique/revision
 import json
 import logging
 
-from story_video.models import AssetType, SceneStatus
+from story_video.models import SCENE_WORD_TARGET_DEFAULT, AssetType, InputMode, SceneStatus
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.state import ProjectState
 from story_video.utils.narration_tags import parse_story_header, strip_narration_tags
@@ -544,13 +544,18 @@ def flag_narration(state: ProjectState, client: ClaudeClient) -> None:
 
 
 def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
-    """Analyze source material to extract craft notes and thematic brief.
+    """Analyze source material or creative brief to extract craft notes and thematic brief.
 
-    Reads source_story.txt, sends it to Claude for analysis, and writes
-    the result to analysis.json in the project directory.
+    For INSPIRED_BY mode: reads a full source story, analyzes its writing craft.
+    For ORIGINAL mode: reads a creative brief, interprets it for style and themes.
+    Both produce the same analysis.json output shape.
+
+    In ORIGINAL mode, source_stats (word_count, scene_count_estimate) are computed
+    from StoryConfig rather than extracted by Claude, since a brief has no
+    meaningful word count to match.
 
     Args:
-        state: Project state (must be in inspired_by mode).
+        state: Project state.
         client: Claude API client.
 
     Raises:
@@ -562,15 +567,36 @@ def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
         raise FileNotFoundError(msg)
     source_text = source_path.read_text(encoding="utf-8")
 
-    # Strip YAML front matter if present
-    _, body_text = parse_story_header(source_text)
+    is_original = state.metadata.mode == InputMode.ORIGINAL
 
-    result = client.generate_structured(
-        system=ANALYSIS_SYSTEM,
-        user_message=body_text,
-        tool_name="analyze_source",
-        tool_schema=ANALYSIS_SCHEMA,
+    if is_original:
+        system_prompt = BRIEF_ANALYSIS_SYSTEM
+        user_message = source_text.strip()
+    else:
+        system_prompt = ANALYSIS_SYSTEM
+        # Strip YAML front matter if present
+        _, body_text = parse_story_header(source_text)
+        user_message = body_text
+
+    result = dict(
+        client.generate_structured(
+            system=system_prompt,
+            user_message=user_message,
+            tool_name="analyze_source",
+            tool_schema=ANALYSIS_SCHEMA,
+        )
     )
+
+    # For ORIGINAL mode, compute source_stats from config instead of trusting
+    # Claude's response (a brief has no meaningful word count to match).
+    if is_original:
+        story_config = state.metadata.config.story
+        word_count = story_config.target_duration_minutes * story_config.words_per_minute
+        scene_count = max(2, word_count // SCENE_WORD_TARGET_DEFAULT)
+        result["source_stats"] = {
+            "word_count": word_count,
+            "scene_count_estimate": scene_count,
+        }
 
     # Write analysis.json
     analysis_path = state.project_dir / "analysis.json"

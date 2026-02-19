@@ -999,6 +999,20 @@ def inspired_state(tmp_path):
     return state
 
 
+@pytest.fixture()
+def original_state(tmp_path):
+    """Create a project state in original mode with a creative brief."""
+    state = ProjectState.create(
+        project_id="original-test",
+        mode=InputMode.ORIGINAL,
+        config=AppConfig(),
+        output_dir=tmp_path,
+    )
+    brief = tmp_path / "original-test" / "source_story.txt"
+    brief.write_text("A story about love and sacrifice between a married couple.")
+    return state
+
+
 # ---------------------------------------------------------------------------
 # Analysis phase — tests
 # ---------------------------------------------------------------------------
@@ -1122,6 +1136,39 @@ class TestAnalyzeSourceSavesState:
 
         reloaded = ProjectState.load(inspired_state.project_dir)
         assert reloaded.metadata.project_id == "inspired-test"
+
+
+class TestAnalyzeSourceOriginalMode:
+    """analyze_source() in ORIGINAL mode interprets a creative brief."""
+
+    def test_uses_brief_analysis_prompt(self, original_state, analysis_client):
+        """ORIGINAL mode uses BRIEF_ANALYSIS_SYSTEM, not ANALYSIS_SYSTEM."""
+        analyze_source(original_state, analysis_client)
+        call_kwargs = analysis_client.generate_structured.call_args.kwargs
+        assert "creative brief" in call_kwargs["system"].lower()
+
+    def test_brief_text_in_user_message(self, original_state, analysis_client):
+        """Brief content is included in user message."""
+        analyze_source(original_state, analysis_client)
+        call_kwargs = analysis_client.generate_structured.call_args.kwargs
+        assert "love and sacrifice" in call_kwargs["user_message"]
+
+    def test_source_stats_from_config(self, original_state, analysis_client):
+        """source_stats are computed from config, not from Claude response."""
+        analyze_source(original_state, analysis_client)
+        analysis_path = original_state.project_dir / "analysis.json"
+        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        # Default config: target_duration_minutes=30, words_per_minute=150
+        # -> word_count = 30 * 150 = 4500
+        assert analysis["source_stats"]["word_count"] == 4500
+
+    def test_scene_count_from_word_count(self, original_state, analysis_client):
+        """scene_count_estimate derived from word_count / SCENE_WORD_TARGET_DEFAULT."""
+        analyze_source(original_state, analysis_client)
+        analysis_path = original_state.project_dir / "analysis.json"
+        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        # 4500 / 600 = 7
+        assert analysis["source_stats"]["scene_count_estimate"] == 7
 
 
 # ---------------------------------------------------------------------------
