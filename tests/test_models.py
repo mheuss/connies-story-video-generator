@@ -196,8 +196,9 @@ class TestPhaseSequences:
         assert CREATIVE_FLOW_PHASES == expected
 
     def test_adapt_flow_sequence(self):
-        """adapt mode uses adapt-specific phases then shared phases."""
+        """adapt mode uses analysis then adapt-specific phases then shared phases."""
         expected = (
+            PipelinePhase.ANALYSIS,
             PipelinePhase.SCENE_SPLITTING,
             PipelinePhase.NARRATION_FLAGGING,
             PipelinePhase.IMAGE_PROMPTS,

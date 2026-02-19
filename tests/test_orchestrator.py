@@ -111,11 +111,11 @@ class TestDetermineStartPhase:
     """_determine_start_phase() correctly identifies where to start or resume."""
 
     def test_fresh_project_starts_at_first_phase(self, adapt_state):
-        """State with current_phase=None -> first phase (SCENE_SPLITTING)."""
+        """State with current_phase=None -> first phase (ANALYSIS)."""
         phases = adapt_state.get_phase_sequence()
         result = _determine_start_phase(adapt_state, phases)
 
-        assert result == PipelinePhase.SCENE_SPLITTING
+        assert result == PipelinePhase.ANALYSIS
 
     def test_completed_phase_advances_to_next(self, adapt_state):
         """COMPLETED current phase -> next phase in sequence."""
@@ -195,6 +195,7 @@ class TestRunPipelineSemiAutoCheckpoints:
     def test_pauses_after_scene_splitting(self, mock_split, tmp_path):
         """Semi-auto mode pauses after SCENE_SPLITTING with AWAITING_REVIEW."""
         state = _make_adapt_state(tmp_path, autonomous=False)
+        _set_phase_state(state, PipelinePhase.ANALYSIS, PhaseStatus.AWAITING_REVIEW)
 
         run_pipeline(state, claude_client=MagicMock())
 
@@ -325,8 +326,10 @@ class TestRunPipelineAutonomous:
     @patch("story_video.pipeline.orchestrator.generate_image_prompts")
     @patch("story_video.pipeline.orchestrator.flag_narration")
     @patch("story_video.pipeline.orchestrator.split_scenes")
+    @patch("story_video.pipeline.orchestrator.analyze_source")
     def test_runs_all_phases_without_pausing(
         self,
+        mock_analyze,
         mock_split,
         mock_flag,
         mock_prompts,
@@ -338,7 +341,7 @@ class TestRunPipelineAutonomous:
         mock_assemble_video,
         tmp_path,
     ):
-        """Autonomous mode runs all 8 phases without pausing."""
+        """Autonomous mode runs all 9 phases without pausing."""
         state = _make_adapt_state(tmp_path, autonomous=True)
         # Add scenes so per-scene phases have something to process
         _add_scenes_with_assets(state, count=2, up_to_asset=AssetType.TEXT)
@@ -352,6 +355,7 @@ class TestRunPipelineAutonomous:
         )
 
         # All phases were dispatched (no checkpoint pause)
+        mock_analyze.assert_called_once()
         mock_split.assert_called_once()
         mock_flag.assert_called_once()
         mock_prompts.assert_called_once()
@@ -372,6 +376,7 @@ class TestRunPipelinePhaseFailure:
         """Exception in dispatch -> fail_phase() + save() + re-raise."""
         mock_split.side_effect = RuntimeError("Claude API down")
         state = _make_adapt_state(tmp_path, autonomous=True)
+        _set_phase_state(state, PipelinePhase.ANALYSIS, PhaseStatus.COMPLETED)
 
         with pytest.raises(RuntimeError, match="Claude API down"):
             run_pipeline(state, claude_client=MagicMock())
@@ -384,6 +389,7 @@ class TestRunPipelinePhaseFailure:
         """State persisted to disk after failure — reload confirms FAILED."""
         mock_split.side_effect = RuntimeError("boom")
         state = _make_adapt_state(tmp_path, autonomous=True)
+        _set_phase_state(state, PipelinePhase.ANALYSIS, PhaseStatus.COMPLETED)
 
         with pytest.raises(RuntimeError):
             run_pipeline(state, claude_client=MagicMock())
@@ -680,6 +686,7 @@ class TestRunPipelineDispatch:
     def test_scene_splitting_calls_split_scenes(self, mock_split, tmp_path):
         """SCENE_SPLITTING dispatches to split_scenes(state, client)."""
         state = _make_adapt_state(tmp_path, autonomous=False)
+        _set_phase_state(state, PipelinePhase.ANALYSIS, PhaseStatus.AWAITING_REVIEW)
         client = MagicMock()
 
         run_pipeline(state, claude_client=client)
@@ -785,6 +792,7 @@ class TestRunPipelineStateSaved:
     def test_state_saved_at_checkpoint(self, mock_split, tmp_path):
         """State is saved to disk at checkpoint pause."""
         state = _make_adapt_state(tmp_path, autonomous=False)
+        _set_phase_state(state, PipelinePhase.ANALYSIS, PhaseStatus.AWAITING_REVIEW)
 
         run_pipeline(state, claude_client=MagicMock())
 
@@ -862,6 +870,7 @@ class TestRunPipelineLazyProviders:
     def test_providers_not_created_at_checkpoint(self, mock_split, tmp_path):
         """Semi-auto pauses at SCENE_SPLITTING — no TTS/image/caption provider needed."""
         state = _make_adapt_state(tmp_path, autonomous=False)
+        _set_phase_state(state, PipelinePhase.ANALYSIS, PhaseStatus.AWAITING_REVIEW)
 
         # Pass None for all providers — they shouldn't be touched
         run_pipeline(
@@ -902,8 +911,10 @@ class TestRunPipelineAutonomousCompleted:
     @patch("story_video.pipeline.orchestrator.generate_image_prompts")
     @patch("story_video.pipeline.orchestrator.flag_narration")
     @patch("story_video.pipeline.orchestrator.split_scenes")
+    @patch("story_video.pipeline.orchestrator.analyze_source")
     def test_autonomous_ends_with_completed_status(
         self,
+        mock_analyze,
         mock_split,
         mock_flag,
         mock_prompts,
@@ -915,7 +926,7 @@ class TestRunPipelineAutonomousCompleted:
         mock_assemble_video,
         tmp_path,
     ):
-        """Autonomous mode completes all 8 phases — final status is COMPLETED."""
+        """Autonomous mode completes all 9 phases — final status is COMPLETED."""
         state = _make_adapt_state(tmp_path, autonomous=True)
         _add_scenes_with_assets(state, count=2, up_to_asset=AssetType.TEXT)
 
@@ -1352,6 +1363,33 @@ class TestPipelineIntegration:
 
         # --- Mock Claude client ---
         claude_responses = {
+            "analyze_source": {
+                "craft_notes": {
+                    "sentence_structure": "Simple declarative.",
+                    "vocabulary": "Concrete and nautical.",
+                    "tone": "Quiet, observational.",
+                    "pacing": "Measured.",
+                    "narrative_voice": "Third person limited.",
+                },
+                "thematic_brief": {
+                    "themes": ["isolation", "duty"],
+                    "emotional_arc": "Tension to relief",
+                    "central_tension": "Nature vs. responsibility",
+                    "mood": "Atmospheric",
+                },
+                "source_stats": {
+                    "word_count": len(source_text.split()),
+                    "scene_count_estimate": 2,
+                },
+                "characters": [
+                    {
+                        "name": "The Keeper",
+                        "visual_description": (
+                            "A weathered man in his sixties, grey stubble, navy peacoat."
+                        ),
+                    },
+                ],
+            },
             "split_into_scenes": {
                 "scenes": [
                     {"title": "The Storm", "text": scene1_text},
@@ -1508,9 +1546,12 @@ class TestPipelineIntegration:
         assert (pd / "segments" / "scene_002.mp4").exists()
         assert (pd / "final.mp4").exists()
 
+        # --- Verify analysis.json exists ---
+        assert (pd / "analysis.json").exists()
+
         # --- Verify external APIs were called ---
-        # 3 original calls (split + flag + prompts) + 2 narration prep (one per scene)
-        assert mock_claude.generate_structured.call_count == 5
+        # 4 calls (analysis + split + flag + prompts) + 2 narration prep (one per scene)
+        assert mock_claude.generate_structured.call_count == 6
         assert mock_tts.synthesize.call_count == 2
         assert mock_image.generate.call_count == 2
         assert mock_caption.transcribe.call_count == 2

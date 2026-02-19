@@ -227,6 +227,25 @@ BRIEF_ANALYSIS_SYSTEM = (
     " the writer a clear creative direction."
 )
 
+ADAPT_ANALYSIS_SYSTEM = (
+    "You are a literary analyst preparing a story for visual adaptation.\n\n"
+    "The user has provided a complete story that will be adapted into a"
+    " narrated video with illustrated scenes.\n\n"
+    "Your goal is to extract four things:\n"
+    "1. CRAFT NOTES — How the story is written. Concrete observations about"
+    " sentence structure, vocabulary choices, tone, pacing, and narrative voice."
+    " Be specific: quote patterns, note tendencies, describe rhythms.\n"
+    "2. THEMATIC BRIEF — What the story is about at a deeper level. Themes,"
+    " emotional arc, central tension, overall mood.\n"
+    "3. SOURCE STATS — Word count and estimated number of natural scenes.\n"
+    "4. CHARACTERS — Every named or significant character in the story."
+    " For each, provide a visual description based on what the text says"
+    " or implies: appearance, clothing, distinguishing features. Only"
+    " include details present in or reasonably inferred from the text.\n\n"
+    "This analysis will guide visual adaptation — accurate character"
+    " descriptions are essential for consistent illustration across scenes."
+)
+
 STORY_BIBLE_SYSTEM = (
     "You are creating the foundation for a new, original story.\n\n"
     "Use the thematic brief as inspiration — same emotional territory,"
@@ -567,7 +586,8 @@ def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
 
     For INSPIRED_BY mode: reads a full source story, analyzes its writing craft.
     For ORIGINAL mode: reads a creative brief, interprets it for style and themes.
-    Both produce the same analysis.json output shape.
+    For ADAPT mode: reads a complete story being adapted for visual illustration.
+    All produce the same analysis.json output shape.
 
     In ORIGINAL mode, source_stats (word_count, scene_count_estimate) are computed
     from StoryConfig rather than extracted by Claude, since a brief has no
@@ -587,10 +607,15 @@ def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
     source_text = source_path.read_text(encoding="utf-8")
 
     is_original = state.metadata.mode == InputMode.ORIGINAL
+    is_adapt = state.metadata.mode == InputMode.ADAPT
 
     if is_original:
         system_prompt = BRIEF_ANALYSIS_SYSTEM
         user_message = source_text.strip()
+    elif is_adapt:
+        system_prompt = ADAPT_ANALYSIS_SYSTEM
+        _, body_text = parse_story_header(source_text)
+        user_message = body_text
     else:
         system_prompt = ANALYSIS_SYSTEM
         # Strip YAML front matter if present

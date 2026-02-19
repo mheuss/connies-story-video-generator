@@ -118,8 +118,9 @@ class PipelinePhase(str, Enum):
         -> caption_generation -> video_assembly
 
     Adaptation flow (adapt):
-        scene_splitting -> narration_flagging -> image_prompts -> narration_prep
-        -> tts_generation -> image_generation -> caption_generation -> video_assembly
+        analysis -> scene_splitting -> narration_flagging -> image_prompts
+        -> narration_prep -> tts_generation -> image_generation
+        -> caption_generation -> video_assembly
     """
 
     # Creative flow phases (original / inspired_by)
@@ -163,6 +164,7 @@ CREATIVE_FLOW_PHASES: tuple[PipelinePhase, ...] = (
 """Phase sequence for original and inspired_by modes (immutable)."""
 
 ADAPT_FLOW_PHASES: tuple[PipelinePhase, ...] = (
+    PipelinePhase.ANALYSIS,
     PipelinePhase.SCENE_SPLITTING,
     PipelinePhase.NARRATION_FLAGGING,
     PipelinePhase.IMAGE_PROMPTS,

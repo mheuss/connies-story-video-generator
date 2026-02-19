@@ -380,9 +380,9 @@ class TestPhaseTransitions:
             project_state.await_review()
 
     def test_start_phase_rejects_invalid_phase_for_adapt_mode(self, adapt_project_state):
-        """Adapt mode does not have an ANALYSIS phase."""
+        """Adapt mode does not have a STORY_BIBLE phase."""
         with pytest.raises(ValueError, match="not valid"):
-            adapt_project_state.start_phase(PipelinePhase.ANALYSIS)
+            adapt_project_state.start_phase(PipelinePhase.STORY_BIBLE)
 
     def test_start_phase_rejects_invalid_phase_for_creative_mode(self, project_state):
         """Creative mode does not have SCENE_SPLITTING."""
@@ -717,20 +717,20 @@ class TestPhaseSequenceHelpers:
         assert project_state.get_next_phase() is None
 
     def test_get_next_phase_for_adapt_mode(self, adapt_project_state):
-        assert adapt_project_state.get_next_phase() == PipelinePhase.SCENE_SPLITTING
+        assert adapt_project_state.get_next_phase() == PipelinePhase.ANALYSIS
 
     def test_get_next_phase_advances_through_adapt_flow(self, adapt_project_state):
-        adapt_project_state.start_phase(PipelinePhase.SCENE_SPLITTING)
+        adapt_project_state.start_phase(PipelinePhase.ANALYSIS)
         adapt_project_state.complete_phase()
-        assert adapt_project_state.get_next_phase() == PipelinePhase.NARRATION_FLAGGING
+        assert adapt_project_state.get_next_phase() == PipelinePhase.SCENE_SPLITTING
 
     def test_get_next_phase_falls_back_to_first_when_phase_not_in_sequence(
         self, adapt_project_state
     ):
         """When current_phase is not in the mode's sequence, returns the first phase."""
-        # ANALYSIS belongs to creative flow, not adapt flow
-        adapt_project_state._metadata.current_phase = PipelinePhase.ANALYSIS
-        assert adapt_project_state.get_next_phase() == PipelinePhase.SCENE_SPLITTING
+        # STORY_BIBLE belongs to creative flow, not adapt flow
+        adapt_project_state._metadata.current_phase = PipelinePhase.STORY_BIBLE
+        assert adapt_project_state.get_next_phase() == PipelinePhase.ANALYSIS
 
 
 # ---------------------------------------------------------------------------

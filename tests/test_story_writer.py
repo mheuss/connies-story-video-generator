@@ -1194,6 +1194,61 @@ class TestAnalyzeSourceOriginalMode:
         assert analysis["source_stats"]["scene_count_estimate"] == 7
 
 
+@pytest.fixture()
+def adapt_state(tmp_path):
+    """Create a project state in adapt mode with source_story.txt."""
+    state = ProjectState.create(
+        project_id="adapt-test",
+        mode=InputMode.ADAPT,
+        config=AppConfig(),
+        output_dir=tmp_path,
+    )
+    source = tmp_path / "adapt-test" / "source_story.txt"
+    source.write_text(SOURCE_TEXT)
+    return state
+
+
+class TestAnalyzeSourceAdaptMode:
+    """analyze_source() in ADAPT mode extracts characters from existing story."""
+
+    def test_uses_adapt_analysis_prompt(self, adapt_state, analysis_client):
+        """ADAPT mode uses ADAPT_ANALYSIS_SYSTEM."""
+        analyze_source(adapt_state, analysis_client)
+        call_kwargs = analysis_client.generate_structured.call_args.kwargs
+        assert "adapting" in call_kwargs["system"].lower() or (
+            "adaptation" in call_kwargs["system"].lower()
+        )
+
+    def test_source_text_in_user_message(self, adapt_state, analysis_client):
+        """Source story text is included in user message."""
+        analyze_source(adapt_state, analysis_client)
+        call_kwargs = analysis_client.generate_structured.call_args.kwargs
+        assert SOURCE_TEXT in call_kwargs["user_message"]
+
+    def test_characters_in_analysis_json(self, adapt_state, analysis_client):
+        """analysis.json contains characters for adapt mode."""
+        analyze_source(adapt_state, analysis_client)
+        data = json.loads((adapt_state.project_dir / "analysis.json").read_text())
+        assert "characters" in data
+
+    def test_strips_yaml_header(self, tmp_path, analysis_client):
+        """YAML front matter is stripped in adapt mode."""
+        state = ProjectState.create(
+            project_id="adapt-header-test",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        source = tmp_path / "adapt-header-test" / "source_story.txt"
+        source.write_text(SOURCE_TEXT_WITH_HEADER)
+
+        analyze_source(state, analysis_client)
+
+        call_kwargs = analysis_client.generate_structured.call_args.kwargs
+        assert "---" not in call_kwargs["user_message"]
+        assert call_kwargs["user_message"].startswith("Part one")
+
+
 # ---------------------------------------------------------------------------
 # Story bible phase — test data
 # ---------------------------------------------------------------------------
