@@ -282,7 +282,7 @@ class TestCreateCommand:
                 "create",
                 "--mode",
                 "adapt",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--output-dir",
                 str(tmp_path / "output"),
@@ -295,8 +295,8 @@ class TestCreateCommand:
             encoding="utf-8"
         ) == "Once upon a time..."
 
-    def test_create_adapt_missing_source_material(self, tmp_path):
-        """Adapt without --source-material -> error."""
+    def test_create_missing_input(self, tmp_path):
+        """Adapt without --input -> error."""
         result = runner.invoke(
             app,
             [
@@ -308,7 +308,7 @@ class TestCreateCommand:
             ],
         )
         assert result.exit_code != 0
-        assert "source-material" in result.output.lower()
+        assert "input" in result.output.lower()
 
     def test_create_original_mode_not_implemented(self, tmp_path):
         """Original mode -> 'not yet implemented'."""
@@ -342,7 +342,7 @@ class TestCreateCommand:
                 "create",
                 "--mode",
                 "adapt",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--output-dir",
                 str(tmp_path / "output"),
@@ -374,7 +374,7 @@ class TestCreateCommand:
                 "create",
                 "--mode",
                 "adapt",
-                "--source-material",
+                "--input",
                 "Once upon a time in a land far away...",
                 "--output-dir",
                 str(tmp_path / "output"),
@@ -403,7 +403,7 @@ class TestCreateCommand:
                 "create",
                 "--mode",
                 "adapt",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--output-dir",
                 str(tmp_path / "output"),
@@ -429,7 +429,7 @@ class TestCreateCommand:
                 "create",
                 "--mode",
                 "adapt",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--output-dir",
                 str(tmp_path / "output"),
@@ -687,7 +687,7 @@ class TestProviderSelection:
                 "create",
                 "--mode",
                 "adapt",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--output-dir",
                 str(tmp_path / "output"),
@@ -728,7 +728,7 @@ class TestProviderSelection:
                 "create",
                 "--mode",
                 "adapt",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--output-dir",
                 str(tmp_path / "output"),
@@ -786,7 +786,7 @@ class TestProviderSelection:
                 "create",
                 "--mode",
                 "adapt",
-                "--source-material",
+                "--input",
                 "Test story text.",
                 "--config",
                 str(config_path),
@@ -851,7 +851,7 @@ class TestCreateInspiredByModeAccepted:
                 "create",
                 "--mode",
                 "inspired_by",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--output-dir",
                 str(tmp_path / "output"),
@@ -891,7 +891,7 @@ class TestCreatePremiseFlag:
                 "create",
                 "--mode",
                 "inspired_by",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--premise",
                 "Set it in space",
@@ -915,7 +915,7 @@ class TestCreatePremiseFlag:
                 "create",
                 "--mode",
                 "adapt",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--premise",
                 "Set it in space",
@@ -939,7 +939,7 @@ class TestCreatePremiseFlag:
                 "create",
                 "--mode",
                 "inspired_by",
-                "--source-material",
+                "--input",
                 str(source_file),
                 "--output-dir",
                 str(tmp_path / "output"),
@@ -952,10 +952,10 @@ class TestCreatePremiseFlag:
 
 
 class TestCreateInspiredByRequiresSource:
-    """Verify inspired_by without --source-material fails."""
+    """Verify inspired_by without --input fails."""
 
-    def test_inspired_by_without_source_material_fails(self, tmp_path):
-        """inspired_by mode without --source-material shows error."""
+    def test_inspired_by_without_input_fails(self, tmp_path):
+        """inspired_by mode without --input shows error."""
         result = runner.invoke(
             app,
             [
@@ -967,7 +967,7 @@ class TestCreateInspiredByRequiresSource:
             ],
         )
         assert result.exit_code != 0
-        assert "source-material" in result.output.lower()
+        assert "input" in result.output.lower()
 
 
 class TestDisplayOutcomeSuccessPath:

@@ -276,8 +276,10 @@ def _run_with_providers(state: ProjectState) -> None:
 
 @app.command()
 def create(
-    mode: str = typer.Option(..., help="Input mode: adapt, inspired_by (original coming soon)"),
-    source_material: str | None = typer.Option(None, help="Source story text or path to file"),
+    mode: str = typer.Option(..., help="Input mode: adapt, original, inspired_by"),
+    input: str | None = typer.Option(
+        None, "--input", help="Source story, creative brief, or path to file"
+    ),
     premise: str | None = typer.Option(
         None, help="Optional creative direction for inspired_by mode"
     ),
@@ -312,11 +314,11 @@ def create(
         )
         raise typer.Exit(1)
 
-    # --- Validate source material required for adapt and inspired_by ---
-    if input_mode in (InputMode.ADAPT, InputMode.INSPIRED_BY) and source_material is None:
+    # --- Validate input required ---
+    if input is None:
         console.print(
             Panel(
-                f"Mode '{mode}' requires --source-material (path to file or inline text).",
+                f"Mode '{mode}' requires --input (path to file or inline text).",
                 title="Error",
                 border_style="red",
             )
@@ -349,9 +351,8 @@ def create(
         raise typer.Exit(1)
 
     # --- Write source material ---
-    if source_material is not None:
-        text = _read_text_input(source_material)
-        (state.project_dir / "source_story.txt").write_text(text, encoding="utf-8")
+    text = _read_text_input(input)
+    (state.project_dir / "source_story.txt").write_text(text, encoding="utf-8")
 
     # --- Write premise ---
     if premise is not None:
