@@ -237,60 +237,26 @@ class TestGenerateStructuredNoToolUseBlock:
 class TestRetryOnTransientErrors:
     """Both methods retry on transient API errors (connection, rate-limit, server)."""
 
-    def test_generate_retries_on_connection_error(self, mock_anthropic):
-        """generate() retries on APIConnectionError then succeeds."""
-        from anthropic import APIConnectionError
+    @pytest.mark.parametrize("error_type", ["connection", "rate_limit", "server"])
+    def test_generate_retries_on_transient_error(self, mock_anthropic, error_type):
+        """generate() retries on transient error then succeeds."""
+        import anthropic
 
-        mock_anthropic.messages.create.side_effect = [
-            APIConnectionError(request=MagicMock()),
-            _make_text_response("recovered"),
-        ]
+        if error_type == "connection":
+            error = anthropic.APIConnectionError(request=MagicMock())
+        else:
+            status = 429 if error_type == "rate_limit" else 500
+            if error_type == "rate_limit":
+                cls = anthropic.RateLimitError
+            else:
+                cls = anthropic.InternalServerError
+            msg = "rate limited" if error_type == "rate_limit" else "server error"
+            mock_response = MagicMock()
+            mock_response.status_code = status
+            mock_response.json.return_value = {"error": {"message": msg}}
+            error = cls(message=msg, response=mock_response, body={"error": {"message": msg}})
 
-        client = ClaudeClient()
-        result = client.generate(system="sys", user_message="msg")
-
-        assert result == "recovered"
-        assert mock_anthropic.messages.create.call_count == 2
-
-    def test_generate_retries_on_rate_limit(self, mock_anthropic):
-        """generate() retries on RateLimitError then succeeds."""
-        from anthropic import RateLimitError
-
-        response_429 = MagicMock()
-        response_429.status_code = 429
-        response_429.json.return_value = {"error": {"message": "rate limited"}}
-
-        mock_anthropic.messages.create.side_effect = [
-            RateLimitError(
-                message="rate limited",
-                response=response_429,
-                body={"error": {"message": "rate limited"}},
-            ),
-            _make_text_response("recovered"),
-        ]
-
-        client = ClaudeClient()
-        result = client.generate(system="sys", user_message="msg")
-
-        assert result == "recovered"
-        assert mock_anthropic.messages.create.call_count == 2
-
-    def test_generate_retries_on_server_error(self, mock_anthropic):
-        """generate() retries on InternalServerError then succeeds."""
-        from anthropic import InternalServerError
-
-        response_500 = MagicMock()
-        response_500.status_code = 500
-        response_500.json.return_value = {"error": {"message": "server error"}}
-
-        mock_anthropic.messages.create.side_effect = [
-            InternalServerError(
-                message="server error",
-                response=response_500,
-                body={"error": {"message": "server error"}},
-            ),
-            _make_text_response("recovered"),
-        ]
+        mock_anthropic.messages.create.side_effect = [error, _make_text_response("recovered")]
 
         client = ClaudeClient()
         result = client.generate(system="sys", user_message="msg")
