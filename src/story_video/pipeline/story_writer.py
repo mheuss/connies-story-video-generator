@@ -7,6 +7,7 @@ Inspired_by mode: analysis, story bible, outline, scene prose, critique/revision
 import json
 import logging
 import re
+from pathlib import Path
 
 from story_video.models import SCENE_WORD_TARGET_DEFAULT, AssetType, InputMode, SceneStatus
 from story_video.pipeline.claude_client import ClaudeClient
@@ -390,6 +391,32 @@ CRITIQUE_SCHEMA = {
 _SCENE_TAG_PATTERN = re.compile(r"\*\*scene:([^*]+)\*\*")
 
 
+def _persist_scenes(state: ProjectState, scenes: list[dict]) -> None:
+    """Update state, write .md files, and save for a list of scenes.
+
+    Shared by both the marker-based and Claude-based splitting paths.
+    """
+    for i, scene in enumerate(scenes):
+        scene_number = i + 1
+        state.add_scene(scene_number=scene_number, title=scene["title"], prose=scene["text"])
+        state.update_scene_asset(
+            scene_number=scene_number, asset=AssetType.TEXT, status=SceneStatus.IN_PROGRESS
+        )
+        state.update_scene_asset(
+            scene_number=scene_number, asset=AssetType.TEXT, status=SceneStatus.COMPLETED
+        )
+
+    scenes_dir = state.project_dir / "scenes"
+    scenes_dir.mkdir(exist_ok=True)
+    for i, scene in enumerate(scenes):
+        scene_number = i + 1
+        filename = f"scene_{scene_number:03d}.md"
+        content = f"# Scene {scene_number}: {scene['title']}\n\n{scene['text']}\n"
+        (scenes_dir / filename).write_text(content, encoding="utf-8")
+
+    state.save()
+
+
 def _split_by_scene_tags(text: str) -> list[dict] | None:
     """Split text on ``**scene:Title**`` markers.
 
@@ -470,31 +497,7 @@ def split_scenes(state: ProjectState, client: ClaudeClient) -> None:
             "Found %d scene tag(s) — using marker-based splitting (skipping Claude)",
             len(tagged_scenes),
         )
-        scenes = tagged_scenes
-        # Jump to step 7 (state update) — skip Claude call and preservation check
-        for i, scene in enumerate(scenes):
-            scene_number = i + 1
-            state.add_scene(scene_number=scene_number, title=scene["title"], prose=scene["text"])
-            state.update_scene_asset(
-                scene_number=scene_number,
-                asset=AssetType.TEXT,
-                status=SceneStatus.IN_PROGRESS,
-            )
-            state.update_scene_asset(
-                scene_number=scene_number,
-                asset=AssetType.TEXT,
-                status=SceneStatus.COMPLETED,
-            )
-
-        scenes_dir = state.project_dir / "scenes"
-        scenes_dir.mkdir(exist_ok=True)
-        for i, scene in enumerate(scenes):
-            scene_number = i + 1
-            filename = f"scene_{scene_number:03d}.md"
-            content = f"# Scene {scene_number}: {scene['title']}\n\n{scene['text']}\n"
-            (scenes_dir / filename).write_text(content, encoding="utf-8")
-
-        state.save()
+        _persist_scenes(state, tagged_scenes)
         return
 
     # 2. Call Claude for scene splitting
@@ -522,28 +525,8 @@ def split_scenes(state: ProjectState, client: ClaudeClient) -> None:
     # 6. Preservation check
     _check_preservation(source_text, scenes)
 
-    # 7. Update state with scenes
-    for i, scene in enumerate(scenes):
-        scene_number = i + 1
-        state.add_scene(scene_number=scene_number, title=scene["title"], prose=scene["text"])
-        state.update_scene_asset(
-            scene_number=scene_number, asset=AssetType.TEXT, status=SceneStatus.IN_PROGRESS
-        )
-        state.update_scene_asset(
-            scene_number=scene_number, asset=AssetType.TEXT, status=SceneStatus.COMPLETED
-        )
-
-    # 8. Write markdown files
-    scenes_dir = state.project_dir / "scenes"
-    scenes_dir.mkdir(exist_ok=True)
-    for i, scene in enumerate(scenes):
-        scene_number = i + 1
-        filename = f"scene_{scene_number:03d}.md"
-        content = f"# Scene {scene_number}: {scene['title']}\n\n{scene['text']}\n"
-        (scenes_dir / filename).write_text(content, encoding="utf-8")
-
-    # 9. Persist state
-    state.save()
+    # 7-9. Update state, write .md files, persist
+    _persist_scenes(state, scenes)
 
 
 def flag_narration(state: ProjectState, client: ClaudeClient) -> None:
@@ -739,18 +722,14 @@ def create_story_bible(state: ProjectState, client: ClaudeClient) -> None:
     Raises:
         FileNotFoundError: If analysis.json doesn't exist.
     """
-    analysis_path = state.project_dir / "analysis.json"
-    if not analysis_path.exists():
-        msg = f"analysis.json not found in {state.project_dir}"
-        raise FileNotFoundError(msg)
-    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    analysis = _load_json_artifact(state.project_dir, "analysis.json")
 
     # Build user message
     parts = [
         "## Craft Notes\n",
-        json.dumps(analysis["craft_notes"], indent=2),
+        json.dumps(analysis.get("craft_notes", {}), indent=2),
         "\n## Thematic Brief\n",
-        json.dumps(analysis["thematic_brief"], indent=2),
+        json.dumps(analysis.get("thematic_brief", {}), indent=2),
     ]
 
     # Optional premise
@@ -789,27 +768,18 @@ def create_outline(state: ProjectState, client: ClaudeClient) -> None:
     Raises:
         FileNotFoundError: If analysis.json or story_bible.json is missing.
     """
-    analysis_path = state.project_dir / "analysis.json"
-    if not analysis_path.exists():
-        msg = f"analysis.json not found in {state.project_dir}"
-        raise FileNotFoundError(msg)
-    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    analysis = _load_json_artifact(state.project_dir, "analysis.json")
+    bible = _load_json_artifact(state.project_dir, "story_bible.json")
 
-    bible_path = state.project_dir / "story_bible.json"
-    if not bible_path.exists():
-        msg = f"story_bible.json not found in {state.project_dir}"
-        raise FileNotFoundError(msg)
-    bible = json.loads(bible_path.read_text(encoding="utf-8"))
-
-    source_stats = analysis["source_stats"]
-    word_count = source_stats["word_count"]
-    scene_count = source_stats["scene_count_estimate"]
+    source_stats = analysis.get("source_stats", {})
+    word_count = source_stats.get("word_count", 6000)
+    scene_count = source_stats.get("scene_count_estimate", 10)
 
     parts = [
         "## Craft Notes\n",
-        json.dumps(analysis["craft_notes"], indent=2),
+        json.dumps(analysis.get("craft_notes", {}), indent=2),
         "\n## Thematic Brief\n",
-        json.dumps(analysis["thematic_brief"], indent=2),
+        json.dumps(analysis.get("thematic_brief", {}), indent=2),
         "\n## Story Bible\n",
         json.dumps(bible, indent=2),
         "\n## Length Target\n",
@@ -955,19 +925,15 @@ def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
         FileNotFoundError: If analysis.json is missing.
         ValueError: If no scenes exist.
     """
-    analysis_path = state.project_dir / "analysis.json"
-    if not analysis_path.exists():
-        msg = f"analysis.json not found in {state.project_dir}"
-        raise FileNotFoundError(msg)
-    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    analysis = _load_json_artifact(state.project_dir, "analysis.json")
 
     scenes = state.metadata.scenes
     if not scenes:
         msg = "No scenes in project"
         raise ValueError(msg)
 
-    craft_notes_text = json.dumps(analysis["craft_notes"], indent=2)
-    thematic_brief_text = json.dumps(analysis["thematic_brief"], indent=2)
+    craft_notes_text = json.dumps(analysis.get("craft_notes", {}), indent=2)
+    thematic_brief_text = json.dumps(analysis.get("thematic_brief", {}), indent=2)
 
     critique_dir = state.project_dir / "critique"
     critique_dir.mkdir(exist_ok=True)
@@ -1023,14 +989,39 @@ def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
         md_content = f"# Scene {scene.scene_number}: {scene.title}\n\n{scene.prose}\n"
         (scenes_dir / md_filename).write_text(md_content, encoding="utf-8")
         logger.info("Critiqued scene %d: %s", scene.scene_number, scene.title)
+        state.save()
 
     logger.info("Critique complete — %d scenes reviewed", len(scenes))
-    state.save()
 
 
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+def _load_json_artifact(project_dir: "Path", filename: str) -> dict:
+    """Load and parse a JSON artifact file from the project directory.
+
+    Args:
+        project_dir: Path to the project directory.
+        filename: Name of the JSON file (e.g. "analysis.json").
+
+    Returns:
+        Parsed dict from the JSON file.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file contains malformed JSON.
+    """
+    path = project_dir / filename
+    if not path.exists():
+        msg = f"{filename} not found in {project_dir}"
+        raise FileNotFoundError(msg)
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        msg = f"Malformed JSON in {path}: {exc}"
+        raise ValueError(msg) from exc
 
 
 def _check_preservation(original: str, scenes: list[dict]) -> None:
