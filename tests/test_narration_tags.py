@@ -330,3 +330,12 @@ class TestPauseTagParsing:
         segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
         pauses = [s for s in segments if s.pause_duration is not None]
         assert pauses[0].pause_duration == 60.0
+
+    def test_large_pause_logs_warning(self, caplog):
+        """Pause >30s logs a warning."""
+        import logging
+
+        text = "Hello. **pause:60.0** Goodbye."
+        with caplog.at_level(logging.WARNING):
+            parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert any("unusually long" in r.message for r in caplog.records)

@@ -8,12 +8,15 @@ Public items:
     parse_narration_segments: Split tagged text into narration segments.
 """
 
+import logging
 import re
 
 import yaml
 from pydantic import ValidationError
 
 from story_video.models import NarrationSegment, StoryHeader
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "extract_tags",
@@ -185,6 +188,12 @@ def parse_narration_segments(
                     f"Invalid pause duration '{tag_value}' — must be a number (e.g., **pause:0.5**)"
                 )
                 raise ValueError(msg) from None
+            if duration > 30:
+                logger.warning(
+                    "Scene %d: pause duration %.1fs is unusually long (>30s)",
+                    scene_number,
+                    duration,
+                )
             segments.append(
                 NarrationSegment(
                     text="_pause",
