@@ -216,70 +216,48 @@ class TestActualMode:
 class TestClaudeCost:
     """Claude API cost varies by mode, scales linearly with scene count."""
 
-    def test_original_mode_25_scenes(self):
-        """original mode at 25 scenes: $2.00 - $5.00."""
+    @pytest.mark.parametrize(
+        "mode,expected_low,expected_high",
+        [
+            (InputMode.ORIGINAL, 2.00, 5.00),
+            (InputMode.INSPIRED_BY, 2.00, 5.00),
+            (InputMode.ADAPT, 0.20, 0.50),
+        ],
+        ids=["original", "inspired_by", "adapt"],
+    )
+    def test_mode_25_scenes(self, mode, expected_low, expected_high):
+        """Cost varies by mode at 25 scenes."""
         config = _config()
         est = estimate_cost(
-            mode=InputMode.ORIGINAL,
+            mode=mode,
             config=config,
             scene_count=25,
             character_count=247500,
         )
         claude = next(s for s in est.services if s.service == "Claude")
-        assert claude.low == pytest.approx(2.00)
-        assert claude.high == pytest.approx(5.00)
+        assert claude.low == pytest.approx(expected_low)
+        assert claude.high == pytest.approx(expected_high)
 
-    def test_inspired_by_mode_25_scenes(self):
-        """inspired_by mode at 25 scenes: $2.00 - $5.00 (same as original)."""
-        config = _config()
-        est = estimate_cost(
-            mode=InputMode.INSPIRED_BY,
-            config=config,
-            scene_count=25,
-            character_count=247500,
-        )
-        claude = next(s for s in est.services if s.service == "Claude")
-        assert claude.low == pytest.approx(2.00)
-        assert claude.high == pytest.approx(5.00)
-
-    def test_adapt_mode_25_scenes(self):
-        """adapt mode at 25 scenes: $0.20 - $0.50."""
-        config = _config()
-        est = estimate_cost(
-            mode=InputMode.ADAPT,
-            config=config,
-            scene_count=25,
-            character_count=247500,
-        )
-        claude = next(s for s in est.services if s.service == "Claude")
-        assert claude.low == pytest.approx(0.20)
-        assert claude.high == pytest.approx(0.50)
-
-    def test_original_mode_scales_linearly(self):
+    @pytest.mark.parametrize(
+        "mode,expected_low,expected_high",
+        [
+            (InputMode.ORIGINAL, 4.00, 10.00),
+            (InputMode.ADAPT, 0.40, 1.00),
+        ],
+        ids=["original", "adapt"],
+    )
+    def test_mode_scales_linearly(self, mode, expected_low, expected_high):
         """50 scenes should be 2x the cost of 25 scenes."""
         config = _config()
         est = estimate_cost(
-            mode=InputMode.ORIGINAL,
+            mode=mode,
             config=config,
             scene_count=50,
             character_count=495000,
         )
         claude = next(s for s in est.services if s.service == "Claude")
-        assert claude.low == pytest.approx(4.00)
-        assert claude.high == pytest.approx(10.00)
-
-    def test_adapt_mode_scales_linearly(self):
-        """50 scenes should be 2x the cost of 25 scenes for adapt."""
-        config = _config()
-        est = estimate_cost(
-            mode=InputMode.ADAPT,
-            config=config,
-            scene_count=50,
-            character_count=495000,
-        )
-        claude = next(s for s in est.services if s.service == "Claude")
-        assert claude.low == pytest.approx(0.40)
-        assert claude.high == pytest.approx(1.00)
+        assert claude.low == pytest.approx(expected_low)
+        assert claude.high == pytest.approx(expected_high)
 
     def test_original_mode_1_scene(self):
         """1 scene: cost = 1/25 of the 25-scene rate."""
@@ -445,42 +423,26 @@ class TestImageCost:
 class TestWhisperCost:
     """Whisper cost = duration_minutes * $0.006."""
 
-    def test_30_minutes(self):
-        """30 min * $0.006 = $0.18."""
-        config = _config()
+    @pytest.mark.parametrize(
+        "duration,scene_count,char_count,expected",
+        [
+            (30, 25, 247500, 30 * 0.006),
+            (60, 25, 247500, 60 * 0.006),
+            (1, 1, 825, 0.006),
+        ],
+        ids=["30_minutes", "60_minutes", "1_minute"],
+    )
+    def test_whisper_cost(self, duration, scene_count, char_count, expected):
+        """Whisper cost = duration_minutes * $0.006."""
+        config = _config(story=StoryConfig(target_duration_minutes=duration))
         est = estimate_cost(
             mode=InputMode.ORIGINAL,
             config=config,
-            scene_count=25,
-            character_count=247500,
+            scene_count=scene_count,
+            character_count=char_count,
         )
         whisper = next(s for s in est.services if s.service == "Whisper")
-        assert whisper.low == pytest.approx(30 * 0.006)
-        assert whisper.high == pytest.approx(30 * 0.006)
-
-    def test_60_minutes(self):
-        """60 min * $0.006 = $0.36."""
-        config = _config(story=StoryConfig(target_duration_minutes=60))
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=config,
-            scene_count=25,
-            character_count=247500,
-        )
-        whisper = next(s for s in est.services if s.service == "Whisper")
-        assert whisper.low == pytest.approx(60 * 0.006)
-
-    def test_1_minute(self):
-        """1 min * $0.006 = $0.006."""
-        config = _config(story=StoryConfig(target_duration_minutes=1))
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=config,
-            scene_count=1,
-            character_count=825,
-        )
-        whisper = next(s for s in est.services if s.service == "Whisper")
-        assert whisper.low == pytest.approx(0.006)
+        assert whisper.low == pytest.approx(expected)
 
 
 # ---------------------------------------------------------------------------
@@ -545,59 +507,32 @@ class TestServiceOrder:
 class TestFormatCostEstimate:
     """format_cost_estimate produces the display format from the design doc."""
 
-    def test_contains_header(self):
+    @pytest.fixture()
+    def format_output(self):
+        """Shared formatted output for the default original-mode estimate."""
         est = estimate_cost(
             mode=InputMode.ORIGINAL,
             config=_config(),
             scene_count=25,
             character_count=247500,
         )
-        output = format_cost_estimate(est)
-        assert "Story Video Cost Estimate" in output
+        return format_cost_estimate(est)
 
-    def test_contains_mode(self):
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=_config(),
-            scene_count=25,
-            character_count=247500,
-        )
-        output = format_cost_estimate(est)
-        assert "original" in output
-
-    def test_contains_duration_and_scene_count(self):
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=_config(),
-            scene_count=25,
-            character_count=247500,
-        )
-        output = format_cost_estimate(est)
-        assert "30 minutes" in output
-        assert "25 scenes" in output
-
-    def test_contains_all_service_names(self):
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=_config(),
-            scene_count=25,
-            character_count=247500,
-        )
-        output = format_cost_estimate(est)
-        assert "Claude" in output
-        assert "TTS" in output
-        assert "Images" in output
-        assert "Whisper" in output
-
-    def test_contains_estimated_total(self):
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=_config(),
-            scene_count=25,
-            character_count=247500,
-        )
-        output = format_cost_estimate(est)
-        assert "Estimated total" in output
+    @pytest.mark.parametrize(
+        "expected_substrings",
+        [
+            ["Story Video Cost Estimate"],
+            ["original"],
+            ["30 minutes", "25 scenes"],
+            ["Claude", "TTS", "Images", "Whisper"],
+            ["Estimated total"],
+        ],
+        ids=["header", "mode", "duration_and_scenes", "service_names", "total"],
+    )
+    def test_format_contains(self, format_output, expected_substrings):
+        """Formatted output contains expected content."""
+        for substring in expected_substrings:
+            assert substring in format_output
 
     def test_range_format_for_claude(self):
         """When low != high, show as range: $X.XX - $Y.YY."""
