@@ -361,6 +361,9 @@ class TestRunPipelineAutonomous:
         mock_prompts.assert_called_once()
         # assemble_video called once at end
         mock_assemble_video.assert_called_once()
+        # Final status is COMPLETED
+        assert state.metadata.current_phase == PipelinePhase.VIDEO_ASSEMBLY
+        assert state.metadata.status == PhaseStatus.COMPLETED
 
 
 # ---------------------------------------------------------------------------
@@ -885,61 +888,6 @@ class TestRunPipelineLazyProviders:
         assert state.metadata.current_phase == PipelinePhase.SCENE_SPLITTING
         assert state.metadata.status == PhaseStatus.AWAITING_REVIEW
         mock_split.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# TestRunPipelineAutonomousCompleted — final status verification
-# ---------------------------------------------------------------------------
-
-
-class TestRunPipelineAutonomousCompleted:
-    """Autonomous pipeline ends with COMPLETED status."""
-
-    @patch("story_video.pipeline.orchestrator.assemble_video")
-    @patch("story_video.pipeline.orchestrator.assemble_scene")
-    @patch("story_video.pipeline.orchestrator.generate_captions")
-    @patch("story_video.pipeline.orchestrator.generate_image")
-    @patch("story_video.pipeline.orchestrator.generate_audio")
-    @patch(
-        "story_video.pipeline.orchestrator.prepare_narration_llm",
-        return_value={
-            "modified_text": "prepped",
-            "changes": [],
-            "pronunciation_guide_additions": [],
-        },
-    )
-    @patch("story_video.pipeline.orchestrator.generate_image_prompts")
-    @patch("story_video.pipeline.orchestrator.flag_narration")
-    @patch("story_video.pipeline.orchestrator.split_scenes")
-    @patch("story_video.pipeline.orchestrator.analyze_source")
-    def test_autonomous_ends_with_completed_status(
-        self,
-        mock_analyze,
-        mock_split,
-        mock_flag,
-        mock_prompts,
-        mock_prep,
-        mock_audio,
-        mock_img,
-        mock_captions,
-        mock_assemble_scene,
-        mock_assemble_video,
-        tmp_path,
-    ):
-        """Autonomous mode completes all 9 phases — final status is COMPLETED."""
-        state = _make_adapt_state(tmp_path, autonomous=True)
-        _add_scenes_with_assets(state, count=2, up_to_asset=AssetType.TEXT)
-
-        run_pipeline(
-            state,
-            claude_client=MagicMock(),
-            tts_provider=MagicMock(),
-            image_provider=MagicMock(),
-            caption_provider=MagicMock(),
-        )
-
-        assert state.metadata.current_phase == PipelinePhase.VIDEO_ASSEMBLY
-        assert state.metadata.status == PhaseStatus.COMPLETED
 
 
 # ---------------------------------------------------------------------------
