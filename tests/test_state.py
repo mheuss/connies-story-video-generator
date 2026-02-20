@@ -291,17 +291,10 @@ class TestPhaseTransitions:
         project_state.await_review()
         assert project_state.metadata.status == PhaseStatus.AWAITING_REVIEW
 
-    def test_complete_phase_raises_if_no_phase_in_progress(self, project_state):
+    @pytest.mark.parametrize("method", ["complete_phase", "fail_phase", "await_review"])
+    def test_raises_if_no_phase_in_progress(self, project_state, method):
         with pytest.raises(ValueError, match="[Nn]o phase"):
-            project_state.complete_phase()
-
-    def test_fail_phase_raises_if_no_phase_in_progress(self, project_state):
-        with pytest.raises(ValueError, match="[Nn]o phase"):
-            project_state.fail_phase()
-
-    def test_await_review_raises_if_no_phase_in_progress(self, project_state):
-        with pytest.raises(ValueError, match="[Nn]o phase"):
-            project_state.await_review()
+            getattr(project_state, method)()
 
     def test_start_phase_rejects_invalid_phase_for_adapt_mode(self, adapt_project_state):
         """Adapt mode does not have a STORY_BIBLE phase."""
@@ -415,24 +408,16 @@ class TestUpdateSceneAsset:
         with pytest.raises(ValueError, match="[Ss]cene.*99"):
             project_with_scenes.update_scene_asset(99, AssetType.TEXT, SceneStatus.IN_PROGRESS)
 
-    def test_never_overwrite_completed_asset(self, project_with_scenes):
+    @pytest.mark.parametrize(
+        "target_status",
+        [SceneStatus.IN_PROGRESS, SceneStatus.FAILED, SceneStatus.PENDING],
+    )
+    def test_never_overwrite_completed_asset(self, project_with_scenes, target_status):
         """A completed asset must never be overwritten — this is a critical rule."""
         project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
         project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
         with pytest.raises(ValueError, match="[Cc]ompleted"):
-            project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
-
-    def test_never_overwrite_completed_with_failed(self, project_with_scenes):
-        project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
-        project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
-        with pytest.raises(ValueError, match="[Cc]ompleted"):
-            project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.FAILED)
-
-    def test_never_overwrite_completed_with_pending(self, project_with_scenes):
-        project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
-        project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
-        with pytest.raises(ValueError, match="[Cc]ompleted"):
-            project_with_scenes.update_scene_asset(1, AssetType.TEXT, SceneStatus.PENDING)
+            project_with_scenes.update_scene_asset(1, AssetType.TEXT, target_status)
 
 
 class TestAssetDependencyEnforcement:
