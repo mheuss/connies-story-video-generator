@@ -17,6 +17,7 @@ from story_video.pipeline.story_writer import (
     SCENE_SPLIT_SCHEMA,
     SCENE_SPLIT_SYSTEM,
     _check_preservation,
+    _load_json_artifact,
     _split_by_scene_tags,
     analyze_source,
     create_outline,
@@ -228,18 +229,6 @@ class TestSplitScenesStateSaved:
 # ---------------------------------------------------------------------------
 
 
-class TestSplitScenesPreservationPasses:
-    """split_scenes() passes the preservation check when text is preserved."""
-
-    def test_split_scenes_preservation_check_passes(self, sample_state, mock_client):
-        """Exact text preserved does not raise."""
-        # This is a subset of the happy path — no exception means pass
-        split_scenes(sample_state, mock_client)
-
-        # Verify all scenes exist (implicitly proves preservation passed)
-        assert len(sample_state.metadata.scenes) == 3
-
-
 # ---------------------------------------------------------------------------
 # Preservation check — failing
 # ---------------------------------------------------------------------------
@@ -400,13 +389,6 @@ class TestSplitScenesStripsYamlHeader:
 
         with pytest.raises(ValueError, match="mismatch"):
             split_scenes(state_with_header, mock_client)
-
-    def test_source_without_header_unchanged(self, sample_state, mock_client):
-        """Source without YAML header still works — body equals full text."""
-        split_scenes(sample_state, mock_client)
-
-        call_kwargs = mock_client.generate_structured.call_args.kwargs
-        assert call_kwargs["user_message"] == SOURCE_TEXT
 
 
 # ---------------------------------------------------------------------------
@@ -1075,18 +1057,6 @@ class TestFlagNarrationFlagsFileFormat:
 # ---------------------------------------------------------------------------
 
 
-class TestFlagNarrationStateSaved:
-    """flag_narration() persists state via state.save()."""
-
-    def test_flag_narration_state_saved(self, state_with_scenes, flagging_client):
-        """Verify state.save() called."""
-        flag_narration(state_with_scenes, flagging_client)
-
-        # Reload from disk — if save was called, project.json is updated
-        reloaded = ProjectState.load(state_with_scenes.project_dir)
-        assert len(reloaded.metadata.scenes) == 3
-
-
 # ---------------------------------------------------------------------------
 # Narration flagging — multiple flags same scene
 # ---------------------------------------------------------------------------
@@ -1298,6 +1268,8 @@ class TestAnalyzeSourceWritesJson:
         assert "craft_notes" in data
         assert "thematic_brief" in data
         assert "source_stats" in data
+        assert "word_count" in data["source_stats"]
+        assert "scene_count_estimate" in data["source_stats"]
 
 
 class TestAnalyzeSourceCraftNotes:
@@ -1331,19 +1303,6 @@ class TestAnalyzeSourceThematicBrief:
         assert "mood" in brief
 
 
-class TestAnalyzeSourceStats:
-    """analyze_source() captures source dimensions."""
-
-    def test_source_stats_present(self, inspired_state, analysis_client):
-        """Source stats contain word_count and scene_count_estimate."""
-        analyze_source(inspired_state, analysis_client)
-
-        data = json.loads((inspired_state.project_dir / "analysis.json").read_text())
-        stats = data["source_stats"]
-        assert "word_count" in stats
-        assert "scene_count_estimate" in stats
-
-
 class TestAnalyzeSourceMissingFile:
     """analyze_source() raises FileNotFoundError when source_story.txt is missing."""
 
@@ -1357,17 +1316,6 @@ class TestAnalyzeSourceMissingFile:
         )
         with pytest.raises(FileNotFoundError, match="source_story.txt"):
             analyze_source(state, analysis_client)
-
-
-class TestAnalyzeSourceSavesState:
-    """analyze_source() persists state."""
-
-    def test_state_saved(self, inspired_state, analysis_client):
-        """state.save() is called after analysis."""
-        analyze_source(inspired_state, analysis_client)
-
-        reloaded = ProjectState.load(inspired_state.project_dir)
-        assert reloaded.metadata.project_id == "inspired-test"
 
 
 class TestAnalyzeSourceCharacters:
@@ -1409,7 +1357,7 @@ class TestAnalyzeSourceOriginalMode:
         assert analysis["source_stats"]["word_count"] == 4500
 
     def test_scene_count_from_word_count(self, original_state, analysis_client):
-        """scene_count_estimate derived from word_count / SCENE_WORD_TARGET_DEFAULT."""
+        """scene_count_estimate derived from word_count / WORDS_PER_SCENE_ESTIMATE."""
         analyze_source(original_state, analysis_client)
         analysis_path = original_state.project_dir / "analysis.json"
         analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
@@ -1572,6 +1520,18 @@ class TestCreateStoryBibleMissingAnalysis:
     def test_missing_analysis_raises(self, inspired_state, bible_client):
         """No analysis.json raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError, match="analysis.json"):
+            create_story_bible(inspired_state, bible_client)
+
+
+class TestCreateStoryBibleMalformedJson:
+    """create_story_bible() raises ValueError on corrupt analysis.json."""
+
+    def test_malformed_analysis_json_raises(self, inspired_state, bible_client):
+        """Corrupt analysis.json raises ValueError with 'Malformed JSON'."""
+        analysis_path = inspired_state.project_dir / "analysis.json"
+        analysis_path.write_text("{ this is not valid json !!!", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="Malformed JSON"):
             create_story_bible(inspired_state, bible_client)
 
 
@@ -2145,3 +2105,18 @@ class TestInspiredByIntegration:
 
         # 7 total Claude calls: 1 analysis + 1 bible + 1 outline + 2 prose + 2 critique
         assert client.generate_structured.call_count == 7
+
+
+# ---------------------------------------------------------------------------
+# _load_json_artifact — malformed JSON
+# ---------------------------------------------------------------------------
+
+
+class TestLoadJsonArtifactMalformed:
+    """_load_json_artifact raises ValueError for malformed JSON."""
+
+    def test_malformed_json_raises(self, tmp_path):
+        """Corrupt JSON file raises ValueError with descriptive message."""
+        (tmp_path / "bad.json").write_text("{broken", encoding="utf-8")
+        with pytest.raises(ValueError, match="Malformed JSON"):
+            _load_json_artifact(tmp_path, "bad.json")
