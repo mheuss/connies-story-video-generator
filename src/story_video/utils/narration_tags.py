@@ -28,15 +28,15 @@ _TAG_PATTERN_NON_CAPTURING = re.compile(r"\*\*(?:voice|mood|pause):[^*]+\*\*")
 
 
 def has_narration_tags(text: str) -> bool:
-    """Check whether text contains inline voice or mood tags."""
+    """Check whether text contains inline voice, mood, or pause tags."""
     return bool(_TAG_PATTERN.search(text))
 
 
 def extract_tags(text: str) -> list[str]:
-    """Extract all voice/mood tags from text in order of appearance.
+    """Extract all voice/mood/pause tags from text in order of appearance.
 
     Args:
-        text: Narration text possibly containing **voice:X** and **mood:X** tags.
+        text: Narration text possibly containing **voice:X**, **mood:X**, and **pause:N** tags.
 
     Returns:
         List of tag strings in order of appearance.
@@ -48,10 +48,10 @@ _STRIP_PATTERN = re.compile(r"\*\*(?:voice|mood|pause):[^*]+\*\*\s*")
 
 
 def strip_narration_tags(text: str) -> str:
-    """Remove inline voice/mood tags (and trailing whitespace) from text.
+    """Remove inline voice/mood/pause tags (and trailing whitespace) from text.
 
-    Tags like ``**voice:narrator**`` and ``**mood:dry**`` are metadata
-    for the TTS pipeline and should be stripped before content analysis.
+    Tags like ``**voice:narrator**``, ``**mood:dry**``, and ``**pause:0.5**``
+    are metadata for the TTS pipeline and should be stripped before content analysis.
     """
     return _STRIP_PATTERN.sub("", text)
 
@@ -125,7 +125,8 @@ def parse_narration_segments(
 
     Walks the text tracking current voice and mood state. Each
     ``**voice:X**`` or ``**mood:X**`` tag closes the current segment
-    and starts a new one.
+    and starts a new one. ``**pause:N**`` tags emit a pause segment
+    with the specified duration in seconds.
 
     Args:
         text: Scene narration text with optional inline tags.
@@ -137,7 +138,8 @@ def parse_narration_segments(
         List of NarrationSegment objects in order.
 
     Raises:
-        ValueError: If a voice tag references an undefined label.
+        ValueError: If a voice tag references an undefined label,
+            or if a pause tag has a non-numeric duration.
     """
     current_voice_label = default_voice
     current_mood: str | None = None
