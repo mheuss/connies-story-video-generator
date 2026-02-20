@@ -16,6 +16,11 @@ from story_video.pipeline.image_generator import (
     generate_image,
 )
 from story_video.state import ProjectState
+from tests.error_factories import (
+    make_openai_connection_error,
+    make_openai_rate_limit_error,
+    make_openai_server_error,
+)
 
 # ---------------------------------------------------------------------------
 # Test data
@@ -182,69 +187,19 @@ class TestOpenAIImageProviderReadsApiKeyFromEnv:
 class TestOpenAIImageProviderRetryOnTransientErrors:
     """OpenAIImageProvider.generate() retries on transient API errors."""
 
-    def test_generate_retries_on_rate_limit(self, mock_openai):
-        """generate() retries on RateLimitError then succeeds."""
-        from tests.error_factories import make_openai_rate_limit_error
-
+    @pytest.mark.parametrize(
+        "error_factory",
+        [make_openai_connection_error, make_openai_rate_limit_error, make_openai_server_error],
+        ids=["connection", "rate_limit", "server"],
+    )
+    def test_generate_retries_on_transient_error(self, mock_openai, error_factory):
+        """generate() retries on transient error then succeeds."""
         image_data = MagicMock()
         image_data.b64_json = FAKE_B64
         success_response = MagicMock()
         success_response.data = [image_data]
 
-        mock_openai.images.generate.side_effect = [
-            make_openai_rate_limit_error(),
-            success_response,
-        ]
-
-        provider = OpenAIImageProvider()
-        result = provider.generate(
-            prompt="test",
-            model="gpt-image-1.5",
-            size="1536x1024",
-            quality="medium",
-        )
-
-        assert result == FAKE_PNG
-        assert mock_openai.images.generate.call_count == 2
-
-    def test_generate_retries_on_connection_error(self, mock_openai):
-        """generate() retries on APIConnectionError then succeeds."""
-        from tests.error_factories import make_openai_connection_error
-
-        image_data = MagicMock()
-        image_data.b64_json = FAKE_B64
-        success_response = MagicMock()
-        success_response.data = [image_data]
-
-        mock_openai.images.generate.side_effect = [
-            make_openai_connection_error(),
-            success_response,
-        ]
-
-        provider = OpenAIImageProvider()
-        result = provider.generate(
-            prompt="test",
-            model="gpt-image-1.5",
-            size="1536x1024",
-            quality="medium",
-        )
-
-        assert result == FAKE_PNG
-        assert mock_openai.images.generate.call_count == 2
-
-    def test_generate_retries_on_server_error(self, mock_openai):
-        """generate() retries on InternalServerError then succeeds."""
-        from tests.error_factories import make_openai_server_error
-
-        image_data = MagicMock()
-        image_data.b64_json = FAKE_B64
-        success_response = MagicMock()
-        success_response.data = [image_data]
-
-        mock_openai.images.generate.side_effect = [
-            make_openai_server_error(),
-            success_response,
-        ]
+        mock_openai.images.generate.side_effect = [error_factory(), success_response]
 
         provider = OpenAIImageProvider()
         result = provider.generate(
@@ -266,75 +221,33 @@ class TestOpenAIImageProviderRetryOnTransientErrors:
 class TestOpenAIImageProviderNoRetryOnPermanentErrors:
     """OpenAIImageProvider.generate() does NOT retry on permanent API errors."""
 
-    def test_generate_no_retry_on_bad_request(self, mock_openai):
-        """generate() does not retry on BadRequestError."""
-        from openai import BadRequestError
+    @pytest.mark.parametrize(
+        "error_name,status,message",
+        [
+            ("BadRequestError", 400, "bad request"),
+            ("AuthenticationError", 401, "invalid key"),
+            ("PermissionDeniedError", 403, "permission denied"),
+        ],
+        ids=["bad_request", "auth", "permission"],
+    )
+    def test_generate_no_retry_on_permanent_error(self, mock_openai, error_name, status, message):
+        """generate() does not retry on permanent error."""
+        import openai
 
-        response_400 = MagicMock()
-        response_400.status_code = 400
-        response_400.json.return_value = {"error": {"message": "bad request"}}
+        error_cls = getattr(openai, error_name)
+        mock_response = MagicMock()
+        mock_response.status_code = status
+        mock_response.json.return_value = {"error": {"message": message}}
 
-        mock_openai.images.generate.side_effect = BadRequestError(
-            message="bad request",
-            response=response_400,
-            body={"error": {"message": "bad request"}},
+        mock_openai.images.generate.side_effect = error_cls(
+            message=message,
+            response=mock_response,
+            body={"error": {"message": message}},
         )
 
         provider = OpenAIImageProvider()
 
-        with pytest.raises(BadRequestError):
-            provider.generate(
-                prompt="test",
-                model="gpt-image-1.5",
-                size="1536x1024",
-                quality="medium",
-            )
-
-        assert mock_openai.images.generate.call_count == 1
-
-    def test_generate_no_retry_on_auth_error(self, mock_openai):
-        """generate() does not retry on AuthenticationError."""
-        from openai import AuthenticationError
-
-        response_401 = MagicMock()
-        response_401.status_code = 401
-        response_401.json.return_value = {"error": {"message": "invalid key"}}
-
-        mock_openai.images.generate.side_effect = AuthenticationError(
-            message="invalid key",
-            response=response_401,
-            body={"error": {"message": "invalid key"}},
-        )
-
-        provider = OpenAIImageProvider()
-
-        with pytest.raises(AuthenticationError):
-            provider.generate(
-                prompt="test",
-                model="gpt-image-1.5",
-                size="1536x1024",
-                quality="medium",
-            )
-
-        assert mock_openai.images.generate.call_count == 1
-
-    def test_generate_no_retry_on_permission_error(self, mock_openai):
-        """generate() does not retry on PermissionDeniedError."""
-        from openai import PermissionDeniedError
-
-        response_403 = MagicMock()
-        response_403.status_code = 403
-        response_403.json.return_value = {"error": {"message": "permission denied"}}
-
-        mock_openai.images.generate.side_effect = PermissionDeniedError(
-            message="permission denied",
-            response=response_403,
-            body={"error": {"message": "permission denied"}},
-        )
-
-        provider = OpenAIImageProvider()
-
-        with pytest.raises(PermissionDeniedError):
+        with pytest.raises(error_cls):
             provider.generate(
                 prompt="test",
                 model="gpt-image-1.5",
