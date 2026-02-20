@@ -236,3 +236,17 @@ class TestExtractTags:
     def test_mixed_voice_and_mood(self):
         text = "**voice:jane** **mood:excited** She laughed."
         assert extract_tags(text) == ["**voice:jane**", "**mood:excited**"]
+
+
+class TestPauseTagParsing:
+    """parse_narration_segments handles **pause:N** tags."""
+
+    VOICE_MAP = {"narrator": "nova", "jane": "shimmer"}
+
+    def test_pause_segment_has_duration(self):
+        """**pause:0.5** produces a segment with pause_duration=0.5."""
+        text = "Hello. **pause:0.5** Goodbye."
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        pause_segments = [s for s in segments if s.pause_duration is not None]
+        assert len(pause_segments) == 1
+        assert pause_segments[0].pause_duration == 0.5

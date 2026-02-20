@@ -1,6 +1,6 @@
 """Narration tag parsing for multi-voice TTS.
 
-Parses YAML front matter (voice mappings) and inline voice/mood tags
+Parses YAML front matter (voice mappings) and inline voice/mood/pause tags
 from story text.
 
 Public items:
@@ -23,8 +23,8 @@ __all__ = [
     "strip_narration_tags",
 ]
 
-_TAG_PATTERN = re.compile(r"\*\*(voice|mood):([^*]+)\*\*")
-_TAG_PATTERN_NON_CAPTURING = re.compile(r"\*\*(?:voice|mood):[^*]+\*\*")
+_TAG_PATTERN = re.compile(r"\*\*(voice|mood|pause):([^*]+)\*\*")
+_TAG_PATTERN_NON_CAPTURING = re.compile(r"\*\*(?:voice|mood|pause):[^*]+\*\*")
 
 
 def has_narration_tags(text: str) -> bool:
@@ -44,7 +44,7 @@ def extract_tags(text: str) -> list[str]:
     return _TAG_PATTERN_NON_CAPTURING.findall(text)
 
 
-_STRIP_PATTERN = re.compile(r"\*\*(?:voice|mood):[^*]+\*\*\s*")
+_STRIP_PATTERN = re.compile(r"\*\*(?:voice|mood|pause):[^*]+\*\*\s*")
 
 
 def strip_narration_tags(text: str) -> str:
@@ -175,6 +175,25 @@ def parse_narration_segments(
             current_mood = None  # Voice change resets mood
         elif tag_type == "mood":
             current_mood = None if tag_value == "neutral" else tag_value
+        elif tag_type == "pause":
+            try:
+                duration = float(tag_value)
+            except ValueError:
+                msg = (
+                    f"Invalid pause duration '{tag_value}' — must be a number (e.g., **pause:0.5**)"
+                )
+                raise ValueError(msg) from None
+            segments.append(
+                NarrationSegment(
+                    text="_pause",
+                    voice="_pause",
+                    voice_label="_pause",
+                    pause_duration=duration,
+                    scene_number=scene_number,
+                    segment_index=segment_index,
+                )
+            )
+            segment_index += 1
 
         last_end = match.end()
 

@@ -290,6 +290,7 @@ class NarrationSegment(BaseModel):
         voice: Resolved voice ID (e.g., "nova").
         voice_label: Original label from the tag (e.g., "jane").
         mood: Emotion instruction or None.
+        pause_duration: Seconds of silence (set for pause segments, None for speech).
         scene_number: Which scene this segment belongs to.
         segment_index: Order within the scene.
     """
@@ -300,6 +301,7 @@ class NarrationSegment(BaseModel):
     voice: str = Field(min_length=1)
     voice_label: str = Field(min_length=1)
     mood: str | None = Field(default=None)
+    pause_duration: float | None = Field(default=None, gt=0)
     scene_number: int = Field(ge=1)
     segment_index: int = Field(ge=0)
 
