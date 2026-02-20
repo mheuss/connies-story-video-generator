@@ -124,20 +124,18 @@ class TestStoryConfig:
 class TestStoryConfigWordCountValidation:
     """StoryConfig enforces min <= target <= max for scene word counts."""
 
-    def test_min_exceeds_max_raises(self):
-        """scene_word_min > scene_word_max is rejected."""
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"scene_word_min": 200, "scene_word_max": 100, "scene_word_target": 150},
+            {"scene_word_min": 100, "scene_word_max": 200, "scene_word_target": 250},
+            {"scene_word_min": 100, "scene_word_max": 200, "scene_word_target": 50},
+        ],
+        ids=["min_exceeds_max", "target_exceeds_max", "target_below_min"],
+    )
+    def test_invalid_word_count_bounds_rejected(self, kwargs):
         with pytest.raises(ValidationError):
-            StoryConfig(scene_word_min=3000, scene_word_max=500)
-
-    def test_target_exceeds_max_raises(self):
-        """scene_word_target > scene_word_max is rejected."""
-        with pytest.raises(ValidationError):
-            StoryConfig(scene_word_target=4000, scene_word_max=3000)
-
-    def test_target_below_min_raises(self):
-        """scene_word_target < scene_word_min is rejected."""
-        with pytest.raises(ValidationError):
-            StoryConfig(scene_word_target=100, scene_word_min=500)
+            StoryConfig(**kwargs)
 
     def test_valid_bounds_accepted(self):
         """Valid ordering passes validation."""
@@ -166,17 +164,12 @@ class TestTTSConfig:
 class TestTTSConfigFileExtension:
     """TTSConfig.file_extension extracts codec from output_format."""
 
-    def test_simple_format(self):
-        config = TTSConfig(output_format="mp3")
-        assert config.file_extension == "mp3"
-
-    def test_compound_format(self):
-        config = TTSConfig(output_format="mp3_44100_128")
-        assert config.file_extension == "mp3"
-
-    def test_opus_format(self):
-        config = TTSConfig(output_format="opus")
-        assert config.file_extension == "opus"
+    @pytest.mark.parametrize(
+        "fmt,expected",
+        [("mp3", "mp3"), ("mp3_44100_128", "mp3"), ("opus", "opus")],
+    )
+    def test_file_extension(self, fmt, expected):
+        assert TTSConfig(output_format=fmt).file_extension == expected
 
 
 class TestImageConfigSizeValidator:
@@ -381,25 +374,13 @@ class TestVideoConfigResolutionValidation:
         config = VideoConfig(resolution="1920x1080")
         assert config.resolution == "1920x1080"
 
-    def test_invalid_resolution_uppercase_x(self):
-        """Uppercase X is rejected."""
+    @pytest.mark.parametrize(
+        "invalid",
+        ["1920X1080", "1920:1080", "1920x1080x720", "fullhd"],
+    )
+    def test_invalid_resolution_rejected(self, invalid):
         with pytest.raises(ValidationError):
-            VideoConfig(resolution="1920X1080")
-
-    def test_invalid_resolution_colon(self):
-        """Colon separator is rejected."""
-        with pytest.raises(ValidationError):
-            VideoConfig(resolution="1920:1080")
-
-    def test_invalid_resolution_extra_dimension(self):
-        """Three dimensions are rejected."""
-        with pytest.raises(ValidationError):
-            VideoConfig(resolution="1920x1080x3")
-
-    def test_invalid_resolution_text(self):
-        """Non-numeric text is rejected."""
-        with pytest.raises(ValidationError):
-            VideoConfig(resolution="widexhigh")
+            VideoConfig(resolution=invalid)
 
 
 # ---------------------------------------------------------------------------
@@ -647,20 +628,17 @@ class TestNarrationSegment:
 class TestSubtitleConfigColorValidation:
     """SubtitleConfig rejects invalid hex color formats."""
 
-    def test_rejects_named_color(self):
-        """Named colors like 'red' are not valid."""
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("color", "red"),
+            ("color", "#FFF"),
+            ("outline_color", "blue"),
+        ],
+    )
+    def test_rejects_invalid_color(self, field, value):
         with pytest.raises(ValidationError):
-            SubtitleConfig(color="red")
-
-    def test_rejects_short_hex(self):
-        """Three-digit hex like '#FFF' is not valid."""
-        with pytest.raises(ValidationError):
-            SubtitleConfig(color="#FFF")
-
-    def test_rejects_outline_named_color(self):
-        """outline_color also validates."""
-        with pytest.raises(ValidationError):
-            SubtitleConfig(outline_color="blue")
+            SubtitleConfig(**{field: value})
 
     def test_accepts_valid_uppercase_hex(self):
         """Standard #RRGGBB format passes."""
