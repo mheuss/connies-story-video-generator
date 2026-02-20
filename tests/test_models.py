@@ -373,17 +373,11 @@ class TestVideoConfig:
         assert config.fps == 30
         assert config.codec == "libx264"
         assert config.crf == 18
-        assert config.background_mode == "blur"
         assert config.background_blur_radius == 40
-        assert config.background_image is None
         assert config.transition_duration == 1.5
         assert config.audio_transition_duration == 0.05
         assert config.fade_in_duration == 2.0
         assert config.fade_out_duration == 3.0
-
-    def test_background_image_optional(self):
-        config = VideoConfig(background_image=Path("/some/image.png"))
-        assert config.background_image == Path("/some/image.png")
 
     def test_rejects_negative_fps(self):
         with pytest.raises(ValidationError):

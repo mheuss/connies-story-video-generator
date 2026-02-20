@@ -253,7 +253,7 @@ def _run_with_providers(state: ProjectState) -> None:
         state: Project state to pass to the pipeline.
 
     Raises:
-        Exception: Any pipeline error is re-raised.
+        Propagates any exception raised by ``run_pipeline``.
     """
     tts_provider = _make_tts_provider(state.metadata.config.tts.provider)
     claude_client = ClaudeClient()
@@ -277,7 +277,7 @@ def _run_with_providers(state: ProjectState) -> None:
 @app.command()
 def create(
     mode: str = typer.Option(..., help="Input mode: adapt, original, inspired_by"),
-    input: str | None = typer.Option(
+    input_text: str | None = typer.Option(
         None, "--input", help="Source story, creative brief, or path to file"
     ),
     premise: str | None = typer.Option(
@@ -304,7 +304,7 @@ def create(
         raise typer.Exit(1)
 
     # --- Validate input required ---
-    if input is None:
+    if input_text is None:
         console.print(
             Panel(
                 f"Mode '{mode}' requires --input (path to file or inline text).",
@@ -340,7 +340,7 @@ def create(
         raise typer.Exit(1)
 
     # --- Write source material ---
-    text = _read_text_input(input)
+    text = _read_text_input(input_text)
     (state.project_dir / "source_story.txt").write_text(text, encoding="utf-8")
 
     # --- Write premise ---

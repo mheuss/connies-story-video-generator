@@ -115,6 +115,16 @@ class TestBlurBackgroundRadius:
         result = blur_background_filter(blur_radius=50, resolution="1920x1080")
         assert "sigma=50" in result
 
+    def test_negative_blur_radius_raises(self):
+        """Negative blur radius raises ValueError."""
+        with pytest.raises(ValueError, match="blur_radius must be >= 0"):
+            blur_background_filter(blur_radius=-5, resolution="1920x1080")
+
+    def test_zero_blur_radius_allowed(self):
+        """Zero blur radius is valid (no blur)."""
+        result = blur_background_filter(blur_radius=0, resolution="1920x1080")
+        assert "sigma=0" in result
+
 
 # ---------------------------------------------------------------------------
 # parse_resolution — WIDTHxHEIGHT parsing and validation

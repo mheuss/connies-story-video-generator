@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from story_video.config import load_config
+from story_video.models import AppConfig
 
 # ---------------------------------------------------------------------------
 # Defaults-only tests (no file, no CLI overrides)
@@ -21,8 +22,6 @@ class TestLoadConfigDefaultsOnly:
 
     def test_returns_app_config_instance(self):
         config = load_config()
-        from story_video.models import AppConfig
-
         assert isinstance(config, AppConfig)
 
     def test_story_defaults(self):

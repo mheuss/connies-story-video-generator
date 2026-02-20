@@ -53,12 +53,18 @@ def blur_background_filter(blur_radius: int, resolution: str) -> str:
     and applies a Gaussian blur.
 
     Args:
-        blur_radius: Gaussian blur sigma value (higher = more blur).
+        blur_radius: Gaussian blur sigma value (higher = more blur, must be >= 0).
         resolution: Target resolution as "WxH" (e.g. "1920x1080").
+
+    Raises:
+        ValueError: If blur_radius is negative.
 
     Returns:
         A comma-separated filter chain string ready for FFmpeg ``-vf``.
     """
+    if blur_radius < 0:
+        msg = f"blur_radius must be >= 0, got {blur_radius}"
+        raise ValueError(msg)
     w, h = parse_resolution(resolution)
 
     return (

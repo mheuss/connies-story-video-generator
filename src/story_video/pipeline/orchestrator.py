@@ -271,7 +271,8 @@ def _dispatch_phase(
 
     elif phase == PipelinePhase.VIDEO_ASSEMBLY:
         _run_per_scene(state, lambda scene: assemble_scene(scene, state))
-        assemble_video(state)
+        final_path = assemble_video(state)
+        logger.info("Final video: %s", final_path)
 
     else:
         msg = f"Unknown phase: {phase}"
@@ -335,6 +336,9 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
         # Mark narration_text COMPLETED if not already set (adapt mode sets it
         # during NARRATION_FLAGGING; creative flow relies on narration_prep).
         if scene.asset_status.narration_text != SceneStatus.COMPLETED:
+            state.update_scene_asset(
+                scene.scene_number, AssetType.NARRATION_TEXT, SceneStatus.IN_PROGRESS
+            )
             state.update_scene_asset(
                 scene.scene_number, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED
             )

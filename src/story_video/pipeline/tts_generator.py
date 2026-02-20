@@ -55,7 +55,13 @@ def generate_mp3_silence(duration: float) -> bytes:
 
     Returns:
         Raw MP3 bytes containing silence.
+
+    Raises:
+        ValueError: If duration is not positive.
     """
+    if duration <= 0:
+        msg = f"Silence duration must be positive, got {duration}"
+        raise ValueError(msg)
     frame_count = math.ceil(duration / _SILENT_FRAME_DURATION)
     return _SILENT_MP3_FRAME * frame_count
 

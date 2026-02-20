@@ -325,9 +325,9 @@ def probe_duration(path: Path) -> float:
     raw = result.stdout.strip()
     try:
         return float(raw)
-    except ValueError:
+    except ValueError as exc:
         raise FFmpegError(
             cmd=cmd,
             returncode=0,
             stderr=f"ffprobe returned non-numeric duration '{raw}' for {path}",
-        )
+        ) from exc

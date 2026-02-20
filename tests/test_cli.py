@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from story_video.cli import (
@@ -100,8 +101,6 @@ class TestReadTextInput:
 
     def test_raises_when_path_is_directory(self, tmp_path: Path) -> None:
         """Directory path raises ValueError instead of silently treating as text."""
-        import pytest
-
         with pytest.raises(ValueError, match="is a directory"):
             _read_text_input(str(tmp_path))
 

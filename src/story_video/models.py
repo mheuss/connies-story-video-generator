@@ -23,6 +23,7 @@ __all__ = [
     "ADAPT_FLOW_PHASES",
     "CREATIVE_FLOW_PHASES",
     "AppConfig",
+    "HEX_COLOR_RE",
     "AssetType",
     "CaptionResult",
     "CaptionSegment",
@@ -35,6 +36,7 @@ __all__ = [
     "PipelineConfig",
     "PipelinePhase",
     "ProjectMetadata",
+    "RESOLUTION_RE",
     "SCENE_WORD_TARGET_DEFAULT",
     "Scene",
     "SceneAssetStatus",
@@ -351,9 +353,7 @@ class VideoConfig(BaseModel):
         fps: Frames per second.
         codec: FFmpeg video codec.
         crf: Constant Rate Factor for encoding quality (lower = better).
-        background_mode: Background treatment mode ("blur" or "custom").
         background_blur_radius: Gaussian blur radius for blurred background.
-        background_image: Optional path to a custom background image.
         transition_duration: Video crossfade duration between scenes in seconds.
         audio_transition_duration: Audio crossfade duration between scenes in seconds.
         fade_in_duration: Fade-from-black duration at video start in seconds.
@@ -366,9 +366,7 @@ class VideoConfig(BaseModel):
     fps: int = Field(default=30, gt=0)
     codec: str = Field(default="libx264")
     crf: int = Field(default=18, ge=0)
-    background_mode: str = Field(default="blur")
     background_blur_radius: int = Field(default=40, ge=0)
-    background_image: Path | None = Field(default=None)
     transition_duration: float = Field(default=1.5, ge=0)
     audio_transition_duration: float = Field(default=0.05, ge=0)
     fade_in_duration: float = Field(default=2.0, ge=0)

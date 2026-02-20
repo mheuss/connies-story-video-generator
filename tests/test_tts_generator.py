@@ -944,6 +944,16 @@ class TestGenerateMp3Silence:
         assert result[0] == 0xFF
         assert (result[1] & 0xE0) == 0xE0
 
+    def test_zero_duration_raises(self):
+        """Zero duration raises ValueError."""
+        with pytest.raises(ValueError, match="must be positive"):
+            generate_mp3_silence(0.0)
+
+    def test_negative_duration_raises(self):
+        """Negative duration raises ValueError."""
+        with pytest.raises(ValueError, match="must be positive"):
+            generate_mp3_silence(-1.0)
+
 
 # ---------------------------------------------------------------------------
 # generate_audio — pause segments insert silence

@@ -698,18 +698,18 @@ def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
         _, body_text = parse_story_header(source_text)
         user_message = body_text
 
-    result = dict(
-        client.generate_structured(
-            system=system_prompt,
-            user_message=user_message,
-            tool_name="analyze_source",
-            tool_schema=ANALYSIS_SCHEMA,
-        )
+    result = client.generate_structured(
+        system=system_prompt,
+        user_message=user_message,
+        tool_name="analyze_source",
+        tool_schema=ANALYSIS_SCHEMA,
     )
 
     # For ORIGINAL mode, compute source_stats from config instead of trusting
     # Claude's response (a brief has no meaningful word count to match).
+    # Shallow-copy so we can override source_stats without mutating the original.
     if is_original:
+        result = dict(result)
         story_config = state.metadata.config.story
         word_count = story_config.target_duration_minutes * story_config.words_per_minute
         scene_count = max(2, word_count // SCENE_WORD_TARGET_DEFAULT)
