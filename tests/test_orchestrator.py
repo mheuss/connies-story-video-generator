@@ -921,82 +921,33 @@ class TestDispatchPhaseUnknown:
 class TestDispatchPhaseProviderGuards:
     """_dispatch_phase raises ValueError when required provider is None."""
 
-    def test_scene_splitting_requires_claude_client(self, adapt_state):
-        with pytest.raises(ValueError, match="claude_client"):
-            _dispatch_phase(
-                PipelinePhase.SCENE_SPLITTING,
-                adapt_state,
-                claude_client=None,
-                tts_provider=MagicMock(),
-                image_provider=MagicMock(),
-                caption_provider=MagicMock(),
-            )
-
-    def test_narration_flagging_requires_claude_client(self, adapt_state):
-        with pytest.raises(ValueError, match="claude_client"):
-            _dispatch_phase(
-                PipelinePhase.NARRATION_FLAGGING,
-                adapt_state,
-                claude_client=None,
-                tts_provider=MagicMock(),
-                image_provider=MagicMock(),
-                caption_provider=MagicMock(),
-            )
-
-    def test_image_prompts_requires_claude_client(self, adapt_state):
-        with pytest.raises(ValueError, match="claude_client"):
-            _dispatch_phase(
-                PipelinePhase.IMAGE_PROMPTS,
-                adapt_state,
-                claude_client=None,
-                tts_provider=MagicMock(),
-                image_provider=MagicMock(),
-                caption_provider=MagicMock(),
-            )
-
-    def test_tts_generation_requires_tts_provider(self, adapt_state):
-        with pytest.raises(ValueError, match="tts_provider"):
-            _dispatch_phase(
-                PipelinePhase.TTS_GENERATION,
-                adapt_state,
-                claude_client=MagicMock(),
-                tts_provider=None,
-                image_provider=MagicMock(),
-                caption_provider=MagicMock(),
-            )
-
-    def test_image_generation_requires_image_provider(self, adapt_state):
-        with pytest.raises(ValueError, match="image_provider"):
-            _dispatch_phase(
-                PipelinePhase.IMAGE_GENERATION,
-                adapt_state,
-                claude_client=MagicMock(),
-                tts_provider=MagicMock(),
-                image_provider=None,
-                caption_provider=MagicMock(),
-            )
-
-    def test_caption_generation_requires_caption_provider(self, adapt_state):
-        with pytest.raises(ValueError, match="caption_provider"):
-            _dispatch_phase(
-                PipelinePhase.CAPTION_GENERATION,
-                adapt_state,
-                claude_client=MagicMock(),
-                tts_provider=MagicMock(),
-                image_provider=MagicMock(),
-                caption_provider=None,
-            )
-
-    def test_narration_prep_requires_claude_client(self, adapt_state):
-        with pytest.raises(ValueError, match="claude_client is required for NARRATION_PREP"):
-            _dispatch_phase(
-                PipelinePhase.NARRATION_PREP,
-                adapt_state,
-                claude_client=None,
-                tts_provider=MagicMock(),
-                image_provider=MagicMock(),
-                caption_provider=MagicMock(),
-            )
+    @pytest.mark.parametrize(
+        "phase,missing_provider",
+        [
+            (PipelinePhase.SCENE_SPLITTING, "claude_client"),
+            (PipelinePhase.NARRATION_FLAGGING, "claude_client"),
+            (PipelinePhase.IMAGE_PROMPTS, "claude_client"),
+            (PipelinePhase.TTS_GENERATION, "tts_provider"),
+            (PipelinePhase.IMAGE_GENERATION, "image_provider"),
+            (PipelinePhase.CAPTION_GENERATION, "caption_provider"),
+            (PipelinePhase.NARRATION_PREP, "claude_client"),
+            (PipelinePhase.ANALYSIS, "claude_client"),
+            (PipelinePhase.STORY_BIBLE, "claude_client"),
+            (PipelinePhase.OUTLINE, "claude_client"),
+            (PipelinePhase.SCENE_PROSE, "claude_client"),
+            (PipelinePhase.CRITIQUE_REVISION, "claude_client"),
+        ],
+    )
+    def test_phase_requires_provider(self, adapt_state, phase, missing_provider):
+        providers = {
+            "claude_client": MagicMock(),
+            "tts_provider": MagicMock(),
+            "image_provider": MagicMock(),
+            "caption_provider": MagicMock(),
+        }
+        providers[missing_provider] = None
+        with pytest.raises(ValueError, match=missing_provider):
+            _dispatch_phase(phase, adapt_state, **providers)
 
 
 # ---------------------------------------------------------------------------
@@ -1007,103 +958,30 @@ class TestDispatchPhaseProviderGuards:
 class TestDispatchCreativePhases:
     """_dispatch_phase routes creative phases to story_writer functions."""
 
-    def test_dispatches_analysis(self, mocker):
-        """ANALYSIS phase calls story_writer.analyze_source."""
-        mock_fn = mocker.patch("story_video.pipeline.orchestrator.analyze_source")
-        state = MagicMock()
-        client = MagicMock()
-        _dispatch_phase(
-            PipelinePhase.ANALYSIS,
-            state,
-            claude_client=client,
-            tts_provider=None,
-            image_provider=None,
-            caption_provider=None,
-        )
-        mock_fn.assert_called_once_with(state, client)
-
-    def test_dispatches_story_bible(self, mocker):
-        """STORY_BIBLE phase calls story_writer.create_story_bible."""
-        mock_fn = mocker.patch("story_video.pipeline.orchestrator.create_story_bible")
-        state = MagicMock()
-        client = MagicMock()
-        _dispatch_phase(
-            PipelinePhase.STORY_BIBLE,
-            state,
-            claude_client=client,
-            tts_provider=None,
-            image_provider=None,
-            caption_provider=None,
-        )
-        mock_fn.assert_called_once_with(state, client)
-
-    def test_dispatches_outline(self, mocker):
-        """OUTLINE phase calls story_writer.create_outline."""
-        mock_fn = mocker.patch("story_video.pipeline.orchestrator.create_outline")
-        state = MagicMock()
-        client = MagicMock()
-        _dispatch_phase(
-            PipelinePhase.OUTLINE,
-            state,
-            claude_client=client,
-            tts_provider=None,
-            image_provider=None,
-            caption_provider=None,
-        )
-        mock_fn.assert_called_once_with(state, client)
-
-    def test_dispatches_scene_prose(self, mocker):
-        """SCENE_PROSE phase calls story_writer.write_scene_prose."""
-        mock_fn = mocker.patch("story_video.pipeline.orchestrator.write_scene_prose")
-        state = MagicMock()
-        client = MagicMock()
-        _dispatch_phase(
-            PipelinePhase.SCENE_PROSE,
-            state,
-            claude_client=client,
-            tts_provider=None,
-            image_provider=None,
-            caption_provider=None,
-        )
-        mock_fn.assert_called_once_with(state, client)
-
-    def test_dispatches_critique_revision(self, mocker):
-        """CRITIQUE_REVISION phase calls story_writer.critique_and_revise."""
-        mock_fn = mocker.patch("story_video.pipeline.orchestrator.critique_and_revise")
-        state = MagicMock()
-        client = MagicMock()
-        _dispatch_phase(
-            PipelinePhase.CRITIQUE_REVISION,
-            state,
-            claude_client=client,
-            tts_provider=None,
-            image_provider=None,
-            caption_provider=None,
-        )
-        mock_fn.assert_called_once_with(state, client)
-
     @pytest.mark.parametrize(
-        "phase",
+        "phase,func_name",
         [
-            PipelinePhase.ANALYSIS,
-            PipelinePhase.STORY_BIBLE,
-            PipelinePhase.OUTLINE,
-            PipelinePhase.SCENE_PROSE,
-            PipelinePhase.CRITIQUE_REVISION,
+            (PipelinePhase.ANALYSIS, "analyze_source"),
+            (PipelinePhase.STORY_BIBLE, "create_story_bible"),
+            (PipelinePhase.OUTLINE, "create_outline"),
+            (PipelinePhase.SCENE_PROSE, "write_scene_prose"),
+            (PipelinePhase.CRITIQUE_REVISION, "critique_and_revise"),
         ],
     )
-    def test_creative_phases_require_claude_client(self, phase):
-        """Each creative phase raises ValueError when claude_client is None."""
+    def test_dispatches_creative_phase(self, mocker, phase, func_name):
+        """Creative phases dispatch to the correct story_writer function."""
+        mock_fn = mocker.patch(f"story_video.pipeline.orchestrator.{func_name}")
         state = MagicMock()
-        with pytest.raises(ValueError, match="claude_client is required"):
-            _dispatch_phase(
-                phase,
-                state,
-                claude_client=None,
-                tts_provider=None,
-                image_provider=None,
-                caption_provider=None,
-            )
+        client = MagicMock()
+        _dispatch_phase(
+            phase,
+            state,
+            claude_client=client,
+            tts_provider=None,
+            image_provider=None,
+            caption_provider=None,
+        )
+        mock_fn.assert_called_once_with(state, client)
 
 
 # ---------------------------------------------------------------------------
