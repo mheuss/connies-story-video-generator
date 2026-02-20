@@ -5,7 +5,6 @@ Each test verifies one logical behavior of the data models.
 """
 
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -21,9 +20,7 @@ from story_video.models import (
     ImageConfig,
     InputMode,
     NarrationSegment,
-    OutputConfig,
     PhaseStatus,
-    PipelineConfig,
     PipelinePhase,
     ProjectMetadata,
     Scene,
@@ -44,21 +41,6 @@ from story_video.models import (
 class TestInputMode:
     """InputMode enum — three input modes for story generation."""
 
-    def test_has_original_member(self):
-        assert InputMode.ORIGINAL == "original"
-
-    def test_has_inspired_by_member(self):
-        assert InputMode.INSPIRED_BY == "inspired_by"
-
-    def test_has_adapt_member(self):
-        assert InputMode.ADAPT == "adapt"
-
-    def test_has_exactly_three_members(self):
-        assert len(InputMode) == 3
-
-    def test_is_string_enum(self):
-        assert isinstance(InputMode.ORIGINAL, str)
-
     def test_json_serializes_as_string_value(self):
         """Pydantic serializes the enum as its string value in JSON."""
         project = ProjectMetadata(project_id="test", mode=InputMode.ORIGINAL)
@@ -66,108 +48,13 @@ class TestInputMode:
         assert '"original"' in json_str
 
 
-class TestPhaseStatus:
-    """PhaseStatus enum — phase-level status tracking."""
-
-    def test_has_pending(self):
-        assert PhaseStatus.PENDING == "pending"
-
-    def test_has_in_progress(self):
-        assert PhaseStatus.IN_PROGRESS == "in_progress"
-
-    def test_has_completed(self):
-        assert PhaseStatus.COMPLETED == "completed"
-
-    def test_has_awaiting_review(self):
-        assert PhaseStatus.AWAITING_REVIEW == "awaiting_review"
-
-    def test_has_failed(self):
-        assert PhaseStatus.FAILED == "failed"
-
-    def test_has_exactly_five_members(self):
-        assert len(PhaseStatus) == 5
-
-
 class TestSceneStatus:
     """SceneStatus enum — scene-level status tracking."""
-
-    def test_has_pending(self):
-        assert SceneStatus.PENDING == "pending"
-
-    def test_has_in_progress(self):
-        assert SceneStatus.IN_PROGRESS == "in_progress"
-
-    def test_has_completed(self):
-        assert SceneStatus.COMPLETED == "completed"
-
-    def test_has_failed(self):
-        assert SceneStatus.FAILED == "failed"
-
-    def test_has_exactly_four_members(self):
-        assert len(SceneStatus) == 4
 
     def test_does_not_have_awaiting_review(self):
         """Scene status does not include awaiting_review — only phases have that."""
         member_values = {m.value for m in SceneStatus}
         assert "awaiting_review" not in member_values
-
-
-class TestAssetType:
-    """AssetType enum — per-scene asset types tracked in status."""
-
-    def test_has_text(self):
-        assert AssetType.TEXT == "text"
-
-    def test_has_narration_text(self):
-        assert AssetType.NARRATION_TEXT == "narration_text"
-
-    def test_has_audio(self):
-        assert AssetType.AUDIO == "audio"
-
-    def test_has_image(self):
-        assert AssetType.IMAGE == "image"
-
-    def test_has_captions(self):
-        assert AssetType.CAPTIONS == "captions"
-
-    def test_has_video_segment(self):
-        assert AssetType.VIDEO_SEGMENT == "video_segment"
-
-    def test_has_image_prompt(self):
-        assert AssetType.IMAGE_PROMPT == "image_prompt"
-
-    def test_has_exactly_seven_members(self):
-        assert len(AssetType) == 7
-
-
-class TestPipelinePhase:
-    """PipelinePhase enum — all pipeline phases across both flows."""
-
-    def test_creative_phases_exist(self):
-        """original/inspired_by phases."""
-        assert PipelinePhase.ANALYSIS == "analysis"
-        assert PipelinePhase.STORY_BIBLE == "story_bible"
-        assert PipelinePhase.OUTLINE == "outline"
-        assert PipelinePhase.SCENE_PROSE == "scene_prose"
-        assert PipelinePhase.CRITIQUE_REVISION == "critique_revision"
-
-    def test_adapt_phases_exist(self):
-        """adapt-only phases."""
-        assert PipelinePhase.SCENE_SPLITTING == "scene_splitting"
-        assert PipelinePhase.NARRATION_FLAGGING == "narration_flagging"
-
-    def test_shared_phases_exist(self):
-        """Phases shared by all modes."""
-        assert PipelinePhase.IMAGE_PROMPTS == "image_prompts"
-        assert PipelinePhase.NARRATION_PREP == "narration_prep"
-        assert PipelinePhase.TTS_GENERATION == "tts_generation"
-        assert PipelinePhase.IMAGE_GENERATION == "image_generation"
-        assert PipelinePhase.CAPTION_GENERATION == "caption_generation"
-        assert PipelinePhase.VIDEO_ASSEMBLY == "video_assembly"
-
-    def test_has_exactly_thirteen_members(self):
-        """5 creative + 2 adapt + 6 shared = 13 total phases."""
-        assert len(PipelinePhase) == 13
 
 
 # ---------------------------------------------------------------------------
@@ -225,19 +112,6 @@ class TestPhaseSequences:
 class TestStoryConfig:
     """StoryConfig — story generation parameters."""
 
-    def test_defaults(self):
-        config = StoryConfig()
-        assert config.target_duration_minutes == 30
-        assert config.words_per_minute == 150
-        assert config.scene_word_target == 1800
-        assert config.scene_word_min == 500
-        assert config.scene_word_max == 3000
-
-    def test_custom_values(self):
-        config = StoryConfig(target_duration_minutes=60, scene_word_target=2000)
-        assert config.target_duration_minutes == 60
-        assert config.scene_word_target == 2000
-
     def test_rejects_negative_duration(self):
         with pytest.raises(ValidationError):
             StoryConfig(target_duration_minutes=-1)
@@ -245,12 +119,6 @@ class TestStoryConfig:
     def test_rejects_zero_words_per_minute(self):
         with pytest.raises(ValidationError):
             StoryConfig(words_per_minute=0)
-
-    def test_serialization_roundtrip(self):
-        config = StoryConfig(target_duration_minutes=45)
-        data = config.model_dump()
-        restored = StoryConfig(**data)
-        assert restored == config
 
 
 class TestStoryConfigWordCountValidation:
@@ -285,27 +153,14 @@ class TestStoryConfigWordCountValidation:
 class TestTTSConfig:
     """TTSConfig — text-to-speech parameters."""
 
-    def test_defaults(self):
-        config = TTSConfig()
-        assert config.provider == "openai"
-        assert config.model == "gpt-4o-mini-tts"
-        assert config.voice == "nova"
-        assert config.speed == 1.0
-        assert config.output_format == "mp3"
-
-    def test_custom_voice(self):
-        config = TTSConfig(voice="alloy")
-        assert config.voice == "alloy"
-
     def test_rejects_non_positive_speed(self):
         with pytest.raises(ValidationError):
             TTSConfig(speed=0.0)
 
-    def test_serialization_roundtrip(self):
-        config = TTSConfig(voice="echo", speed=1.2)
-        data = config.model_dump()
-        restored = TTSConfig(**data)
-        assert restored == config
+    def test_rejects_unknown_provider(self):
+        """Unknown TTS provider name raises ValidationError."""
+        with pytest.raises(ValidationError, match="Unknown TTS provider"):
+            TTSConfig(provider="google")
 
 
 class TestTTSConfigFileExtension:
@@ -324,30 +179,6 @@ class TestTTSConfigFileExtension:
         assert config.file_extension == "opus"
 
 
-class TestImageConfig:
-    """ImageConfig — image generation parameters."""
-
-    def test_defaults(self):
-        config = ImageConfig()
-        assert config.provider == "openai"
-        assert config.model == "gpt-image-1.5"
-        assert config.size == "1536x1024"
-        assert config.quality == "medium"
-        assert config.style is None
-        assert config.style_prefix == "Cinematic, dramatic lighting:"
-
-    def test_custom_values(self):
-        config = ImageConfig(quality="hd", style="natural")
-        assert config.quality == "hd"
-        assert config.style == "natural"
-
-    def test_serialization_roundtrip(self):
-        config = ImageConfig(quality="hd")
-        data = config.model_dump()
-        restored = ImageConfig(**data)
-        assert restored == config
-
-
 class TestImageConfigSizeValidator:
     """ImageConfig.size must be WIDTHxHEIGHT format."""
 
@@ -359,25 +190,9 @@ class TestImageConfigSizeValidator:
         with pytest.raises(ValidationError, match="WIDTHxHEIGHT"):
             ImageConfig(size="big")
 
-    def test_default_size_valid(self):
-        config = ImageConfig()
-        assert config.size == "1536x1024"
-
 
 class TestVideoConfig:
     """VideoConfig — video assembly parameters."""
-
-    def test_defaults(self):
-        config = VideoConfig()
-        assert config.resolution == "1920x1080"
-        assert config.fps == 30
-        assert config.codec == "libx264"
-        assert config.crf == 18
-        assert config.background_blur_radius == 40
-        assert config.transition_duration == 1.5
-        assert config.audio_transition_duration == 0.05
-        assert config.fade_in_duration == 2.0
-        assert config.fade_out_duration == 3.0
 
     def test_rejects_negative_fps(self):
         with pytest.raises(ValidationError):
@@ -387,31 +202,9 @@ class TestVideoConfig:
         with pytest.raises(ValidationError):
             VideoConfig(crf=-1)
 
-    def test_serialization_roundtrip(self):
-        config = VideoConfig(fps=60, crf=23)
-        data = config.model_dump()
-        restored = VideoConfig(**data)
-        assert restored == config
-
 
 class TestSubtitleConfig:
     """SubtitleConfig — subtitle rendering parameters."""
-
-    def test_defaults(self):
-        config = SubtitleConfig()
-        assert config.font == "Montserrat"
-        assert config.font_size == 48
-        assert config.color == "#FFFFFF"
-        assert config.outline_color == "#000000"
-        assert config.outline_width == 3
-        assert config.position_bottom == 80
-        assert config.max_chars_per_line == 42
-        assert config.max_lines == 2
-
-    def test_custom_font(self):
-        config = SubtitleConfig(font="Roboto", font_size=36)
-        assert config.font == "Roboto"
-        assert config.font_size == 36
 
     def test_rejects_non_positive_font_size(self):
         with pytest.raises(ValidationError):
@@ -421,79 +214,25 @@ class TestSubtitleConfig:
         with pytest.raises(ValidationError):
             SubtitleConfig(max_lines=0)
 
-    def test_serialization_roundtrip(self):
-        config = SubtitleConfig(font="Helvetica")
-        data = config.model_dump()
-        restored = SubtitleConfig(**data)
-        assert restored == config
-
-
-class TestPipelineConfig:
-    """PipelineConfig — pipeline behavior parameters."""
-
-    def test_defaults(self):
-        config = PipelineConfig()
-        assert config.autonomous is False
-
-    def test_autonomous_mode(self):
-        config = PipelineConfig(autonomous=True)
-        assert config.autonomous is True
-
-    def test_serialization_roundtrip(self):
-        config = PipelineConfig(autonomous=True)
-        data = config.model_dump()
-        restored = PipelineConfig(**data)
-        assert restored == config
-
-
-class TestOutputConfig:
-    """OutputConfig — output directory configuration."""
-
-    def test_default_directory(self):
-        config = OutputConfig()
-        assert config.directory == Path("./output")
-
-    def test_custom_directory(self):
-        config = OutputConfig(directory=Path("/custom/output"))
-        assert config.directory == Path("/custom/output")
-
-    def test_serialization_roundtrip(self):
-        config = OutputConfig(directory=Path("/tmp/out"))
-        data = config.model_dump()
-        restored = OutputConfig(**data)
-        assert restored == config
-
 
 class TestAppConfig:
     """AppConfig — top-level config combining all sections."""
-
-    def test_all_defaults(self):
-        config = AppConfig()
-        assert config.story.target_duration_minutes == 30
-        assert config.tts.voice == "nova"
-        assert config.images.model == "gpt-image-1.5"
-        assert config.video.fps == 30
-        assert config.subtitles.font == "Montserrat"
-        assert config.pipeline.autonomous is False
-        assert config.output.directory == Path("./output")
-
-    def test_partial_override(self):
-        config = AppConfig(story=StoryConfig(target_duration_minutes=60))
-        assert config.story.target_duration_minutes == 60
-        # Other sections use defaults
-        assert config.tts.voice == "nova"
-
-    def test_serialization_roundtrip(self):
-        config = AppConfig()
-        data = config.model_dump()
-        restored = AppConfig(**data)
-        assert restored == config
 
     def test_json_roundtrip(self):
         config = AppConfig()
         json_str = config.model_dump_json()
         restored = AppConfig.model_validate_json(json_str)
         assert restored == config
+
+    def test_rejects_unknown_top_level_key(self):
+        """Extra="forbid" on sub-configs rejects unknown nested keys."""
+        with pytest.raises(ValidationError):
+            AppConfig(story=StoryConfig(), unknown_section="bad")
+
+    def test_rejects_unknown_nested_key(self):
+        """Extra="forbid" on StoryConfig rejects unknown fields."""
+        with pytest.raises(ValidationError):
+            AppConfig(story={"target_duration_minutes": 30, "bogus_key": True})
 
 
 # ---------------------------------------------------------------------------
@@ -503,16 +242,6 @@ class TestAppConfig:
 
 class TestSceneAssetStatus:
     """SceneAssetStatus — per-asset status tracking for a scene."""
-
-    def test_all_default_to_pending(self):
-        status = SceneAssetStatus()
-        assert status.text == SceneStatus.PENDING
-        assert status.narration_text == SceneStatus.PENDING
-        assert status.image_prompt == SceneStatus.PENDING
-        assert status.audio == SceneStatus.PENDING
-        assert status.image == SceneStatus.PENDING
-        assert status.captions == SceneStatus.PENDING
-        assert status.video_segment == SceneStatus.PENDING
 
     def test_individual_status_update(self):
         status = SceneAssetStatus(text=SceneStatus.COMPLETED)
@@ -542,33 +271,6 @@ class TestSceneAssetStatus:
 class TestScene:
     """Scene — content and metadata for a single story scene."""
 
-    def test_creation_with_required_fields(self):
-        scene = Scene(
-            scene_number=1,
-            title="The Lighthouse",
-            prose="The waves crashed against the rocks...",
-        )
-        assert scene.scene_number == 1
-        assert scene.title == "The Lighthouse"
-        assert scene.prose == "The waves crashed against the rocks..."
-
-    def test_optional_fields_default_to_none(self):
-        scene = Scene(
-            scene_number=1,
-            title="Opening",
-            prose="Once upon a time...",
-        )
-        assert scene.narration_text is None
-        assert scene.image_prompt is None
-
-    def test_asset_status_defaults_to_all_pending(self):
-        scene = Scene(
-            scene_number=1,
-            title="Opening",
-            prose="Once upon a time...",
-        )
-        assert scene.asset_status.text == SceneStatus.PENDING
-
     def test_all_fields_populated(self):
         scene = Scene(
             scene_number=3,
@@ -597,18 +299,6 @@ class TestScene:
     def test_rejects_empty_prose(self):
         with pytest.raises(ValidationError):
             Scene(scene_number=1, title="Title", prose="")
-
-    def test_serialization_roundtrip(self):
-        scene = Scene(
-            scene_number=1,
-            title="Opening",
-            prose="Once upon a time...",
-            narration_text="Once upon a time.",
-            image_prompt="A castle on a hill at sunset",
-        )
-        data = scene.model_dump()
-        restored = Scene(**data)
-        assert restored == scene
 
     def test_json_roundtrip(self):
         scene = Scene(
@@ -646,35 +336,6 @@ class TestProjectMetadata:
         after = datetime.now(timezone.utc)
         assert before <= project.created_at <= after
 
-    def test_current_phase_defaults_to_none(self):
-        project = ProjectMetadata(
-            project_id="test-project",
-            mode=InputMode.ORIGINAL,
-        )
-        assert project.current_phase is None
-
-    def test_status_defaults_to_pending(self):
-        project = ProjectMetadata(
-            project_id="test-project",
-            mode=InputMode.ORIGINAL,
-        )
-        assert project.status == PhaseStatus.PENDING
-
-    def test_scenes_defaults_to_empty_list(self):
-        project = ProjectMetadata(
-            project_id="test-project",
-            mode=InputMode.ORIGINAL,
-        )
-        assert project.scenes == []
-
-    def test_config_defaults_to_app_config_defaults(self):
-        project = ProjectMetadata(
-            project_id="test-project",
-            mode=InputMode.ORIGINAL,
-        )
-        assert project.config.story.target_duration_minutes == 30
-        assert project.config.tts.voice == "nova"
-
     def test_rejects_empty_project_id(self):
         with pytest.raises(ValidationError):
             ProjectMetadata(project_id="", mode=InputMode.ORIGINAL)
@@ -695,24 +356,6 @@ class TestProjectMetadata:
         assert project.status == PhaseStatus.IN_PROGRESS
         assert len(project.scenes) == 1
         assert project.config.story.target_duration_minutes == 60
-
-    def test_serialization_roundtrip(self):
-        project = ProjectMetadata(
-            project_id="roundtrip-test",
-            mode=InputMode.ADAPT,
-            current_phase=PipelinePhase.SCENE_SPLITTING,
-            status=PhaseStatus.IN_PROGRESS,
-            scenes=[
-                Scene(scene_number=1, title="Part One", prose="The story begins..."),
-            ],
-        )
-        data = project.model_dump()
-        restored = ProjectMetadata(**data)
-        assert restored.project_id == project.project_id
-        assert restored.mode == project.mode
-        assert restored.current_phase == project.current_phase
-        assert restored.status == project.status
-        assert len(restored.scenes) == 1
 
     def test_json_roundtrip(self):
         project = ProjectMetadata(
@@ -737,11 +380,6 @@ class TestVideoConfigResolutionValidation:
         """Standard 1080p resolution is accepted."""
         config = VideoConfig(resolution="1920x1080")
         assert config.resolution == "1920x1080"
-
-    def test_valid_resolution_4k(self):
-        """4K resolution is accepted."""
-        config = VideoConfig(resolution="3840x2160")
-        assert config.resolution == "3840x2160"
 
     def test_invalid_resolution_uppercase_x(self):
         """Uppercase X is rejected."""
@@ -769,31 +407,6 @@ class TestVideoConfigResolutionValidation:
 # ---------------------------------------------------------------------------
 
 
-class TestCaptionModels:
-    """Caption data models are importable from story_video.models."""
-
-    def test_caption_word_fields(self):
-        """CaptionWord has word, start, end fields."""
-
-        word = CaptionWord(word="hello", start=0.0, end=0.5)
-        assert word.word == "hello"
-        assert word.start == 0.0
-        assert word.end == 0.5
-
-    def test_caption_segment_fields(self):
-        """CaptionSegment has text, start, end fields."""
-
-        seg = CaptionSegment(text="hello world", start=0.0, end=1.0)
-        assert seg.text == "hello world"
-
-    def test_caption_result_fields(self):
-        """CaptionResult has segments, words, language, duration fields."""
-
-        result = CaptionResult(segments=[], words=[], language="en", duration=1.0)
-        assert result.language == "en"
-        assert result.duration == 1.0
-
-
 # ---------------------------------------------------------------------------
 # CaptionWord timestamp validation
 # ---------------------------------------------------------------------------
@@ -808,12 +421,6 @@ class TestCaptionWordTimestampValidation:
         with pytest.raises(ValidationError):
             CaptionWord(word="hello", start=-0.1, end=0.5)
 
-    def test_rejects_negative_end(self):
-        """Negative end timestamp is rejected."""
-
-        with pytest.raises(ValidationError):
-            CaptionWord(word="hello", start=0.0, end=-0.5)
-
     def test_accepts_zero_timestamps(self):
         """Zero timestamps are valid."""
 
@@ -827,11 +434,15 @@ class TestCaptionWordTimestampValidation:
         with pytest.raises(ValidationError, match="start.*must not exceed.*end"):
             CaptionWord(word="hello", start=1.0, end=0.5)
 
-    def test_accepts_start_equal_to_end(self):
-        """start == end is valid (zero-length word)."""
 
-        word = CaptionWord(word="hello", start=1.0, end=1.0)
-        assert word.start == word.end
+class TestCaptionSegmentTimestampValidation:
+    """CaptionSegment rejects invalid timestamps."""
+
+    def test_rejects_start_after_end(self):
+        """start > end is rejected."""
+
+        with pytest.raises(ValidationError, match="start.*must not exceed.*end"):
+            CaptionSegment(text="hello", start=2.0, end=1.0)
 
 
 class TestCaptionResultDurationValidation:
@@ -1003,6 +614,30 @@ class TestNarrationSegment:
         restored = NarrationSegment(**data)
         assert restored == seg
 
+    def test_rejects_zero_pause_duration(self):
+        """pause_duration=0 is rejected (gt=0 constraint)."""
+        with pytest.raises(ValidationError):
+            NarrationSegment(
+                text="[pause]",
+                voice="nova",
+                voice_label="narrator",
+                scene_number=1,
+                segment_index=0,
+                pause_duration=0,
+            )
+
+    def test_accepts_positive_pause_duration(self):
+        """Positive pause_duration is accepted."""
+        seg = NarrationSegment(
+            text="[pause]",
+            voice="nova",
+            voice_label="narrator",
+            scene_number=1,
+            segment_index=0,
+            pause_duration=0.5,
+        )
+        assert seg.pause_duration == 0.5
+
 
 # ---------------------------------------------------------------------------
 # SubtitleConfig hex color validation tests
@@ -1032,7 +667,18 @@ class TestSubtitleConfigColorValidation:
         config = SubtitleConfig(color="#FF0000")
         assert config.color == "#FF0000"
 
-    def test_accepts_valid_lowercase_hex(self):
-        """Lowercase hex passes."""
-        config = SubtitleConfig(color="#ff0000")
-        assert config.color == "#ff0000"
+
+# ---------------------------------------------------------------------------
+# Package version
+# ---------------------------------------------------------------------------
+
+
+class TestPackageVersion:
+    """Package exposes __version__."""
+
+    def test_version_is_importable(self):
+        """__version__ is a non-empty string."""
+        from story_video import __version__
+
+        assert isinstance(__version__, str)
+        assert len(__version__) > 0

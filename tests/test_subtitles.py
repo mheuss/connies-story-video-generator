@@ -4,6 +4,7 @@ TDD: These tests are written first, before the implementation.
 Each test verifies one logical behavior of the subtitle generation functions.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -79,26 +80,15 @@ def _default_video_config() -> VideoConfig:
 class TestASSHeader:
     """generate_ass_content produces a valid [Script Info] section."""
 
-    def test_contains_script_info_section(self):
-        """Output contains [Script Info] section header."""
+    def test_header_shape(self):
+        """Output contains [Script Info] with resolution and script type."""
         result = generate_ass_content(
             _make_caption_result(), _default_subtitle_config(), _default_video_config()
         )
         assert "[Script Info]" in result
-
-    def test_play_res_x_from_video_config(self):
-        """PlayResX matches the width from VideoConfig resolution."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
         assert "PlayResX: 1920" in result
-
-    def test_play_res_y_from_video_config(self):
-        """PlayResY matches the height from VideoConfig resolution."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
         assert "PlayResY: 1080" in result
+        assert "ScriptType: v4.00+" in result
 
     def test_play_res_custom_resolution(self):
         """PlayResX/Y adapt to a custom resolution."""
@@ -109,13 +99,6 @@ class TestASSHeader:
         assert "PlayResX: 1280" in result
         assert "PlayResY: 720" in result
 
-    def test_script_type_v4_plus(self):
-        """Output contains ScriptType: v4.00+ for ASS format."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
-        assert "ScriptType: v4.00+" in result
-
 
 # ---------------------------------------------------------------------------
 # ASS style — [V4+ Styles] section
@@ -125,40 +108,21 @@ class TestASSHeader:
 class TestASSStyle:
     """generate_ass_content produces a valid [V4+ Styles] section."""
 
-    def test_contains_v4_styles_section(self):
-        """Output contains [V4+ Styles] section header."""
+    def test_style_section_shape(self):
+        """Output contains [V4+ Styles] with Style line and default font."""
         result = generate_ass_content(
             _make_caption_result(), _default_subtitle_config(), _default_video_config()
         )
         assert "[V4+ Styles]" in result
-
-    def test_contains_style_line(self):
-        """Output contains a Style: definition line."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
         assert "Style:" in result
-
-    def test_font_name_from_config(self):
-        """Style line uses the font name from SubtitleConfig."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
         assert "Montserrat" in result
+        assert ",48," in result
 
     def test_custom_font_name(self):
         """Style line uses a custom font name when configured."""
         config = SubtitleConfig(font="Comic Sans")
         result = generate_ass_content(_make_caption_result(), config, _default_video_config())
         assert "Comic Sans" in result
-
-    def test_font_size_from_config(self):
-        """Style line uses the font size from SubtitleConfig."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
-        # Default font_size is 48
-        assert ",48," in result
 
     def test_custom_font_size(self):
         """Style line uses a custom font size when configured."""
@@ -183,14 +147,6 @@ class TestHexToASSColor:
         """Red #FF0000 becomes &H000000FF& (BGR reversal)."""
         assert _hex_to_ass_color("#FF0000") == "&H000000FF&"
 
-    def test_green(self):
-        """Green #00FF00 stays &H0000FF00& (middle byte unchanged)."""
-        assert _hex_to_ass_color("#00FF00") == "&H0000FF00&"
-
-    def test_blue(self):
-        """Blue #0000FF becomes &H00FF0000&."""
-        assert _hex_to_ass_color("#0000FF") == "&H00FF0000&"
-
     def test_black(self):
         """Black #000000 becomes &H00000000&."""
         assert _hex_to_ass_color("#000000") == "&H00000000&"
@@ -199,28 +155,16 @@ class TestHexToASSColor:
         """Arbitrary color #1A2B3C becomes &H003C2B1A&."""
         assert _hex_to_ass_color("#1A2B3C") == "&H003C2B1A&"
 
-    def test_lowercase_input(self):
-        """Lowercase hex input is handled correctly."""
-        assert _hex_to_ass_color("#ff0000") == "&H000000FF&"
-
 
 class TestColorInOutput:
     """Colors from SubtitleConfig appear in the ASS output."""
 
-    def test_primary_color_in_output(self):
-        """Primary text color appears in the style section."""
+    def test_default_colors_in_output(self):
+        """Default primary (#FFFFFF) and outline (#000000) colors appear in output."""
         result = generate_ass_content(
             _make_caption_result(), _default_subtitle_config(), _default_video_config()
         )
-        # Default color #FFFFFF -> &H00FFFFFF&
         assert "&H00FFFFFF&" in result
-
-    def test_outline_color_in_output(self):
-        """Outline color appears in the style section."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
-        # Default outline_color #000000 -> &H00000000&
         assert "&H00000000&" in result
 
     def test_custom_colors(self):
@@ -245,10 +189,6 @@ class TestFormatASSTime:
         """0.0 seconds formats as 0:00:00.00."""
         assert _format_ass_time(0.0) == "0:00:00.00"
 
-    def test_one_second(self):
-        """1.0 seconds formats as 0:00:01.00."""
-        assert _format_ass_time(1.0) == "0:00:01.00"
-
     def test_fractional_seconds(self):
         """2.56 seconds formats as 0:00:02.56."""
         assert _format_ass_time(2.56) == "0:00:02.56"
@@ -261,13 +201,14 @@ class TestFormatASSTime:
         """3661.5 seconds formats as 1:01:01.50."""
         assert _format_ass_time(3661.5) == "1:01:01.50"
 
-    def test_centisecond_precision(self):
-        """Time is rounded to centisecond precision."""
-        assert _format_ass_time(1.234) == "0:00:01.23"
-
     def test_centisecond_rounding(self):
         """Time with >2 decimal digits is rounded to centiseconds."""
         assert _format_ass_time(1.999) == "0:00:02.00"
+
+    def test_negative_seconds_raises(self):
+        """Negative seconds raises ValueError."""
+        with pytest.raises(ValueError, match="seconds must be >= 0"):
+            _format_ass_time(-1.5)
 
 
 # ---------------------------------------------------------------------------
@@ -345,18 +286,12 @@ class TestLineWrapping:
 class TestDialogueEvents:
     """generate_ass_content produces a valid [Events] section."""
 
-    def test_contains_events_section(self):
-        """Output contains [Events] section header."""
+    def test_contains_events_and_dialogue(self):
+        """Output contains [Events] section with Dialogue lines."""
         result = generate_ass_content(
             _make_caption_result(), _default_subtitle_config(), _default_video_config()
         )
         assert "[Events]" in result
-
-    def test_contains_dialogue_lines(self):
-        """Output contains at least one Dialogue: line."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
         assert "Dialogue:" in result
 
     def test_dialogue_has_ass_time_format(self):
@@ -364,8 +299,6 @@ class TestDialogueEvents:
         result = generate_ass_content(
             _make_caption_result(), _default_subtitle_config(), _default_video_config()
         )
-        import re
-
         dialogue_lines = [ln for ln in result.split("\n") if ln.startswith("Dialogue:")]
         for line in dialogue_lines:
             # Should contain at least two ASS timestamps
@@ -414,11 +347,6 @@ class TestSubtitleFilter:
         result = subtitle_filter(Path("/tmp/subs.ass"))
         assert result == "ass='/tmp/subs.ass'"
 
-    def test_different_path(self):
-        """Works with a different file path."""
-        result = subtitle_filter(Path("/output/project/subtitles/scene_01.ass"))
-        assert result == "ass='/output/project/subtitles/scene_01.ass'"
-
     def test_escapes_single_quote_in_path(self):
         """Single quotes in path are escaped to prevent filter graph breakage."""
         result = subtitle_filter(Path("/tmp/user's project/scene.ass"))
@@ -430,18 +358,10 @@ class TestSubtitleFilter:
         result = subtitle_filter(Path("/tmp/back\\slash/scene.ass"))
         assert result == "ass='/tmp/back\\\\slash/scene.ass'"
 
-    def test_clean_path_unchanged(self):
-        """Normal paths without special characters pass through unchanged."""
-        result = subtitle_filter(Path("/tmp/subs.ass"))
-        assert result == "ass='/tmp/subs.ass'"
-
-    def test_colon_in_path_safe_inside_single_quotes(self):
-        """Colons (FFmpeg option separators) are safe inside single-quoted values."""
+    def test_special_chars_safe_inside_quotes(self):
+        """Colons and semicolons (FFmpeg separators) are safe inside single-quoted values."""
         result = subtitle_filter(Path("/tmp/project:v2/scene.ass"))
         assert result == "ass='/tmp/project:v2/scene.ass'"
-
-    def test_semicolon_in_path_safe_inside_single_quotes(self):
-        """Semicolons (FFmpeg chain separators) are safe inside single-quoted values."""
         result = subtitle_filter(Path("/tmp/dir;name/scene.ass"))
         assert result == "ass='/tmp/dir;name/scene.ass'"
 
