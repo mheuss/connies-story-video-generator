@@ -26,6 +26,9 @@ class TestHasNarrationTags:
     def test_bold_text_not_detected(self):
         assert has_narration_tags("**bold text** is fine") is False
 
+    def test_pause_tag_detected(self):
+        assert has_narration_tags("Hello. **pause:1.0** Goodbye.") is True
+
 
 class TestParseStoryHeader:
     """parse_story_header extracts YAML front matter from story text."""
@@ -214,6 +217,10 @@ class TestStripNarrationTags:
         text = "The hero spoke plainly."
         assert strip_narration_tags(text) == text
 
+    def test_strips_pause_tags(self):
+        text = "Hello. **pause:0.5** Goodbye."
+        assert strip_narration_tags(text) == "Hello. Goodbye."
+
 
 class TestExtractTags:
     """extract_tags returns all voice/mood tags in order."""
@@ -237,6 +244,14 @@ class TestExtractTags:
         text = "**voice:jane** **mood:excited** She laughed."
         assert extract_tags(text) == ["**voice:jane**", "**mood:excited**"]
 
+    def test_pause_tag(self):
+        text = "Hello. **pause:0.5** Goodbye."
+        assert extract_tags(text) == ["**pause:0.5**"]
+
+    def test_mixed_voice_mood_pause(self):
+        text = "**voice:jane** Hello. **pause:1.0** **mood:sad** Goodbye."
+        assert extract_tags(text) == ["**voice:jane**", "**pause:1.0**", "**mood:sad**"]
+
 
 class TestPauseTagParsing:
     """parse_narration_segments handles **pause:N** tags."""
@@ -250,3 +265,68 @@ class TestPauseTagParsing:
         pause_segments = [s for s in segments if s.pause_duration is not None]
         assert len(pause_segments) == 1
         assert pause_segments[0].pause_duration == 0.5
+
+    def test_pause_between_voice_segments(self):
+        """Pause between two voice segments produces 3 segments: speech, pause, speech."""
+        text = 'Hello. **pause:1.0** **voice:jane** "Hi!"'
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert len(segments) == 3
+        assert segments[0].text == "Hello."
+        assert segments[0].pause_duration is None
+        assert segments[1].pause_duration == 1.0
+        assert segments[2].text == '"Hi!"'
+
+    def test_pause_at_start(self):
+        """Pause at start of text."""
+        text = "**pause:0.5** Hello."
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert segments[0].pause_duration == 0.5
+        assert segments[1].text == "Hello."
+
+    def test_pause_at_end(self):
+        """Pause at end of text — no trailing speech segment."""
+        text = "Hello. **pause:0.5**"
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert len(segments) == 2
+        assert segments[0].text == "Hello."
+        assert segments[1].pause_duration == 0.5
+
+    def test_consecutive_pauses(self):
+        """Two consecutive pauses both produce segments."""
+        text = "Hello. **pause:0.5** **pause:1.0** Goodbye."
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        pauses = [s for s in segments if s.pause_duration is not None]
+        assert len(pauses) == 2
+        assert pauses[0].pause_duration == 0.5
+        assert pauses[1].pause_duration == 1.0
+
+    def test_invalid_pause_value_raises(self):
+        """Non-numeric pause value raises ValueError."""
+        text = "Hello. **pause:abc** Goodbye."
+        with pytest.raises(ValueError, match="[Ii]nvalid pause duration"):
+            parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+
+    def test_negative_pause_raises(self):
+        """Negative pause value raises ValidationError (Pydantic gt=0)."""
+        text = "Hello. **pause:-1** Goodbye."
+        with pytest.raises((ValueError,)):
+            parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+
+    def test_zero_pause_raises(self):
+        """Zero pause value raises ValidationError (Pydantic gt=0)."""
+        text = "Hello. **pause:0** Goodbye."
+        with pytest.raises((ValueError,)):
+            parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+
+    def test_pause_segment_indices_sequential(self):
+        """Pause segments get correct sequential indices."""
+        text = "A. **pause:0.5** B."
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        assert [s.segment_index for s in segments] == [0, 1, 2]
+
+    def test_large_pause_allowed(self):
+        """Large pause values (>30s) are allowed."""
+        text = "Hello. **pause:60.0** Goodbye."
+        segments = parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
+        pauses = [s for s in segments if s.pause_duration is not None]
+        assert pauses[0].pause_duration == 60.0
