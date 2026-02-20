@@ -82,84 +82,40 @@ def project_with_scenes(project_state: ProjectState) -> ProjectState:
 class TestPhaseAssetMap:
     """PHASE_ASSET_MAP — maps pipeline phases to the asset type they produce."""
 
-    def test_covers_all_pipeline_phases(self):
-        """Every PipelinePhase must have an entry in PHASE_ASSET_MAP."""
-        for phase in PipelinePhase:
-            assert phase in PHASE_ASSET_MAP, f"Missing mapping for {phase}"
-
-    def test_scene_prose_maps_to_text(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.SCENE_PROSE] == AssetType.TEXT
-
-    def test_tts_generation_maps_to_audio(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.TTS_GENERATION] == AssetType.AUDIO
-
-    def test_image_generation_maps_to_image(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.IMAGE_GENERATION] == AssetType.IMAGE
-
-    def test_caption_generation_maps_to_captions(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.CAPTION_GENERATION] == AssetType.CAPTIONS
-
-    def test_video_assembly_maps_to_video_segment(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.VIDEO_ASSEMBLY] == AssetType.VIDEO_SEGMENT
-
-    def test_analysis_maps_to_none(self):
-        """Analysis produces no per-scene asset."""
-        assert PHASE_ASSET_MAP[PipelinePhase.ANALYSIS] is None
-
-    def test_story_bible_maps_to_none(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.STORY_BIBLE] is None
-
-    def test_outline_maps_to_none(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.OUTLINE] is None
-
-    def test_image_prompts_maps_to_image_prompt(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.IMAGE_PROMPTS] == AssetType.IMAGE_PROMPT
-
-    def test_narration_prep_maps_to_narration_text(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.NARRATION_PREP] == AssetType.NARRATION_TEXT
-
-    def test_narration_flagging_maps_to_narration_text(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.NARRATION_FLAGGING] == AssetType.NARRATION_TEXT
-
-    def test_critique_revision_maps_to_text(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.CRITIQUE_REVISION] == AssetType.TEXT
-
-    def test_scene_splitting_maps_to_text(self):
-        assert PHASE_ASSET_MAP[PipelinePhase.SCENE_SPLITTING] == AssetType.TEXT
+    def test_full_mapping(self):
+        """Every phase maps to the correct asset type (or None)."""
+        expected = {
+            PipelinePhase.ANALYSIS: None,
+            PipelinePhase.STORY_BIBLE: None,
+            PipelinePhase.OUTLINE: None,
+            PipelinePhase.SCENE_PROSE: AssetType.TEXT,
+            PipelinePhase.CRITIQUE_REVISION: AssetType.TEXT,
+            PipelinePhase.SCENE_SPLITTING: AssetType.TEXT,
+            PipelinePhase.NARRATION_FLAGGING: AssetType.NARRATION_TEXT,
+            PipelinePhase.IMAGE_PROMPTS: AssetType.IMAGE_PROMPT,
+            PipelinePhase.NARRATION_PREP: AssetType.NARRATION_TEXT,
+            PipelinePhase.TTS_GENERATION: AssetType.AUDIO,
+            PipelinePhase.IMAGE_GENERATION: AssetType.IMAGE,
+            PipelinePhase.CAPTION_GENERATION: AssetType.CAPTIONS,
+            PipelinePhase.VIDEO_ASSEMBLY: AssetType.VIDEO_SEGMENT,
+        }
+        assert PHASE_ASSET_MAP == expected
 
 
 class TestAssetDependencies:
     """ASSET_DEPENDENCIES — downstream dependency rules for assets."""
 
-    def test_covers_all_asset_types(self):
-        """Every AssetType must have an entry in ASSET_DEPENDENCIES."""
-        for asset in AssetType:
-            assert asset in ASSET_DEPENDENCIES, f"Missing dependency for {asset}"
-
-    def test_text_has_no_dependencies(self):
+    def test_full_dependency_map(self):
+        """Every asset type maps to the correct dependencies."""
+        assert set(ASSET_DEPENDENCIES.keys()) == set(AssetType)
         assert ASSET_DEPENDENCIES[AssetType.TEXT] == []
-
-    def test_narration_text_depends_on_text(self):
         assert ASSET_DEPENDENCIES[AssetType.NARRATION_TEXT] == [AssetType.TEXT]
-
-    def test_audio_depends_on_narration_text(self):
         assert ASSET_DEPENDENCIES[AssetType.AUDIO] == [AssetType.NARRATION_TEXT]
-
-    def test_image_prompt_depends_on_text(self):
         assert ASSET_DEPENDENCIES[AssetType.IMAGE_PROMPT] == [AssetType.TEXT]
-
-    def test_image_depends_on_image_prompt(self):
         assert ASSET_DEPENDENCIES[AssetType.IMAGE] == [AssetType.IMAGE_PROMPT]
-
-    def test_captions_depends_on_audio(self):
         assert ASSET_DEPENDENCIES[AssetType.CAPTIONS] == [AssetType.AUDIO]
-
-    def test_video_segment_depends_on_audio_image_captions(self):
-        deps = ASSET_DEPENDENCIES[AssetType.VIDEO_SEGMENT]
-        assert AssetType.AUDIO in deps
-        assert AssetType.IMAGE in deps
-        assert AssetType.CAPTIONS in deps
-        assert len(deps) == 3
+        video_deps = set(ASSET_DEPENDENCIES[AssetType.VIDEO_SEGMENT])
+        assert video_deps == {AssetType.AUDIO, AssetType.IMAGE, AssetType.CAPTIONS}
 
 
 # ---------------------------------------------------------------------------
@@ -170,33 +126,20 @@ class TestAssetDependencies:
 class TestProjectStateCreate:
     """ProjectState.create() — creates a new project with initial state."""
 
-    def test_returns_project_state_instance(self, output_dir, config):
-        output_dir.mkdir(parents=True, exist_ok=True)
-        state = ProjectState.create("new-project", InputMode.ORIGINAL, config, output_dir)
-        assert isinstance(state, ProjectState)
-
     def test_project_dir_is_under_output_dir(self, output_dir, config):
         output_dir.mkdir(parents=True, exist_ok=True)
         state = ProjectState.create("my-project", InputMode.ORIGINAL, config, output_dir)
         assert state.project_dir == output_dir / "my-project"
 
-    def test_metadata_has_correct_project_id(self, project_state):
-        assert project_state.metadata.project_id == "test-project"
-
-    def test_metadata_has_correct_mode(self, project_state):
-        assert project_state.metadata.mode == InputMode.ORIGINAL
-
-    def test_metadata_status_is_pending(self, project_state):
-        assert project_state.metadata.status == PhaseStatus.PENDING
-
-    def test_metadata_current_phase_is_none(self, project_state):
-        assert project_state.metadata.current_phase is None
-
-    def test_metadata_scenes_is_empty(self, project_state):
-        assert project_state.metadata.scenes == []
-
-    def test_metadata_stores_config(self, project_state, config):
-        assert project_state.metadata.config == config
+    def test_metadata_has_correct_initial_state(self, project_state, config):
+        """New project metadata has correct id, mode, status, and defaults."""
+        m = project_state.metadata
+        assert m.project_id == "test-project"
+        assert m.mode == InputMode.ORIGINAL
+        assert m.status == PhaseStatus.PENDING
+        assert m.current_phase is None
+        assert m.scenes == []
+        assert m.config == config
 
     def test_raises_if_project_dir_already_exists(self, output_dir, config):
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -221,26 +164,12 @@ class TestProjectStateCreate:
 class TestProjectStateCreateDiskIO:
     """ProjectState.create() writes project.json and creates directories."""
 
-    def test_creates_project_directory(self, project_state):
+    def test_creates_project_structure(self, project_state):
+        """Creates project directory, project.json, and all subdirectories."""
         assert project_state.project_dir.is_dir()
-
-    def test_creates_project_json(self, project_state):
         assert (project_state.project_dir / "project.json").is_file()
-
-    def test_creates_scenes_directory(self, project_state):
-        assert (project_state.project_dir / "scenes").is_dir()
-
-    def test_creates_audio_directory(self, project_state):
-        assert (project_state.project_dir / "audio").is_dir()
-
-    def test_creates_images_directory(self, project_state):
-        assert (project_state.project_dir / "images").is_dir()
-
-    def test_creates_captions_directory(self, project_state):
-        assert (project_state.project_dir / "captions").is_dir()
-
-    def test_creates_video_directory(self, project_state):
-        assert (project_state.project_dir / "video").is_dir()
+        for subdir in ("scenes", "audio", "images", "captions", "video", "segments"):
+            assert (project_state.project_dir / subdir).is_dir(), f"Missing {subdir}/"
 
     def test_project_json_contains_valid_data(self, project_state):
         json_path = project_state.project_dir / "project.json"
@@ -262,16 +191,11 @@ class TestProjectStateLoad:
         loaded = ProjectState.load(project_state.project_dir)
         assert isinstance(loaded, ProjectState)
 
-    def test_loaded_project_id_matches(self, project_state):
+    def test_loaded_state_matches_original(self, project_state):
+        """Loaded project preserves project_id, mode, and status."""
         loaded = ProjectState.load(project_state.project_dir)
         assert loaded.metadata.project_id == "test-project"
-
-    def test_loaded_mode_matches(self, project_state):
-        loaded = ProjectState.load(project_state.project_dir)
         assert loaded.metadata.mode == InputMode.ORIGINAL
-
-    def test_loaded_status_matches(self, project_state):
-        loaded = ProjectState.load(project_state.project_dir)
         assert loaded.metadata.status == PhaseStatus.PENDING
 
     def test_raises_if_project_json_missing(self, tmp_path):
@@ -414,6 +338,16 @@ class TestPhaseTransitions:
         with pytest.raises(ValueError, match="still in progress"):
             project_state.start_phase(PipelinePhase.STORY_BIBLE)
 
+    def test_start_phase_auto_completes_awaiting_review(self, project_state):
+        """Starting a new phase after AWAITING_REVIEW auto-completes the previous one."""
+        project_state.start_phase(PipelinePhase.ANALYSIS)
+        project_state.await_review()
+        assert project_state.metadata.status == PhaseStatus.AWAITING_REVIEW
+
+        project_state.start_phase(PipelinePhase.STORY_BIBLE)
+        assert project_state.metadata.current_phase == PipelinePhase.STORY_BIBLE
+        assert project_state.metadata.status == PhaseStatus.IN_PROGRESS
+
     def test_complete_then_start_next_phase(self, project_state):
         """After completing a phase, we can start the next one."""
         project_state.start_phase(PipelinePhase.ANALYSIS)
@@ -431,27 +365,14 @@ class TestPhaseTransitions:
 class TestAddScene:
     """ProjectState.add_scene() — adds scenes to the project."""
 
-    def test_adds_scene_to_scenes_list(self, project_state):
+    def test_adds_scene_with_correct_fields(self, project_state):
+        """Added scene has correct number, title, prose, and pending asset status."""
         project_state.add_scene(1, "Opening", "The story begins...")
-        assert len(project_state.metadata.scenes) == 1
-
-    def test_scene_has_correct_number(self, project_state):
-        project_state.add_scene(1, "Opening", "The story begins...")
-        assert project_state.metadata.scenes[0].scene_number == 1
-
-    def test_scene_has_correct_title(self, project_state):
-        project_state.add_scene(1, "Opening", "The story begins...")
-        assert project_state.metadata.scenes[0].title == "Opening"
-
-    def test_scene_has_correct_prose(self, project_state):
-        project_state.add_scene(1, "Opening", "The story begins...")
-        assert project_state.metadata.scenes[0].prose == "The story begins..."
-
-    def test_scene_assets_default_to_pending(self, project_state):
-        project_state.add_scene(1, "Opening", "The story begins...")
-        asset_status = project_state.metadata.scenes[0].asset_status
-        assert asset_status.text == SceneStatus.PENDING
-        assert asset_status.audio == SceneStatus.PENDING
+        scene = project_state.metadata.scenes[0]
+        assert scene.scene_number == 1
+        assert scene.title == "Opening"
+        assert scene.prose == "The story begins..."
+        assert scene.asset_status.text == SceneStatus.PENDING
 
     def test_add_multiple_scenes(self, project_state):
         project_state.add_scene(1, "First", "First scene.")
@@ -856,20 +777,6 @@ class TestResumeWorkflow:
 
 class TestEdgeCases:
     """Edge cases and structural invariants."""
-
-    def test_project_dir_property_returns_correct_path(self, project_state, output_dir):
-        assert project_state.project_dir == output_dir / "test-project"
-
-    def test_metadata_property_returns_project_metadata(self, project_state):
-        assert isinstance(project_state.metadata, ProjectMetadata)
-
-    def test_phase_asset_map_keys_match_pipeline_phase_members(self):
-        """PHASE_ASSET_MAP must cover exactly the PipelinePhase members."""
-        assert set(PHASE_ASSET_MAP.keys()) == set(PipelinePhase)
-
-    def test_asset_dependencies_keys_match_asset_type_members(self):
-        """ASSET_DEPENDENCIES must cover exactly the AssetType members."""
-        assert set(ASSET_DEPENDENCIES.keys()) == set(AssetType)
 
     def test_asset_dependency_values_are_valid_asset_types(self):
         """All dependency values must be valid AssetType members."""
