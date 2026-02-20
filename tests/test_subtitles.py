@@ -139,21 +139,19 @@ class TestASSStyle:
 class TestHexToASSColor:
     """_hex_to_ass_color converts #RRGGBB to &H00BBGGRR& format."""
 
-    def test_white(self):
-        """White #FFFFFF becomes &H00FFFFFF&."""
-        assert _hex_to_ass_color("#FFFFFF") == "&H00FFFFFF&"
-
-    def test_red(self):
-        """Red #FF0000 becomes &H000000FF& (BGR reversal)."""
-        assert _hex_to_ass_color("#FF0000") == "&H000000FF&"
-
-    def test_black(self):
-        """Black #000000 becomes &H00000000&."""
-        assert _hex_to_ass_color("#000000") == "&H00000000&"
-
-    def test_arbitrary_color(self):
-        """Arbitrary color #1A2B3C becomes &H003C2B1A&."""
-        assert _hex_to_ass_color("#1A2B3C") == "&H003C2B1A&"
+    @pytest.mark.parametrize(
+        "hex_input,expected",
+        [
+            ("#FFFFFF", "&H00FFFFFF&"),
+            ("#FF0000", "&H000000FF&"),
+            ("#000000", "&H00000000&"),
+            ("#1A2B3C", "&H003C2B1A&"),
+        ],
+        ids=["white", "red", "black", "arbitrary"],
+    )
+    def test_hex_to_ass_color(self, hex_input, expected):
+        """Hex color is correctly converted to ASS &H00BBGGRR& format."""
+        assert _hex_to_ass_color(hex_input) == expected
 
 
 class TestColorInOutput:
@@ -185,25 +183,20 @@ class TestColorInOutput:
 class TestFormatASSTime:
     """_format_ass_time converts seconds to H:MM:SS.cc format."""
 
-    def test_zero_seconds(self):
-        """0.0 seconds formats as 0:00:00.00."""
-        assert _format_ass_time(0.0) == "0:00:00.00"
-
-    def test_fractional_seconds(self):
-        """2.56 seconds formats as 0:00:02.56."""
-        assert _format_ass_time(2.56) == "0:00:02.56"
-
-    def test_minutes(self):
-        """65.0 seconds formats as 0:01:05.00."""
-        assert _format_ass_time(65.0) == "0:01:05.00"
-
-    def test_hours(self):
-        """3661.5 seconds formats as 1:01:01.50."""
-        assert _format_ass_time(3661.5) == "1:01:01.50"
-
-    def test_centisecond_rounding(self):
-        """Time with >2 decimal digits is rounded to centiseconds."""
-        assert _format_ass_time(1.999) == "0:00:02.00"
+    @pytest.mark.parametrize(
+        "seconds,expected",
+        [
+            (0.0, "0:00:00.00"),
+            (2.56, "0:00:02.56"),
+            (65.0, "0:01:05.00"),
+            (3661.5, "1:01:01.50"),
+            (1.999, "0:00:02.00"),
+        ],
+        ids=["zero", "fractional", "minutes", "hours", "centisecond_rounding"],
+    )
+    def test_format_ass_time(self, seconds, expected):
+        """Seconds are correctly formatted as H:MM:SS.cc."""
+        assert _format_ass_time(seconds) == expected
 
     def test_negative_seconds_raises(self):
         """Negative seconds raises ValueError."""
@@ -399,25 +392,15 @@ class TestEmptyWords:
 class TestHexToAssColorValidation:
     """_hex_to_ass_color rejects malformed hex input."""
 
-    def test_rejects_short_hex(self):
-        """Three-digit hex is rejected."""
+    @pytest.mark.parametrize(
+        "invalid_hex",
+        ["#FFF", "#GGGGGG", "FFFFFF", ""],
+        ids=["short_hex", "non_hex_chars", "missing_hash", "empty_string"],
+    )
+    def test_rejects_invalid_hex(self, invalid_hex):
+        """Malformed hex input is rejected."""
         with pytest.raises(ValueError, match="Invalid hex color"):
-            _hex_to_ass_color("#FFF")
-
-    def test_rejects_non_hex_characters(self):
-        """Non-hex characters are rejected."""
-        with pytest.raises(ValueError, match="Invalid hex color"):
-            _hex_to_ass_color("#GGGGGG")
-
-    def test_rejects_missing_hash(self):
-        """Missing '#' prefix is rejected."""
-        with pytest.raises(ValueError, match="Invalid hex color"):
-            _hex_to_ass_color("FFFFFF")
-
-    def test_rejects_empty_string(self):
-        """Empty string is rejected."""
-        with pytest.raises(ValueError, match="Invalid hex color"):
-            _hex_to_ass_color("")
+            _hex_to_ass_color(invalid_hex)
 
 
 # ---------------------------------------------------------------------------

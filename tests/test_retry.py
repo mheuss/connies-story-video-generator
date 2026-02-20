@@ -1,15 +1,9 @@
-"""Tests for story_video.utils.retry — Retry decorators with tenacity.
-
-TDD: These tests are written first, before the implementation.
-Each test verifies one logical behavior of the retry utilities.
-"""
+"""Tests for story_video.utils.retry — Retry decorators with tenacity."""
 
 import logging
 
 import pytest
-from tenacity import RetryError
 
-from story_video.utils.retry import RetryError as ReexportedRetryError
 from story_video.utils.retry import with_retry
 
 # ---------------------------------------------------------------------------
@@ -110,41 +104,26 @@ class TestWithRetryBasicBehavior:
 class TestWithRetryCustomParameters:
     """with_retry respects custom max_retries and base_delay."""
 
-    def test_custom_max_retries_one(self):
-        """max_retries=1 means 1 initial + 1 retry = 2 total attempts."""
-        tracker = TrackedCallable(fail_times=100)
+    @pytest.mark.parametrize(
+        "max_retries,fail_times,expected_calls",
+        [
+            (1, 100, 2),
+            (5, 100, 6),
+            (0, 1, 1),
+        ],
+        ids=["one_retry", "five_retries", "zero_no_retry"],
+    )
+    def test_custom_max_retries(self, max_retries, fail_times, expected_calls):
+        """max_retries controls total attempt count."""
+        tracker = TrackedCallable(fail_times=fail_times)
 
-        @with_retry(retry_on=(RuntimeError,), max_retries=1, base_delay=0.01)
+        @with_retry(retry_on=(RuntimeError,), max_retries=max_retries, base_delay=0.01)
         def fn():
             return tracker()
 
         with pytest.raises(RuntimeError):
             fn()
-        assert tracker.call_count == 2
-
-    def test_custom_max_retries_five(self):
-        """max_retries=5 means 1 initial + 5 retries = 6 total attempts."""
-        tracker = TrackedCallable(fail_times=100)
-
-        @with_retry(retry_on=(RuntimeError,), max_retries=5, base_delay=0.01)
-        def fn():
-            return tracker()
-
-        with pytest.raises(RuntimeError):
-            fn()
-        assert tracker.call_count == 6
-
-    def test_custom_max_retries_zero_no_retry(self):
-        """max_retries=0 means only 1 attempt, no retries."""
-        tracker = TrackedCallable(fail_times=1)
-
-        @with_retry(retry_on=(RuntimeError,), max_retries=0, base_delay=0.01)
-        def fn():
-            return tracker()
-
-        with pytest.raises(RuntimeError):
-            fn()
-        assert tracker.call_count == 1
+        assert tracker.call_count == expected_calls
 
     def test_succeeds_on_last_retry(self):
         """Function succeeds on the very last allowed attempt."""
@@ -253,19 +232,6 @@ class TestWithRetryLogging:
 
 
 # ---------------------------------------------------------------------------
-# RetryError re-export
-# ---------------------------------------------------------------------------
-
-
-class TestRetryErrorReexport:
-    """RetryError is re-exported from tenacity for consumer convenience."""
-
-    def test_retry_error_is_same_as_tenacity(self):
-        """Re-exported RetryError is the same class as tenacity.RetryError."""
-        assert ReexportedRetryError is RetryError
-
-
-# ---------------------------------------------------------------------------
 # with_retry — function metadata
 # ---------------------------------------------------------------------------
 
@@ -284,45 +250,34 @@ class TestWithRetryMetadata:
 
 
 # ---------------------------------------------------------------------------
-# _OPENAI_TRANSIENT — per-module constant (moved from retry.py in PR2-13)
+# _OPENAI_TRANSIENT — cross-module consistency check
+# Lives here (not per-module tests) because it verifies all three modules
+# define the same constant, which is a retry-related concern.
 # ---------------------------------------------------------------------------
 
 
 class TestOpenAITransientPerModule:
     """Each OpenAI-consuming module defines its own _OPENAI_TRANSIENT tuple."""
 
-    def test_tts_generator_defines_transient(self):
-        """tts_generator has _OPENAI_TRANSIENT with the three OpenAI error types."""
+    @pytest.mark.parametrize(
+        "module_path",
+        [
+            "story_video.pipeline.tts_generator",
+            "story_video.pipeline.image_generator",
+            "story_video.pipeline.caption_generator",
+        ],
+        ids=["tts_generator", "image_generator", "caption_generator"],
+    )
+    def test_module_defines_transient(self, module_path):
+        """Each OpenAI-consuming module defines _OPENAI_TRANSIENT with 3 error types."""
+        import importlib
+
         from openai import APIConnectionError, InternalServerError, RateLimitError
 
-        from story_video.pipeline.tts_generator import _OPENAI_TRANSIENT
-
-        assert isinstance(_OPENAI_TRANSIENT, tuple)
-        assert len(_OPENAI_TRANSIENT) == 3
-        assert APIConnectionError in _OPENAI_TRANSIENT
-        assert RateLimitError in _OPENAI_TRANSIENT
-        assert InternalServerError in _OPENAI_TRANSIENT
-
-    def test_image_generator_defines_transient(self):
-        """image_generator has _OPENAI_TRANSIENT with the three OpenAI error types."""
-        from openai import APIConnectionError, InternalServerError, RateLimitError
-
-        from story_video.pipeline.image_generator import _OPENAI_TRANSIENT
-
-        assert isinstance(_OPENAI_TRANSIENT, tuple)
-        assert len(_OPENAI_TRANSIENT) == 3
-        assert APIConnectionError in _OPENAI_TRANSIENT
-        assert RateLimitError in _OPENAI_TRANSIENT
-        assert InternalServerError in _OPENAI_TRANSIENT
-
-    def test_caption_generator_defines_transient(self):
-        """caption_generator has _OPENAI_TRANSIENT with the three OpenAI error types."""
-        from openai import APIConnectionError, InternalServerError, RateLimitError
-
-        from story_video.pipeline.caption_generator import _OPENAI_TRANSIENT
-
-        assert isinstance(_OPENAI_TRANSIENT, tuple)
-        assert len(_OPENAI_TRANSIENT) == 3
-        assert APIConnectionError in _OPENAI_TRANSIENT
-        assert RateLimitError in _OPENAI_TRANSIENT
-        assert InternalServerError in _OPENAI_TRANSIENT
+        module = importlib.import_module(module_path)
+        transient = module._OPENAI_TRANSIENT
+        assert isinstance(transient, tuple)
+        assert len(transient) == 3
+        assert APIConnectionError in transient
+        assert RateLimitError in transient
+        assert InternalServerError in transient

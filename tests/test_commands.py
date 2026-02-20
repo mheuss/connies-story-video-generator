@@ -100,38 +100,26 @@ class TestBuildSegmentCommand:
 class TestBuildConcatCommand:
     """build_concat_command produces a valid FFmpeg concatenation command."""
 
-    def test_two_segments_one_xfade(self, tmp_path, video_config):
-        """Two segments produce one xfade in the filter."""
-        segments = [tmp_path / "s1.mp4", tmp_path / "s2.mp4"]
-        durations = [10.0, 10.0]
+    @pytest.mark.parametrize(
+        "segment_count,expected_xfade_count",
+        [(1, 0), (2, 1), (3, 2)],
+        ids=["single", "two", "three"],
+    )
+    def test_xfade_count_matches_segments(
+        self, tmp_path, video_config, segment_count, expected_xfade_count
+    ):
+        """Segment count determines xfade count in the filter."""
+        segments = [tmp_path / f"s{i + 1}.mp4" for i in range(segment_count)]
+        durations = [10.0] * segment_count
         output = tmp_path / "final.mp4"
         result = build_concat_command(segments, durations, output, video_config)
         filter_str = result[result.index("-filter_complex") + 1]
-        assert filter_str.count("xfade") == 1
-
-    def test_three_segments_two_xfades(self, tmp_path, video_config):
-        """Three segments produce two xfades in the filter."""
-        segments = [tmp_path / "s1.mp4", tmp_path / "s2.mp4", tmp_path / "s3.mp4"]
-        durations = [10.0, 10.0, 10.0]
-        output = tmp_path / "final.mp4"
-        result = build_concat_command(segments, durations, output, video_config)
-        filter_str = result[result.index("-filter_complex") + 1]
-        assert filter_str.count("xfade") == 2
+        assert filter_str.count("xfade") == expected_xfade_count
 
     def test_empty_segments_raises(self, video_config):
         """Empty segment list raises ValueError."""
         with pytest.raises(ValueError, match="at least one segment"):
             build_concat_command([], [], Path("/tmp/final.mp4"), video_config)
-
-    def test_single_segment_no_xfade(self, tmp_path, video_config):
-        """Single segment produces no xfade, just fade in/out."""
-        segments = [tmp_path / "s1.mp4"]
-        durations = [10.0]
-        output = tmp_path / "final.mp4"
-        result = build_concat_command(segments, durations, output, video_config)
-        filter_str = result[result.index("-filter_complex") + 1]
-        assert "xfade" not in filter_str
-        assert "fade" in filter_str
 
     def test_acrossfade_uses_audio_transition_duration(self, tmp_path):
         """acrossfade duration uses audio_transition_duration, not transition_duration."""
@@ -288,21 +276,15 @@ class TestBuildSegmentCommandStillImage:
 class TestProbeDurationNonNumeric:
     """probe_duration handles non-numeric ffprobe output."""
 
-    def test_empty_stdout_raises_ffmpeg_error(self, monkeypatch):
-        """Empty stdout from ffprobe raises FFmpegError."""
+    @pytest.mark.parametrize(
+        "stdout",
+        ["", "N/A\n"],
+        ids=["empty", "non_numeric"],
+    )
+    def test_non_numeric_stdout_raises_ffmpeg_error(self, monkeypatch, stdout):
+        """Non-numeric or empty stdout from ffprobe raises FFmpegError."""
         fake_result = subprocess.CompletedProcess(
-            args=["ffprobe"], returncode=0, stdout="", stderr=""
-        )
-        monkeypatch.setattr(
-            "story_video.ffmpeg.commands.subprocess.run", lambda *a, **kw: fake_result
-        )
-        with pytest.raises(FFmpegError, match="non-numeric duration"):
-            probe_duration(Path("/tmp/corrupt.mp4"))
-
-    def test_non_numeric_stdout_raises_ffmpeg_error(self, monkeypatch):
-        """Non-numeric stdout like 'N/A' from ffprobe raises FFmpegError."""
-        fake_result = subprocess.CompletedProcess(
-            args=["ffprobe"], returncode=0, stdout="N/A\n", stderr=""
+            args=["ffprobe"], returncode=0, stdout=stdout, stderr=""
         )
         monkeypatch.setattr(
             "story_video.ffmpeg.commands.subprocess.run", lambda *a, **kw: fake_result

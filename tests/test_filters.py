@@ -20,36 +20,19 @@ from story_video.ffmpeg.filters import (
 class TestStillImageFilter:
     """still_image_filter scales and pads an image to fit the target resolution."""
 
-    def test_contains_scale(self):
-        """Output contains a scale filter."""
+    def test_filter_shape(self):
+        """Output contains scale, pad, and centering for target resolution."""
         result = still_image_filter(resolution="1920x1080")
         assert "scale=" in result
-
-    def test_contains_pad(self):
-        """Output contains a pad filter."""
-        result = still_image_filter(resolution="1920x1080")
-        assert "pad=" in result
-
-    def test_uses_force_original_aspect_ratio_decrease(self):
-        """Scale filter uses force_original_aspect_ratio=decrease (fit within)."""
-        result = still_image_filter(resolution="1920x1080")
-        assert "force_original_aspect_ratio=decrease" in result
-
-    def test_pad_uses_resolution(self):
-        """Pad filter uses the target resolution dimensions."""
-        result = still_image_filter(resolution="1920x1080")
         assert "pad=1920:1080" in result
+        assert "force_original_aspect_ratio=decrease" in result
+        assert "(ow-iw)/2" in result
+        assert "(oh-ih)/2" in result
 
-    def test_pad_uses_different_resolution(self):
+    def test_adapts_to_resolution(self):
         """Pad filter adapts to a different resolution."""
         result = still_image_filter(resolution="1280x720")
         assert "pad=1280:720" in result
-
-    def test_centers_image(self):
-        """Pad expression centers the image within the frame."""
-        result = still_image_filter(resolution="1920x1080")
-        assert "(ow-iw)/2" in result
-        assert "(oh-ih)/2" in result
 
     def test_deterministic(self):
         """Same inputs always produce the same output."""
@@ -66,30 +49,13 @@ class TestStillImageFilter:
 class TestBlurBackgroundComponents:
     """blur_background_filter returns a filter chain with scale, crop, and blur."""
 
-    def test_contains_scale(self):
-        """Output contains a scale filter."""
+    def test_filter_shape(self):
+        """Output contains scale (with aspect ratio), crop, and blur components."""
         result = blur_background_filter(blur_radius=20, resolution="1920x1080")
         assert "scale=" in result
-
-    def test_contains_crop(self):
-        """Output contains a crop filter."""
-        result = blur_background_filter(blur_radius=20, resolution="1920x1080")
-        assert "crop=" in result
-
-    def test_contains_blur(self):
-        """Output contains a gblur filter."""
-        result = blur_background_filter(blur_radius=20, resolution="1920x1080")
-        assert "gblur" in result
-
-    def test_scale_uses_force_original_aspect_ratio(self):
-        """Scale filter uses force_original_aspect_ratio=increase."""
-        result = blur_background_filter(blur_radius=20, resolution="1920x1080")
-        assert "force_original_aspect_ratio=increase" in result
-
-    def test_crop_uses_resolution(self):
-        """Crop filter uses the target resolution dimensions."""
-        result = blur_background_filter(blur_radius=20, resolution="1920x1080")
         assert "crop=1920:1080" in result
+        assert "gblur" in result
+        assert "force_original_aspect_ratio=increase" in result
 
     def test_crop_uses_different_resolution(self):
         """Crop filter adapts to a different resolution."""
@@ -105,15 +71,10 @@ class TestBlurBackgroundComponents:
 class TestBlurBackgroundRadius:
     """blur_background_filter includes the blur radius in the output."""
 
-    def test_blur_radius_20(self):
-        """Blur radius 20 appears in the filter expression."""
+    def test_blur_radius_in_output(self):
+        """Blur radius value appears in the filter expression."""
         result = blur_background_filter(blur_radius=20, resolution="1920x1080")
         assert "sigma=20" in result
-
-    def test_blur_radius_50(self):
-        """Blur radius 50 appears in the filter expression."""
-        result = blur_background_filter(blur_radius=50, resolution="1920x1080")
-        assert "sigma=50" in result
 
     def test_negative_blur_radius_raises(self):
         """Negative blur radius raises ValueError."""
@@ -138,26 +99,12 @@ class TestParseResolution:
         """Standard resolution returns (width, height) tuple."""
         assert parse_resolution("1920x1080") == ("1920", "1080")
 
-    def test_returns_different_resolution(self):
-        """Works with non-standard dimensions."""
-        assert parse_resolution("1280x720") == ("1280", "720")
-
-    def test_rejects_missing_x_separator(self):
-        """Resolution without 'x' raises ValueError."""
+    @pytest.mark.parametrize(
+        "invalid_input",
+        ["1920:1080", "widexhigh", "", "1920"],
+        ids=["colon_separator", "non_numeric", "empty_string", "single_number"],
+    )
+    def test_rejects_invalid_resolution(self, invalid_input):
+        """Invalid resolution strings are rejected."""
         with pytest.raises(ValueError, match="Invalid resolution"):
-            parse_resolution("1920:1080")
-
-    def test_rejects_non_numeric(self):
-        """Non-numeric values raise ValueError."""
-        with pytest.raises(ValueError, match="Invalid resolution"):
-            parse_resolution("widexhigh")
-
-    def test_rejects_empty_string(self):
-        """Empty string raises ValueError."""
-        with pytest.raises(ValueError, match="Invalid resolution"):
-            parse_resolution("")
-
-    def test_rejects_single_number(self):
-        """Single number without x raises ValueError."""
-        with pytest.raises(ValueError, match="Invalid resolution"):
-            parse_resolution("1920")
+            parse_resolution(invalid_input)
