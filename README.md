@@ -49,17 +49,17 @@ All three modes work end-to-end. You can give it a story, a creative brief, or s
 - **LLM-based narration prep** -- Claude API handles abbreviations, numbers, and punctuation contextually instead of brittle regex transforms. Produces a changelog of all modifications.
 - **Multi-voice narration** -- YAML front matter defines voice mappings, inline `**voice:name**` tags switch between voices mid-scene. Works with both OpenAI and ElevenLabs.
 - **Mood tags** -- inline `**mood:thoughtful**` tags add emotional direction. OpenAI uses its `instructions` parameter; ElevenLabs v3 uses freeform audio tags.
+- **Pause tags** -- inline `**pause:1.5**` tags insert silence into narration audio. Useful for pacing, dramatic beats, and poetry.
 - **Two TTS providers** -- OpenAI (`gpt-4o-mini-tts`) and ElevenLabs (v3). Switch via config file.
 - **CLI** -- all five commands functional: `create`, `resume`, `estimate`, `status`, `list`
 - **Resume from failure** -- pipeline saves state per phase and per scene, picks up where it left off
 - **Semi-automated mode** -- pauses at content phases for human review, or runs straight through in autonomous mode
 - **Cost estimation** -- projected costs before starting, actual costs after completion
-- **920 tests** covering all modules
+- **955 tests** covering all modules
 
 ### Pie in the Sky
 
 - Inline image tags -- author-controlled image transitions within scenes
-- Pause tags -- precise silence injection for pacing and poetry
 - Background music / sound effects -- audio overlay with volume and duration control
 - Iterative critique/revision -- critic and author personas with multi-pass refinement
 - User-configurable story length -- `--target-words`, `--target-scenes` flags
@@ -93,6 +93,12 @@ default_voice: narrator
 ---
 The old man sat alone. **voice:old_man** **mood:dry** "Black or white?"
 **voice:narrator** The boy pointed at the black pieces.
+```
+
+Use `**pause:N**` tags to insert silence (in seconds) for pacing:
+
+```
+The door swung open. **pause:1.5** "Is anyone there?" she whispered.
 ```
 
 Voice IDs depend on your TTS provider. OpenAI uses names like `nova`, `echo`, `alloy`. ElevenLabs uses voice ID hashes from your account.
