@@ -609,50 +609,34 @@ class TestReconcilePunctuation:
 class TestTokenizeProse:
     """_tokenize_prose splits prose words into (leading, bare, trailing) tuples."""
 
-    def test_plain_word(self):
-        """Word with no punctuation returns empty leading and trailing."""
-        tokens = _tokenize_prose("hello")
-        assert tokens == [("", "hello", "")]
-
-    def test_trailing_period(self):
-        """Trailing period is captured."""
-        tokens = _tokenize_prose("hello.")
-        assert tokens == [("", "hello", ".")]
-
-    def test_trailing_comma(self):
-        """Trailing comma is captured."""
-        tokens = _tokenize_prose("hello,")
-        assert tokens == [("", "hello", ",")]
-
-    def test_leading_double_quote(self):
-        """Leading double quote is captured."""
-        tokens = _tokenize_prose('"Hello')
-        assert tokens == [('"', "Hello", "")]
-
-    def test_trailing_double_quote(self):
-        """Trailing double quote is captured."""
-        tokens = _tokenize_prose('world"')
-        assert tokens == [("", "world", '"')]
-
-    def test_both_leading_and_trailing(self):
-        """Leading quote and trailing comma are both captured."""
-        tokens = _tokenize_prose('"Hello, world."')
-        assert tokens == [('"', "Hello", ","), ("", "world", '."')]
-
-    def test_curly_quotes(self):
-        """Curly quotes are captured."""
-        tokens = _tokenize_prose("\u201cHello\u201d")
-        assert tokens == [("\u201c", "Hello", "\u201d")]
-
-    def test_em_dash_trailing(self):
-        """Em dash as trailing punctuation is captured."""
-        tokens = _tokenize_prose("wait\u2014")
-        assert tokens == [("", "wait", "\u2014")]
-
-    def test_multiple_trailing(self):
-        """Multiple trailing punctuation characters are captured together."""
-        tokens = _tokenize_prose('said."')
-        assert tokens == [("", "said", '."')]
+    @pytest.mark.parametrize(
+        "input_text,expected",
+        [
+            ("hello", [("", "hello", "")]),
+            ("hello.", [("", "hello", ".")]),
+            ("hello,", [("", "hello", ",")]),
+            ('"Hello', [('"', "Hello", "")]),
+            ('world"', [("", "world", '"')]),
+            ('"Hello, world."', [('"', "Hello", ","), ("", "world", '."')]),
+            ("\u201cHello\u201d", [("\u201c", "Hello", "\u201d")]),
+            ("wait\u2014", [("", "wait", "\u2014")]),
+            ('said."', [("", "said", '."')]),
+        ],
+        ids=[
+            "plain_word",
+            "trailing_period",
+            "trailing_comma",
+            "leading_quote",
+            "trailing_quote",
+            "both_leading_trailing",
+            "curly_quotes",
+            "em_dash",
+            "multiple_trailing",
+        ],
+    )
+    def test_tokenize_prose(self, input_text, expected):
+        """_tokenize_prose splits words with correct leading/bare/trailing."""
+        assert _tokenize_prose(input_text) == expected
 
     def test_empty_string(self):
         """Empty string returns empty list."""
