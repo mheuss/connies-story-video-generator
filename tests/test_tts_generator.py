@@ -16,6 +16,7 @@ from story_video.pipeline.tts_generator import (
     _mood_to_elevenlabs_text,
     _mood_to_instructions,
     generate_audio,
+    generate_mp3_silence,
 )
 from story_video.state import ProjectState
 
@@ -911,3 +912,100 @@ class TestGenerateAudioTagsWithoutHeader:
 
         generate_audio(scene, state, provider, story_header=None)
         assert provider.synthesize.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# generate_mp3_silence — silent MP3 generation
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateMp3Silence:
+    """generate_mp3_silence produces valid silent MP3 bytes."""
+
+    def test_returns_bytes(self):
+        """Returns bytes object."""
+        result = generate_mp3_silence(0.5)
+        assert isinstance(result, bytes)
+
+    def test_non_empty(self):
+        """Returns non-empty bytes."""
+        result = generate_mp3_silence(0.5)
+        assert len(result) > 0
+
+    def test_longer_duration_produces_more_bytes(self):
+        """2 seconds produces more bytes than 0.5 seconds."""
+        short = generate_mp3_silence(0.5)
+        long = generate_mp3_silence(2.0)
+        assert len(long) > len(short)
+
+    def test_starts_with_mp3_sync(self):
+        """First two bytes contain MP3 frame sync (0xFF followed by 0xE0+ mask)."""
+        result = generate_mp3_silence(0.5)
+        assert result[0] == 0xFF
+        assert (result[1] & 0xE0) == 0xE0
+
+
+# ---------------------------------------------------------------------------
+# generate_audio — pause segments insert silence
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateAudioWithPause:
+    """generate_audio handles pause segments by inserting silence."""
+
+    @pytest.fixture()
+    def state_for_pause(self, tmp_path):
+        """Create project state for pause tag testing."""
+        state = ProjectState.create(
+            project_id="pause-test",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        state.add_scene(1, "The Pause", "Text with a pause.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
+        return state
+
+    def test_pause_segment_not_sent_to_provider(self, state_for_pause, mock_provider):
+        """Pause segments do not call provider.synthesize."""
+        scene = state_for_pause.metadata.scenes[0]
+        scene.narration_text = "Hello. **pause:0.5** Goodbye."
+        header = StoryHeader(voices={"narrator": "nova"})
+        generate_audio(scene, state_for_pause, mock_provider, story_header=header)
+        # 2 speech segments, 0 pause calls
+        assert mock_provider.synthesize.call_count == 2
+
+    def test_pause_produces_audio_file(self, state_for_pause, mock_provider):
+        """Audio file is created even with pause segments."""
+        scene = state_for_pause.metadata.scenes[0]
+        scene.narration_text = "Hello. **pause:0.5** Goodbye."
+        header = StoryHeader(voices={"narrator": "nova"})
+        generate_audio(scene, state_for_pause, mock_provider, story_header=header)
+        audio_path = state_for_pause.project_dir / "audio" / "scene_001.mp3"
+        assert audio_path.exists()
+
+    def test_pause_audio_contains_silence_bytes(self, state_for_pause, mock_provider):
+        """Audio file contains provider bytes AND silence bytes concatenated."""
+        mock_provider.synthesize.side_effect = [b"speech1", b"speech2"]
+        scene = state_for_pause.metadata.scenes[0]
+        scene.narration_text = "Hello. **pause:0.5** Goodbye."
+        header = StoryHeader(voices={"narrator": "nova"})
+        generate_audio(scene, state_for_pause, mock_provider, story_header=header)
+        audio_path = state_for_pause.project_dir / "audio" / "scene_001.mp3"
+        data = audio_path.read_bytes()
+        # Should be speech1 + silence + speech2
+        assert data.startswith(b"speech1")
+        assert data.endswith(b"speech2")
+        assert len(data) > len(b"speech1") + len(b"speech2")
+
+    def test_pause_tag_without_header_raises(self, tmp_path):
+        """Pause tag without story header raises ValueError (same as voice/mood)."""
+        provider = MagicMock(spec=TTSProvider)
+        state = ProjectState.create("pause-no-header", InputMode.ADAPT, AppConfig(), tmp_path)
+        state.add_scene(1, "Scene", "Hello. **pause:0.5** Goodbye.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
+        scene = state.metadata.scenes[0]
+        with pytest.raises(ValueError, match="tag.*found.*no.*header"):
+            generate_audio(scene, state, provider, story_header=None)

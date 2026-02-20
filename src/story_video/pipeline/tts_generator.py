@@ -5,6 +5,7 @@ Ships with OpenAI and ElevenLabs implementations.
 """
 
 import logging
+import math
 from typing import Protocol
 
 import elevenlabs
@@ -25,11 +26,38 @@ __all__ = [
     "OpenAITTSProvider",
     "TTSProvider",
     "generate_audio",
+    "generate_mp3_silence",
 ]
 
 # Formats that support raw byte concatenation (independently decodable frames).
 # Prefixes, not exact matches — ElevenLabs uses e.g. "mp3_44100_128".
 _CONCAT_SAFE_PREFIXES = ("mp3", "opus")
+
+# A single valid silent MP3 frame: MPEG-1 Layer III, 128kbps, 44100Hz, stereo.
+# 417 bytes per frame, ~26.12ms duration per frame.
+_SILENT_MP3_FRAME = (
+    b"\xff\xfb\x90\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    b"\x00\x00\x00\x00" + b"\x00" * 381
+)
+
+_SILENT_FRAME_DURATION = 0.02612  # seconds per frame (1152 samples / 44100 Hz)
+
+
+def generate_mp3_silence(duration: float) -> bytes:
+    """Generate silent MP3 audio of the specified duration.
+
+    Repeats a valid silent MP3 frame enough times to cover the requested
+    duration. The output can be concatenated with other MP3 bytes.
+
+    Args:
+        duration: Silence duration in seconds (must be positive).
+
+    Returns:
+        Raw MP3 bytes containing silence.
+    """
+    frame_count = math.ceil(duration / _SILENT_FRAME_DURATION)
+    return _SILENT_MP3_FRAME * frame_count
 
 
 class TTSProvider(Protocol):
@@ -257,14 +285,17 @@ def generate_audio(
             raise ValueError(msg)
         audio_chunks: list[bytes] = []
         for segment in segments:
-            chunk = provider.synthesize(
-                segment.text,
-                voice=segment.voice,
-                model=tts_config.model,
-                speed=tts_config.speed,
-                output_format=tts_config.output_format,
-                instructions=_mood_to_instructions(segment.mood),
-            )
+            if segment.pause_duration is not None:
+                chunk = generate_mp3_silence(segment.pause_duration)
+            else:
+                chunk = provider.synthesize(
+                    segment.text,
+                    voice=segment.voice,
+                    model=tts_config.model,
+                    speed=tts_config.speed,
+                    output_format=tts_config.output_format,
+                    instructions=_mood_to_instructions(segment.mood),
+                )
             audio_chunks.append(chunk)
         audio_bytes = b"".join(audio_chunks)
     else:
