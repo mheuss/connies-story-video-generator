@@ -2,6 +2,7 @@
 
 import json
 import logging
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -101,6 +102,35 @@ def _read_text_input(value: str) -> str:
     return value
 
 
+def _scan_project_dirs(output_dir: Path) -> Iterator[tuple[Path, dict]]:
+    """Yield ``(path, data)`` for each subdirectory with valid ``project.json``.
+
+    Silently skips directories without ``project.json`` and files with
+    corrupted or unreadable JSON.
+
+    Args:
+        output_dir: Base output directory to scan.
+
+    Yields:
+        Tuples of ``(directory_path, parsed_json_dict)``.
+    """
+    for child in output_dir.iterdir():
+        if not child.is_dir():
+            continue
+
+        json_path = child / "project.json"
+        if not json_path.exists():
+            continue
+
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            logger.debug("Skipping %s: invalid or unreadable project.json", child)
+            continue
+
+        yield child, data
+
+
 def _find_most_recent_project(output_dir: Path) -> Path | None:
     """Find the most recently created project in *output_dir*.
 
@@ -124,21 +154,8 @@ def _find_most_recent_project(output_dir: Path) -> Path | None:
     most_recent_path: Path | None = None
     most_recent_timestamp: str = ""
 
-    for child in output_dir.iterdir():
-        if not child.is_dir():
-            continue
-
-        json_path = child / "project.json"
-        if not json_path.exists():
-            continue
-
-        try:
-            data = json.loads(json_path.read_text(encoding="utf-8"))
-            created_at = data["created_at"]
-        except (json.JSONDecodeError, KeyError, OSError):
-            logger.debug("Skipping %s: invalid or unreadable project.json", child)
-            continue
-
+    for child, data in _scan_project_dirs(output_dir):
+        created_at = data.get("created_at", "")
         if created_at > most_recent_timestamp:
             most_recent_timestamp = created_at
             most_recent_path = child
@@ -269,6 +286,31 @@ def _run_with_providers(state: ProjectState) -> None:
     )
 
 
+def _validate_mode(mode: str) -> InputMode:
+    """Parse and validate a mode string into an ``InputMode`` enum.
+
+    Args:
+        mode: Raw mode string from the CLI.
+
+    Returns:
+        The validated ``InputMode``.
+
+    Raises:
+        typer.Exit: If the mode string is not a valid ``InputMode`` value.
+    """
+    try:
+        return InputMode(mode)
+    except ValueError:
+        console.print(
+            Panel(
+                f"Unknown mode: '{mode}'. Valid modes: adapt, original, inspired_by",
+                title="Error",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(1)
+
+
 # ---------------------------------------------------------------------------
 # CLI commands
 # ---------------------------------------------------------------------------
@@ -290,18 +332,7 @@ def create(
     config: Path | None = typer.Option(None, help="Path to config.yaml"),
 ) -> None:
     """Start a new story video project."""
-    # --- Validate mode ---
-    try:
-        input_mode = InputMode(mode)
-    except ValueError:
-        console.print(
-            Panel(
-                f"Unknown mode: '{mode}'. Valid modes: adapt, original, inspired_by",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
+    input_mode = _validate_mode(mode)
 
     # --- Validate input required ---
     if input_text is None:
@@ -422,18 +453,7 @@ def estimate(
     config: Path | None = typer.Option(None, help="Path to config.yaml"),
 ) -> None:
     """Show cost estimate without starting generation."""
-    # --- Validate mode ---
-    try:
-        input_mode = InputMode(mode)
-    except ValueError:
-        console.print(
-            Panel(
-                f"Unknown mode: '{mode}'. Valid modes: adapt, original, inspired_by",
-                title="Error",
-                border_style="red",
-            )
-        )
-        raise typer.Exit(1)
+    input_mode = _validate_mode(mode)
 
     # --- Build config overrides ---
     cli_overrides: dict[str, Any] = {}
@@ -538,28 +558,16 @@ def list_projects(
     # --- Scan for projects with lightweight JSON parse ---
     projects: list[dict[str, str]] = []
 
-    for child in output_dir.iterdir():
-        if not child.is_dir():
-            continue
-
-        json_path = child / "project.json"
-        if not json_path.exists():
-            continue
-
-        try:
-            data = json.loads(json_path.read_text(encoding="utf-8"))
-            projects.append(
-                {
-                    "project_id": data.get("project_id", child.name),
-                    "mode": data.get("mode", "unknown"),
-                    "current_phase": data.get("current_phase") or "none",
-                    "status": data.get("status", "unknown"),
-                    "created_at": data.get("created_at", ""),
-                }
-            )
-        except (json.JSONDecodeError, KeyError, OSError):
-            logger.debug("Skipping %s: invalid or unreadable project.json", child)
-            continue
+    for child, data in _scan_project_dirs(output_dir):
+        projects.append(
+            {
+                "project_id": data.get("project_id", child.name),
+                "mode": data.get("mode", "unknown"),
+                "current_phase": data.get("current_phase") or "none",
+                "status": data.get("status", "unknown"),
+                "created_at": data.get("created_at", ""),
+            }
+        )
 
     if not projects:
         console.print("No projects found.")

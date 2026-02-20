@@ -194,88 +194,67 @@ def build_concat_command(
             f"[0:a]afade=t=in:st=0:d={fade_in_dur},"
             f"afade=t=out:st={fade_out_start}:d={fade_out_dur}[outa]"
         )
-        return [
-            "ffmpeg",
-            "-y",
-            *inputs,
-            "-filter_complex",
-            filtergraph,
-            "-map",
-            "[outv]",
-            "-map",
-            "[outa]",
-            "-c:v",
-            video_config.codec,
-            "-crf",
-            str(video_config.crf),
-            "-pix_fmt",
-            "yuv420p",
-            str(output_path),
-        ]
+    else:
+        # Multiple segments: chain xfade transitions
+        video_parts: list[str] = []
+        audio_parts: list[str] = []
 
-    # Multiple segments: chain xfade transitions
-    video_parts: list[str] = []
-    audio_parts: list[str] = []
+        # Calculate xfade offsets:
+        # offset_i = sum(durations[0..i]) - i * transition_dur
+        # Each xfade takes two streams and produces one.
+        cumulative_dur = 0.0
+        prev_video_label = "[0:v]"
+        prev_audio_label = "[0:a]"
 
-    # Calculate xfade offsets:
-    # offset_i = sum(durations[0..i]) - i * transition_dur
-    # Each xfade takes two streams and produces one.
-    cumulative_dur = 0.0
-    prev_video_label = "[0:v]"
-    prev_audio_label = "[0:a]"
+        for i in range(n - 1):
+            cumulative_dur += segment_durations[i]
+            raw_offset = cumulative_dur - (i + 1) * transition_dur
+            offset = max(0.0, raw_offset)
+            if raw_offset < 0:
+                logger.warning(
+                    "Segment %d duration (%.2fs) is shorter than transition_duration (%.2fs); "
+                    "xfade offset clamped from %.2f to 0.0",
+                    i,
+                    segment_durations[i],
+                    transition_dur,
+                    raw_offset,
+                )
+            next_video = f"[{i + 1}:v]"
+            next_audio = f"[{i + 1}:a]"
 
-    for i in range(n - 1):
-        cumulative_dur += segment_durations[i]
-        raw_offset = cumulative_dur - (i + 1) * transition_dur
-        offset = max(0.0, raw_offset)
-        if raw_offset < 0:
-            logger.warning(
-                "Segment %d duration (%.2fs) is shorter than transition_duration (%.2fs); "
-                "xfade offset clamped from %.2f to 0.0",
-                i,
-                segment_durations[i],
-                transition_dur,
-                raw_offset,
+            out_video = f"[xf{i}]"
+            out_audio = f"[axf{i}]"
+
+            video_parts.append(
+                f"{prev_video_label}{next_video}"
+                f"xfade=transition=fade:duration={transition_dur}:offset={offset}"
+                f"{out_video}"
             )
-        next_video = f"[{i + 1}:v]"
-        next_audio = f"[{i + 1}:a]"
+            audio_parts.append(
+                f"{prev_audio_label}{next_audio}acrossfade=d={audio_transition_dur}{out_audio}"
+            )
 
-        out_video = f"[xf{i}]"
-        out_audio = f"[axf{i}]"
+            prev_video_label = out_video
+            prev_audio_label = out_audio
 
+        # Add final duration for fade calculation
+        cumulative_dur += segment_durations[-1]
+        total_dur = max(0.0, cumulative_dur - (n - 1) * transition_dur)
+        fade_out_start = max(0.0, total_dur - fade_out_dur)
+
+        # Fade in/out on the final composited stream
         video_parts.append(
-            f"{prev_video_label}{next_video}"
-            f"xfade=transition=fade:duration={transition_dur}:offset={offset}"
-            f"{out_video}"
+            f"{prev_video_label}"
+            f"fade=t=in:st=0:d={fade_in_dur},"
+            f"fade=t=out:st={fade_out_start}:d={fade_out_dur}[outv]"
         )
         audio_parts.append(
-            f"{prev_audio_label}{next_audio}acrossfade=d={audio_transition_dur}{out_audio}"
+            f"{prev_audio_label}"
+            f"afade=t=in:st=0:d={fade_in_dur},"
+            f"afade=t=out:st={fade_out_start}:d={fade_out_dur}[outa]"
         )
 
-        prev_video_label = out_video
-        prev_audio_label = out_audio
-
-    # Add final duration for fade calculation
-    cumulative_dur += segment_durations[-1]
-    total_dur = cumulative_dur - (n - 1) * transition_dur
-    fade_out_start = max(0.0, total_dur - fade_out_dur)
-
-    # Fade in/out on the final composited stream
-    last_video = prev_video_label
-    last_audio = prev_audio_label
-
-    video_parts.append(
-        f"{last_video}"
-        f"fade=t=in:st=0:d={fade_in_dur},"
-        f"fade=t=out:st={fade_out_start}:d={fade_out_dur}[outv]"
-    )
-    audio_parts.append(
-        f"{last_audio}"
-        f"afade=t=in:st=0:d={fade_in_dur},"
-        f"afade=t=out:st={fade_out_start}:d={fade_out_dur}[outa]"
-    )
-
-    filtergraph = ";".join(video_parts + audio_parts)
+        filtergraph = ";".join(video_parts + audio_parts)
 
     return [
         "ffmpeg",

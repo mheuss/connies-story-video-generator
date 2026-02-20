@@ -515,6 +515,13 @@ class CaptionWord(BaseModel):
     start: float = Field(ge=0)
     end: float = Field(ge=0)
 
+    @model_validator(mode="after")
+    def _validate_start_before_end(self) -> "CaptionWord":
+        if self.start > self.end:
+            msg = f"start ({self.start}) must not exceed end ({self.end})"
+            raise ValueError(msg)
+        return self
+
 
 class CaptionSegment(BaseModel):
     """A transcribed segment (roughly sentence-level) with timing."""

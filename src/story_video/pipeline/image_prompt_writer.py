@@ -62,14 +62,19 @@ IMAGE_PROMPT_SCHEMA = {
 def _load_characters(state: ProjectState) -> list[dict]:
     """Load character descriptions from analysis.json if available.
 
-    Returns an empty list if analysis.json doesn't exist or has no
-    characters key. This provides backward compatibility with projects
-    created before character extraction was added.
+    Returns an empty list if analysis.json doesn't exist, contains
+    malformed JSON, or has no characters key. This provides backward
+    compatibility with projects created before character extraction
+    was added.
     """
     analysis_path = state.project_dir / "analysis.json"
     if not analysis_path.exists():
         return []
-    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    try:
+        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.warning("Malformed analysis.json; skipping character reference")
+        return []
     return analysis.get("characters", [])
 
 
@@ -77,7 +82,9 @@ def _format_character_reference(characters: list[dict]) -> str:
     """Format character list into a text block for the image prompt context."""
     lines = ["=== Character Reference ==="]
     for char in characters:
-        lines.append(f"{char['name']}: {char['visual_description']}")
+        name = char.get("name", "Unknown")
+        desc = char.get("visual_description", "No description")
+        lines.append(f"{name}: {desc}")
     lines.append("")
     return "\n".join(lines)
 

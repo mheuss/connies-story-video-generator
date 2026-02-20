@@ -821,6 +821,18 @@ class TestCaptionWordTimestampValidation:
         assert word.start == 0.0
         assert word.end == 0.0
 
+    def test_rejects_start_after_end(self):
+        """start > end is rejected."""
+
+        with pytest.raises(ValidationError, match="start.*must not exceed.*end"):
+            CaptionWord(word="hello", start=1.0, end=0.5)
+
+    def test_accepts_start_equal_to_end(self):
+        """start == end is valid (zero-length word)."""
+
+        word = CaptionWord(word="hello", start=1.0, end=1.0)
+        assert word.start == word.end
+
 
 class TestCaptionResultDurationValidation:
     """CaptionResult.duration rejects negative values."""
