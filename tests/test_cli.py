@@ -16,6 +16,9 @@ from story_video.cli import (
     _generate_project_id,
     _read_text_input,
     _run_with_providers,
+    _scan_project_dirs,
+    _status_icon,
+    _validate_mode,
     app,
 )
 from story_video.models import (
@@ -205,60 +208,28 @@ class TestFindMostRecentProject:
 class TestDisplayOutcome:
     """Tests for _display_outcome — Rich panel display based on project status."""
 
-    def test_completed_shows_success(self, capsys) -> None:
-        """COMPLETED status prints a success-related message."""
+    @pytest.mark.parametrize(
+        "status,phase,expected_keywords",
+        [
+            (PhaseStatus.COMPLETED, None, ["success", "complete"]),
+            (PhaseStatus.AWAITING_REVIEW, PipelinePhase.SCENE_SPLITTING, ["review", "paused"]),
+            (PhaseStatus.FAILED, PipelinePhase.TTS_GENERATION, ["failed", "error"]),
+            (PhaseStatus.PENDING, None, ["pending"]),
+            (PhaseStatus.IN_PROGRESS, PipelinePhase.SCENE_SPLITTING, ["in_progress"]),
+        ],
+        ids=["completed", "awaiting_review", "failed", "pending", "in_progress"],
+    )
+    def test_display_outcome(self, capsys, status, phase, expected_keywords):
+        """_display_outcome prints status-appropriate message."""
         state = MagicMock()
-        state.metadata.status = PhaseStatus.COMPLETED
+        state.metadata.status = status
+        state.metadata.current_phase = phase
         state.project_dir = Path("/output/my-project")
 
         _display_outcome(state)
 
         captured = capsys.readouterr().out.lower()
-        assert "success" in captured or "complete" in captured
-
-    def test_awaiting_review_shows_paused(self, capsys) -> None:
-        """AWAITING_REVIEW status prints a paused/review message."""
-        state = MagicMock()
-        state.metadata.status = PhaseStatus.AWAITING_REVIEW
-        state.metadata.current_phase = PipelinePhase.SCENE_SPLITTING
-
-        _display_outcome(state)
-
-        captured = capsys.readouterr().out.lower()
-        assert "review" in captured or "paused" in captured
-
-    def test_failed_shows_error(self, capsys) -> None:
-        """FAILED status prints a failure/error message."""
-        state = MagicMock()
-        state.metadata.status = PhaseStatus.FAILED
-        state.metadata.current_phase = PipelinePhase.TTS_GENERATION
-
-        _display_outcome(state)
-
-        captured = capsys.readouterr().out.lower()
-        assert "failed" in captured or "error" in captured
-
-    def test_pending_shows_info(self, capsys) -> None:
-        """PENDING status prints an info panel with the status value."""
-        state = MagicMock()
-        state.metadata.status = PhaseStatus.PENDING
-        state.metadata.current_phase = None
-
-        _display_outcome(state)
-
-        captured = capsys.readouterr().out.lower()
-        assert "pending" in captured
-
-    def test_in_progress_shows_info(self, capsys) -> None:
-        """IN_PROGRESS status prints an info panel with the status value."""
-        state = MagicMock()
-        state.metadata.status = PhaseStatus.IN_PROGRESS
-        state.metadata.current_phase = PipelinePhase.SCENE_SPLITTING
-
-        _display_outcome(state)
-
-        captured = capsys.readouterr().out.lower()
-        assert "in_progress" in captured
+        assert any(kw in captured for kw in expected_keywords)
 
 
 class TestCreateCommand:
@@ -524,25 +495,14 @@ class TestResumeCommand:
 class TestEstimateCommand:
     """Tests for the estimate CLI command — projected cost display."""
 
-    def test_estimate_adapt(self):
-        """Adapt mode estimate displays cost breakdown."""
-        result = runner.invoke(app, ["estimate", "--mode", "adapt"])
+    @pytest.mark.parametrize("mode", ["adapt", "original", "inspired_by"])
+    def test_estimate_mode(self, mode):
+        """All modes produce a cost estimate."""
+        result = runner.invoke(app, ["estimate", "--mode", mode])
         assert result.exit_code == 0
         assert "cost estimate" in result.output.lower()
         assert "claude" in result.output.lower()
         assert "$" in result.output
-
-    def test_estimate_original(self):
-        """Original mode works for estimate (all modes supported)."""
-        result = runner.invoke(app, ["estimate", "--mode", "original"])
-        assert result.exit_code == 0
-        assert "cost estimate" in result.output.lower()
-
-    def test_estimate_inspired_by(self):
-        """Inspired_by mode works for estimate."""
-        result = runner.invoke(app, ["estimate", "--mode", "inspired_by"])
-        assert result.exit_code == 0
-        assert "cost estimate" in result.output.lower()
 
     def test_estimate_with_duration_override(self):
         """--duration affects the estimate."""
@@ -836,14 +796,10 @@ class TestRunWithProviders:
 class TestVerboseFlag:
     """--verbose flag configures logging level."""
 
-    def test_verbose_flag_accepted(self):
-        """--verbose is a valid global option."""
-        result = runner.invoke(app, ["--verbose", "estimate", "--mode", "adapt"])
-        assert result.exit_code == 0
-
-    def test_short_verbose_flag_accepted(self):
-        """-v is a valid shorthand for --verbose."""
-        result = runner.invoke(app, ["-v", "estimate", "--mode", "adapt"])
+    @pytest.mark.parametrize("flag", ["--verbose", "-v"])
+    def test_verbose_flag_accepted(self, flag):
+        """--verbose and -v are valid global options."""
+        result = runner.invoke(app, [flag, "estimate", "--mode", "adapt"])
         assert result.exit_code == 0
 
 
@@ -980,3 +936,105 @@ class TestDisplayOutcomeSuccessPath:
         captured = capsys.readouterr().out
         assert "final.mp4" in captured
         assert "video" not in captured.lower() or "video is at" in captured.lower()
+
+
+# ---------------------------------------------------------------------------
+# Direct tests for CLI helper functions
+# ---------------------------------------------------------------------------
+
+
+class TestStatusIcon:
+    """_status_icon maps SceneStatus to Rich-markup strings."""
+
+    @pytest.mark.parametrize(
+        "status,expected_substrings",
+        [
+            (SceneStatus.COMPLETED, ["green", "done"]),
+            (SceneStatus.PENDING, ["dim"]),
+            (SceneStatus.FAILED, ["red", "FAIL"]),
+            (SceneStatus.IN_PROGRESS, ["yellow"]),
+        ],
+        ids=["completed", "pending", "failed", "in_progress"],
+    )
+    def test_status_icon(self, status, expected_substrings):
+        result = _status_icon(status)
+        for expected in expected_substrings:
+            assert expected in result
+
+
+class TestValidateMode:
+    """_validate_mode parses mode strings into InputMode enums."""
+
+    @pytest.mark.parametrize(
+        "mode_str,expected",
+        [
+            ("adapt", InputMode.ADAPT),
+            ("original", InputMode.ORIGINAL),
+            ("inspired_by", InputMode.INSPIRED_BY),
+        ],
+    )
+    def test_valid_mode(self, mode_str, expected):
+        assert _validate_mode(mode_str) == expected
+
+    def test_invalid_mode_raises_exit(self):
+        """Unknown mode string raises typer.Exit."""
+        from click.exceptions import Exit
+
+        with pytest.raises(Exit):
+            _validate_mode("nonexistent")
+
+
+class TestScanProjectDirs:
+    """_scan_project_dirs yields (path, data) for valid project directories."""
+
+    def test_yields_valid_project(self, tmp_path):
+        project_dir = tmp_path / "my-project"
+        project_dir.mkdir()
+        data = {"project_id": "my-project", "mode": "adapt"}
+        (project_dir / "project.json").write_text(json.dumps(data), encoding="utf-8")
+
+        results = list(_scan_project_dirs(tmp_path))
+        assert len(results) == 1
+        assert results[0][0] == project_dir
+        assert results[0][1]["project_id"] == "my-project"
+
+    def test_skips_corrupted_json(self, tmp_path):
+        bad_dir = tmp_path / "bad"
+        bad_dir.mkdir()
+        (bad_dir / "project.json").write_text("{broken", encoding="utf-8")
+
+        results = list(_scan_project_dirs(tmp_path))
+        assert len(results) == 0
+
+    def test_skips_dirs_without_project_json(self, tmp_path):
+        (tmp_path / "empty-dir").mkdir()
+
+        results = list(_scan_project_dirs(tmp_path))
+        assert len(results) == 0
+
+    def test_skips_non_dict_json(self, tmp_path):
+        """project.json containing a JSON array is skipped."""
+        arr_dir = tmp_path / "array-project"
+        arr_dir.mkdir()
+        (arr_dir / "project.json").write_text("[1, 2, 3]", encoding="utf-8")
+
+        results = list(_scan_project_dirs(tmp_path))
+        assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# _read_text_input — warning log for nonexistent file path
+# ---------------------------------------------------------------------------
+
+
+class TestReadTextInputWarningLog:
+    """_read_text_input logs a warning for file-like paths that don't exist."""
+
+    def test_warns_for_nonexistent_file_path(self, caplog):
+        """Input that looks like a file path but doesn't exist logs a warning."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _read_text_input("/nonexistent/story.txt")
+        assert result == "/nonexistent/story.txt"
+        assert any("looks like a file path" in r.message for r in caplog.records)
