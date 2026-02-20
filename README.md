@@ -50,12 +50,13 @@ All three modes work end-to-end. You can give it a story, a creative brief, or s
 - **Multi-voice narration** -- YAML front matter defines voice mappings, inline `**voice:name**` tags switch between voices mid-scene. Works with both OpenAI and ElevenLabs.
 - **Mood tags** -- inline `**mood:thoughtful**` tags add emotional direction. OpenAI uses its `instructions` parameter; ElevenLabs v3 uses freeform audio tags.
 - **Pause tags** -- inline `**pause:1.5**` tags insert silence into narration audio. Useful for pacing, dramatic beats, and poetry.
+- **Scene markers** -- `**scene:Title**` tags in your story file let you pre-split scenes. The pipeline auto-detects them and skips the AI splitting step.
 - **Two TTS providers** -- OpenAI (`gpt-4o-mini-tts`) and ElevenLabs (v3). Switch via config file.
 - **CLI** -- all five commands functional: `create`, `resume`, `estimate`, `status`, `list`
 - **Resume from failure** -- pipeline saves state per phase and per scene, picks up where it left off
 - **Semi-automated mode** -- pauses at content phases for human review, or runs straight through in autonomous mode
 - **Cost estimation** -- projected costs before starting, actual costs after completion
-- **955 tests** covering all modules
+- **971 tests** covering all modules
 
 ### Pie in the Sky
 
@@ -100,6 +101,20 @@ Use `**pause:N**` tags to insert silence (in seconds) for pacing:
 ```
 The door swung open. **pause:1.5** "Is anyone there?" she whispered.
 ```
+
+### Scene Markers
+
+If you want to control where scenes split, add `**scene:Title**` tags to your story file:
+
+```
+**scene:The Storm**
+It was a dark and stormy night. The wind howled through the trees.
+
+**scene:The Journey**
+The hero ventured forth bravely into the unknown.
+```
+
+When the pipeline detects scene tags, it splits on them directly and skips the AI scene-splitting step. Any text before the first tag becomes a scene titled "Opening".
 
 Voice IDs depend on your TTS provider. OpenAI uses names like `nova`, `echo`, `alloy`. ElevenLabs uses voice ID hashes from your account.
 

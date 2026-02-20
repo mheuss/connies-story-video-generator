@@ -6,6 +6,7 @@ Inspired_by mode: analysis, story bible, outline, scene prose, critique/revision
 
 import json
 import logging
+import re
 
 from story_video.models import SCENE_WORD_TARGET_DEFAULT, AssetType, InputMode, SceneStatus
 from story_video.pipeline.claude_client import ClaudeClient
@@ -386,6 +387,46 @@ CRITIQUE_SCHEMA = {
     "required": ["revised_prose", "changes"],
 }
 
+_SCENE_TAG_PATTERN = re.compile(r"\*\*scene:([^*]+)\*\*")
+
+
+def _split_by_scene_tags(text: str) -> list[dict] | None:
+    """Split text on ``**scene:Title**`` markers.
+
+    Returns None if no scene tags are found (caller should fall through
+    to Claude-based splitting). Otherwise returns a list of
+    ``{"title": ..., "text": ...}`` dicts. Text before the first tag
+    becomes a scene titled "Opening".
+
+    Raises:
+        ValueError: If a tagged scene has empty text.
+    """
+    matches = list(_SCENE_TAG_PATTERN.finditer(text))
+    if not matches:
+        return None
+
+    scenes: list[dict] = []
+
+    # Text before first tag → "Opening" scene (if non-empty)
+    opening_text = text[: matches[0].start()].strip()
+    if opening_text:
+        scenes.append({"title": "Opening", "text": opening_text})
+
+    for i, match in enumerate(matches):
+        title = match.group(1).strip()
+        # Text runs from end of this tag to start of next tag (or end of string)
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        scene_text = text[start:end].strip()
+
+        if not scene_text:
+            msg = f"Empty text in scene '{title}' (tag {i + 1})"
+            raise ValueError(msg)
+
+        scenes.append({"title": title, "text": scene_text})
+
+    return scenes
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -420,6 +461,41 @@ def split_scenes(state: ProjectState, client: ClaudeClient) -> None:
     #     the body without the header.
     _, body_text = parse_story_header(source_text)
     source_text = body_text
+
+    # 1c. Check for **scene:Title** markers — if present, split locally
+    #     and skip the Claude call entirely.
+    tagged_scenes = _split_by_scene_tags(source_text)
+    if tagged_scenes is not None:
+        logger.info(
+            "Found %d scene tag(s) — using marker-based splitting (skipping Claude)",
+            len(tagged_scenes),
+        )
+        scenes = tagged_scenes
+        # Jump to step 7 (state update) — skip Claude call and preservation check
+        for i, scene in enumerate(scenes):
+            scene_number = i + 1
+            state.add_scene(scene_number=scene_number, title=scene["title"], prose=scene["text"])
+            state.update_scene_asset(
+                scene_number=scene_number,
+                asset=AssetType.TEXT,
+                status=SceneStatus.IN_PROGRESS,
+            )
+            state.update_scene_asset(
+                scene_number=scene_number,
+                asset=AssetType.TEXT,
+                status=SceneStatus.COMPLETED,
+            )
+
+        scenes_dir = state.project_dir / "scenes"
+        scenes_dir.mkdir(exist_ok=True)
+        for i, scene in enumerate(scenes):
+            scene_number = i + 1
+            filename = f"scene_{scene_number:03d}.md"
+            content = f"# Scene {scene_number}: {scene['title']}\n\n{scene['text']}\n"
+            (scenes_dir / filename).write_text(content, encoding="utf-8")
+
+        state.save()
+        return
 
     # 2. Call Claude for scene splitting
     result = client.generate_structured(

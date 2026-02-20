@@ -17,6 +17,7 @@ from story_video.pipeline.story_writer import (
     SCENE_SPLIT_SCHEMA,
     SCENE_SPLIT_SYSTEM,
     _check_preservation,
+    _split_by_scene_tags,
     analyze_source,
     create_outline,
     create_story_bible,
@@ -434,6 +435,228 @@ class TestPreservationCheckNormalizesWhitespace:
 
         with pytest.raises(ValueError, match="mismatch"):
             _check_preservation(original, scenes)
+
+
+# ---------------------------------------------------------------------------
+# Marker-based scene splitting — test data
+# ---------------------------------------------------------------------------
+
+SOURCE_WITH_SCENE_TAGS = (
+    "**scene:The Storm**\n"
+    "Part one of the story. It was a dark and stormy night.\n\n"
+    "**scene:The Journey**\n"
+    "Part two of the story. The hero ventured forth bravely.\n\n"
+    "**scene:The Ending**\n"
+    "Part three of the story. And they all lived happily ever after."
+)
+
+SOURCE_WITH_OPENING_BEFORE_FIRST_TAG = (
+    "Once upon a time, in a land far away.\n\n"
+    "**scene:The Storm**\n"
+    "Part one of the story. It was a dark and stormy night.\n\n"
+    "**scene:The Journey**\n"
+    "Part two of the story. The hero ventured forth bravely."
+)
+
+
+# ---------------------------------------------------------------------------
+# _split_by_scene_tags — no tags (returns None)
+# ---------------------------------------------------------------------------
+
+
+class TestSplitBySceneTagsNoTags:
+    """_split_by_scene_tags returns None when no scene tags present."""
+
+    def test_no_tags_returns_none(self):
+        result = _split_by_scene_tags("Just a plain story with no tags.")
+        assert result is None
+
+    def test_bold_text_not_confused_with_scene_tag(self):
+        result = _split_by_scene_tags("**bold text** and more text.")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _split_by_scene_tags — basic splitting
+# ---------------------------------------------------------------------------
+
+
+class TestSplitBySceneTagsBasic:
+    """_split_by_scene_tags splits text on scene tags."""
+
+    def test_three_scenes(self):
+        result = _split_by_scene_tags(SOURCE_WITH_SCENE_TAGS)
+        assert result is not None
+        assert len(result) == 3
+
+    def test_scene_titles_extracted(self):
+        result = _split_by_scene_tags(SOURCE_WITH_SCENE_TAGS)
+        assert result[0]["title"] == "The Storm"
+        assert result[1]["title"] == "The Journey"
+        assert result[2]["title"] == "The Ending"
+
+    def test_scene_text_extracted(self):
+        result = _split_by_scene_tags(SOURCE_WITH_SCENE_TAGS)
+        assert result[0]["text"] == "Part one of the story. It was a dark and stormy night."
+        assert result[1]["text"] == "Part two of the story. The hero ventured forth bravely."
+        assert (
+            result[2]["text"] == "Part three of the story. And they all lived happily ever after."
+        )
+
+
+# ---------------------------------------------------------------------------
+# _split_by_scene_tags — text before first tag
+# ---------------------------------------------------------------------------
+
+
+class TestSplitBySceneTagsOpeningText:
+    """_split_by_scene_tags handles text before the first scene tag."""
+
+    def test_opening_text_becomes_opening_scene(self):
+        result = _split_by_scene_tags(SOURCE_WITH_OPENING_BEFORE_FIRST_TAG)
+        assert result is not None
+        assert len(result) == 3
+
+    def test_opening_scene_title(self):
+        result = _split_by_scene_tags(SOURCE_WITH_OPENING_BEFORE_FIRST_TAG)
+        assert result[0]["title"] == "Opening"
+
+    def test_opening_scene_text(self):
+        result = _split_by_scene_tags(SOURCE_WITH_OPENING_BEFORE_FIRST_TAG)
+        assert result[0]["text"] == "Once upon a time, in a land far away."
+
+
+# ---------------------------------------------------------------------------
+# _split_by_scene_tags — whitespace-only before first tag
+# ---------------------------------------------------------------------------
+
+
+class TestSplitBySceneTagsWhitespaceOpening:
+    """_split_by_scene_tags ignores whitespace-only text before first tag."""
+
+    def test_whitespace_before_first_tag_ignored(self):
+        text = "\n\n  \n**scene:First** Content here."
+        result = _split_by_scene_tags(text)
+        assert result is not None
+        assert len(result) == 1
+        assert result[0]["title"] == "First"
+
+
+# ---------------------------------------------------------------------------
+# _split_by_scene_tags — empty scene text raises
+# ---------------------------------------------------------------------------
+
+
+class TestSplitBySceneTagsEmptyText:
+    """_split_by_scene_tags raises ValueError for empty scene text."""
+
+    def test_empty_scene_text_raises(self):
+        text = "**scene:First**\nSome text.\n**scene:Second**\n  \n"
+        with pytest.raises(ValueError, match="Empty text"):
+            _split_by_scene_tags(text)
+
+
+# ---------------------------------------------------------------------------
+# _split_by_scene_tags — title whitespace stripped
+# ---------------------------------------------------------------------------
+
+
+class TestSplitBySceneTagsTitleStrip:
+    """_split_by_scene_tags strips whitespace from titles."""
+
+    def test_title_whitespace_stripped(self):
+        text = "**scene:  The Storm  **\nContent here."
+        result = _split_by_scene_tags(text)
+        assert result[0]["title"] == "The Storm"
+
+
+# ---------------------------------------------------------------------------
+# split_scenes with scene tags — skips Claude
+# ---------------------------------------------------------------------------
+
+
+class TestSplitScenesWithSceneTags:
+    """split_scenes() skips Claude call when scene tags present."""
+
+    def test_claude_not_called(self, tmp_path, mock_client):
+        state = ProjectState.create(
+            project_id="tagged-project",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        source = tmp_path / "tagged-project" / "source_story.txt"
+        source.write_text(SOURCE_WITH_SCENE_TAGS)
+
+        split_scenes(state, mock_client)
+
+        mock_client.generate_structured.assert_not_called()
+
+    def test_scenes_created_from_tags(self, tmp_path, mock_client):
+        state = ProjectState.create(
+            project_id="tagged-project",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        source = tmp_path / "tagged-project" / "source_story.txt"
+        source.write_text(SOURCE_WITH_SCENE_TAGS)
+
+        split_scenes(state, mock_client)
+
+        assert len(state.metadata.scenes) == 3
+        assert state.metadata.scenes[0].title == "The Storm"
+        assert state.metadata.scenes[1].title == "The Journey"
+        assert state.metadata.scenes[2].title == "The Ending"
+
+    def test_md_files_written(self, tmp_path, mock_client):
+        state = ProjectState.create(
+            project_id="tagged-project",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        source = tmp_path / "tagged-project" / "source_story.txt"
+        source.write_text(SOURCE_WITH_SCENE_TAGS)
+
+        split_scenes(state, mock_client)
+
+        scenes_dir = state.project_dir / "scenes"
+        assert (scenes_dir / "scene_001.md").exists()
+        assert (scenes_dir / "scene_002.md").exists()
+        assert (scenes_dir / "scene_003.md").exists()
+
+    def test_scene_tags_with_yaml_header(self, tmp_path, mock_client):
+        """Scene tags work with YAML front matter — header stripped first."""
+        state = ProjectState.create(
+            project_id="tagged-header",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        source = tmp_path / "tagged-header" / "source_story.txt"
+        source.write_text("---\nvoices:\n  narrator: alloy\n---\n" + SOURCE_WITH_SCENE_TAGS)
+
+        split_scenes(state, mock_client)
+
+        mock_client.generate_structured.assert_not_called()
+        assert len(state.metadata.scenes) == 3
+
+    def test_logs_marker_splitting(self, tmp_path, mock_client, caplog):
+        """Logs info message when using marker-based splitting."""
+        state = ProjectState.create(
+            project_id="tagged-log",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        source = tmp_path / "tagged-log" / "source_story.txt"
+        source.write_text(SOURCE_WITH_SCENE_TAGS)
+
+        with caplog.at_level(logging.INFO):
+            split_scenes(state, mock_client)
+
+        assert any("scene tag" in r.message.lower() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
