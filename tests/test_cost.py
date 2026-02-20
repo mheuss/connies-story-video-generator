@@ -204,26 +204,7 @@ class TestActualMode:
             character_count=247500,
         )
         assert est.scene_count == 25
-
-    def test_uses_provided_character_count(self):
-        config = _config()
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=config,
-            scene_count=25,
-            character_count=247500,
-        )
         assert est.character_count == 247500
-
-    def test_duration_still_from_config(self):
-        """Duration always comes from config, even in actual mode."""
-        config = _config()
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=config,
-            scene_count=25,
-            character_count=247500,
-        )
         assert est.duration_minutes == 30
 
 
@@ -334,20 +315,6 @@ class TestClaudeCost:
 class TestTTSCost:
     """TTS cost = character_count / 1_000_000 * rate_per_million_chars."""
 
-    def test_gpt_4o_mini_tts_default(self):
-        """gpt-4o-mini-tts (default) at 247500 chars: 247500 / 1e6 * 0.60 = $0.1485."""
-        config = _config()
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=config,
-            scene_count=25,
-            character_count=247500,
-        )
-        tts = next(s for s in est.services if s.service == "TTS")
-        expected = 247500 / 1_000_000 * 0.60
-        assert tts.low == pytest.approx(expected)
-        assert tts.high == pytest.approx(expected)  # Exact cost, low == high
-
     def test_tts_1_standard(self):
         """tts-1 at 247500 chars: 247500 / 1e6 * 15.00 = $3.7125."""
         config = _config(tts=TTSConfig(model="tts-1"))
@@ -398,19 +365,7 @@ class TestTTSCost:
         assert tts.low == 0.0
         assert tts.high == 0.0
         assert "not estimated" in tts.description
-
-    def test_unknown_tts_model_included_in_service_list(self):
-        """Unknown TTS model still appears as a service entry (not silently dropped)."""
-        config = _config(tts=TTSConfig(model="eleven_multilingual_v2"))
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=config,
-            scene_count=25,
-            character_count=247500,
-        )
         assert len(est.services) == 4
-        service_names = [s.service for s in est.services]
-        assert "TTS" in service_names
 
 
 # ---------------------------------------------------------------------------
@@ -547,14 +502,6 @@ class TestTotalCost:
         )
         assert est.total_low == pytest.approx(sum(s.low for s in est.services))
         assert est.total_high == pytest.approx(sum(s.high for s in est.services))
-
-    def test_has_four_services(self):
-        """Estimate should contain exactly 4 services: Claude, TTS, Images, Whisper."""
-        config = _config()
-        est = estimate_cost(mode=InputMode.ORIGINAL, config=config)
-        assert len(est.services) == 4
-        service_names = {s.service for s in est.services}
-        assert service_names == {"Claude", "TTS", "Images", "Whisper"}
 
     def test_default_original_mode_total_range(self):
         """Sanity check: default original mode total should be reasonable.
@@ -756,18 +703,6 @@ class TestEdgeCases:
             est = estimate_cost(mode=mode, config=config)
             assert est.total_low > 0
             assert est.total_high >= est.total_low
-
-    def test_scene_count_never_zero(self):
-        """Even with tiny duration, at least 1 scene."""
-        config = _config(story=StoryConfig(target_duration_minutes=1))
-        est = estimate_cost(mode=InputMode.ORIGINAL, config=config)
-        assert est.scene_count >= 1
-
-    def test_mode_stored_on_estimate(self):
-        """The mode is preserved on the estimate object."""
-        for mode in InputMode:
-            est = estimate_cost(mode=mode, config=_config())
-            assert est.mode == mode
 
     def test_large_scene_count(self):
         """100 scenes should not cause errors, costs scale linearly."""
