@@ -14,20 +14,20 @@ from story_video.utils.narration_tags import (
 class TestHasNarrationTags:
     """has_narration_tags detects inline voice/mood tags."""
 
-    def test_voice_tag_detected(self):
-        assert has_narration_tags("Hello **voice:jane** world") is True
-
-    def test_mood_tag_detected(self):
-        assert has_narration_tags("**mood:sad** Goodbye.") is True
-
-    def test_plain_text_not_detected(self):
-        assert has_narration_tags("Just plain text.") is False
-
-    def test_bold_text_not_detected(self):
-        assert has_narration_tags("**bold text** is fine") is False
-
-    def test_pause_tag_detected(self):
-        assert has_narration_tags("Hello. **pause:1.0** Goodbye.") is True
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("Hello **voice:jane** world", True),
+            ("**mood:sad** Goodbye.", True),
+            ("Just plain text.", False),
+            ("**bold text** is fine", False),
+            ("Hello. **pause:1.0** Goodbye.", True),
+            ("", False),
+        ],
+        ids=["voice", "mood", "plain", "bold", "pause", "empty"],
+    )
+    def test_has_narration_tags(self, text, expected):
+        assert has_narration_tags(text) is expected
 
 
 class TestParseStoryHeader:
@@ -86,6 +86,12 @@ class TestParseStoryHeader:
         """voices: null (YAML None) raises ValueError."""
         text = "---\nvoices:\n---\nBody."
         with pytest.raises(ValueError, match="[Ee]mpty"):
+            parse_story_header(text)
+
+    def test_invalid_default_voice_raises(self):
+        """default_voice not in voices triggers Pydantic validation error."""
+        text = "---\nvoices:\n  narrator: nova\ndefault_voice: unknown\n---\nBody."
+        with pytest.raises(ValueError, match="Invalid story header"):
             parse_story_header(text)
 
 
@@ -192,6 +198,11 @@ class TestParseNarrationSegmentsEdgeCases:
         result = parse_narration_segments("", self.VOICE_MAP, "narrator", scene_number=1)
         assert result == []
 
+    def test_empty_voice_map_raises(self):
+        """Empty voice_map raises ValueError."""
+        with pytest.raises(ValueError, match="voice_map must not be empty"):
+            parse_narration_segments("Hello.", {}, "narrator", scene_number=1)
+
 
 # ---------------------------------------------------------------------------
 # Strip narration tags
@@ -201,56 +212,59 @@ class TestParseNarrationSegmentsEdgeCases:
 class TestStripNarrationTags:
     """strip_narration_tags() removes voice/mood tags from text."""
 
-    def test_strips_voice_tags(self):
-        text = "**voice:narrator** Hello. **voice:villain** Goodbye."
-        assert strip_narration_tags(text) == "Hello. Goodbye."
-
-    def test_strips_mood_tags(self):
-        text = '**mood:angry** "Never!" he cried.'
-        assert strip_narration_tags(text) == '"Never!" he cried.'
-
-    def test_strips_combined_tags(self):
-        text = '**voice:old_man** **mood:dry** "Black or white?"'
-        assert strip_narration_tags(text) == '"Black or white?"'
-
-    def test_no_tags_unchanged(self):
-        text = "The hero spoke plainly."
-        assert strip_narration_tags(text) == text
-
-    def test_strips_pause_tags(self):
-        text = "Hello. **pause:0.5** Goodbye."
-        assert strip_narration_tags(text) == "Hello. Goodbye."
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("**voice:narrator** Hello. **voice:villain** Goodbye.", "Hello. Goodbye."),
+            ('**mood:angry** "Never!" he cried.', '"Never!" he cried.'),
+            ('**voice:old_man** **mood:dry** "Black or white?"', '"Black or white?"'),
+            ("The hero spoke plainly.", "The hero spoke plainly."),
+            ("Hello. **pause:0.5** Goodbye.", "Hello. Goodbye."),
+            ("", ""),
+        ],
+        ids=["voice", "mood", "combined", "no_tags", "pause", "empty"],
+    )
+    def test_strip_narration_tags(self, text, expected):
+        assert strip_narration_tags(text) == expected
 
 
 class TestExtractTags:
     """extract_tags returns all voice/mood tags in order."""
 
-    def test_no_tags(self):
-        assert extract_tags("Plain text with no tags.") == []
-
-    def test_single_voice_tag(self):
-        text = "**voice:narrator** He spoke softly."
-        assert extract_tags(text) == ["**voice:narrator**"]
-
-    def test_multiple_tags(self):
-        text = '**voice:old_man** "I\'ve seen worse," **voice:narrator** he muttered.'
-        assert extract_tags(text) == ["**voice:old_man**", "**voice:narrator**"]
-
-    def test_mood_tag(self):
-        text = "**mood:somber** The rain fell."
-        assert extract_tags(text) == ["**mood:somber**"]
-
-    def test_mixed_voice_and_mood(self):
-        text = "**voice:jane** **mood:excited** She laughed."
-        assert extract_tags(text) == ["**voice:jane**", "**mood:excited**"]
-
-    def test_pause_tag(self):
-        text = "Hello. **pause:0.5** Goodbye."
-        assert extract_tags(text) == ["**pause:0.5**"]
-
-    def test_mixed_voice_mood_pause(self):
-        text = "**voice:jane** Hello. **pause:1.0** **mood:sad** Goodbye."
-        assert extract_tags(text) == ["**voice:jane**", "**pause:1.0**", "**mood:sad**"]
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("Plain text with no tags.", []),
+            ("**voice:narrator** He spoke softly.", ["**voice:narrator**"]),
+            (
+                '**voice:old_man** "I\'ve seen worse," **voice:narrator** he muttered.',
+                ["**voice:old_man**", "**voice:narrator**"],
+            ),
+            ("**mood:somber** The rain fell.", ["**mood:somber**"]),
+            (
+                "**voice:jane** **mood:excited** She laughed.",
+                ["**voice:jane**", "**mood:excited**"],
+            ),
+            ("Hello. **pause:0.5** Goodbye.", ["**pause:0.5**"]),
+            (
+                "**voice:jane** Hello. **pause:1.0** **mood:sad** Goodbye.",
+                ["**voice:jane**", "**pause:1.0**", "**mood:sad**"],
+            ),
+            ("", []),
+        ],
+        ids=[
+            "no_tags",
+            "single_voice",
+            "multiple_tags",
+            "mood",
+            "mixed_voice_mood",
+            "pause",
+            "mixed_all",
+            "empty",
+        ],
+    )
+    def test_extract_tags(self, text, expected):
+        assert extract_tags(text) == expected
 
 
 class TestPauseTagParsing:
@@ -306,15 +320,10 @@ class TestPauseTagParsing:
         with pytest.raises(ValueError, match="[Ii]nvalid pause duration"):
             parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
 
-    def test_negative_pause_raises(self):
-        """Negative pause value raises ValidationError (Pydantic gt=0)."""
-        text = "Hello. **pause:-1** Goodbye."
-        with pytest.raises((ValueError,)):
-            parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
-
-    def test_zero_pause_raises(self):
-        """Zero pause value raises ValidationError (Pydantic gt=0)."""
-        text = "Hello. **pause:0** Goodbye."
+    @pytest.mark.parametrize("value", [-1, 0], ids=["negative", "zero"])
+    def test_non_positive_pause_raises(self, value):
+        """Negative or zero pause value raises ValueError (Pydantic gt=0)."""
+        text = f"Hello. **pause:{value}** Goodbye."
         with pytest.raises((ValueError,)):
             parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
 
