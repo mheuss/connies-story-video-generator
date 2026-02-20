@@ -100,9 +100,8 @@ class TestOpenAIImageProviderReturnsDecodedBytes:
 class TestDallePassesParams:
     """OpenAIImageProvider.generate() passes correct parameters for DALL-E models."""
 
-    @pytest.fixture()
-    def dalle_call_kwargs(self, mock_openai):
-        """Call generate() with DALL-E params and return the SDK call kwargs."""
+    def test_params_shape(self, mock_openai):
+        """DALL-E parameters are forwarded correctly to the SDK."""
         image_data = MagicMock()
         image_data.b64_json = FAKE_B64
         response = MagicMock()
@@ -118,47 +117,22 @@ class TestDallePassesParams:
             style="natural",
         )
 
-        return mock_openai.images.generate.call_args.kwargs
-
-    def test_dalle_passes_model(self, dalle_call_kwargs):
-        """DALL-E model name is forwarded to the SDK."""
-        assert dalle_call_kwargs["model"] == "dall-e-3"
-
-    def test_dalle_passes_prompt(self, dalle_call_kwargs):
-        """Prompt text is forwarded to the SDK."""
-        assert dalle_call_kwargs["prompt"] == "A castle on a hill"
-
-    def test_dalle_passes_size(self, dalle_call_kwargs):
-        """Size is forwarded to the SDK."""
-        assert dalle_call_kwargs["size"] == "1536x1024"
-
-    def test_dalle_passes_quality(self, dalle_call_kwargs):
-        """Quality is forwarded to the SDK."""
-        assert dalle_call_kwargs["quality"] == "hd"
-
-    def test_dalle_passes_style(self, dalle_call_kwargs):
-        """Style is forwarded to the SDK."""
-        assert dalle_call_kwargs["style"] == "natural"
-
-    def test_dalle_uses_response_format_b64_json(self, dalle_call_kwargs):
-        """DALL-E models use response_format=b64_json."""
-        assert dalle_call_kwargs["response_format"] == "b64_json"
-
-    def test_dalle_excludes_output_format(self, dalle_call_kwargs):
-        """DALL-E models do not send output_format."""
-        assert "output_format" not in dalle_call_kwargs
-
-    def test_dalle_requests_single_image(self, dalle_call_kwargs):
-        """DALL-E models request exactly one image."""
-        assert dalle_call_kwargs["n"] == 1
+        kwargs = mock_openai.images.generate.call_args.kwargs
+        assert kwargs["model"] == "dall-e-3"
+        assert kwargs["prompt"] == "A castle on a hill"
+        assert kwargs["size"] == "1536x1024"
+        assert kwargs["quality"] == "hd"
+        assert kwargs["style"] == "natural"
+        assert kwargs["response_format"] == "b64_json"
+        assert "output_format" not in kwargs
+        assert kwargs["n"] == 1
 
 
 class TestGptImagePassesParams:
     """OpenAIImageProvider.generate() passes correct parameters for GPT Image models."""
 
-    @pytest.fixture()
-    def gpt_image_call_kwargs(self, mock_openai):
-        """Call generate() with GPT Image params and return the SDK call kwargs."""
+    def test_params_shape(self, mock_openai):
+        """GPT Image parameters are forwarded correctly to the SDK."""
         image_data = MagicMock()
         image_data.b64_json = FAKE_B64
         response = MagicMock()
@@ -173,27 +147,12 @@ class TestGptImagePassesParams:
             quality="medium",
         )
 
-        return mock_openai.images.generate.call_args.kwargs
-
-    def test_gpt_image_passes_model(self, gpt_image_call_kwargs):
-        """GPT Image model name is forwarded to the SDK."""
-        assert gpt_image_call_kwargs["model"] == "gpt-image-1.5"
-
-    def test_gpt_image_passes_prompt(self, gpt_image_call_kwargs):
-        """Prompt text is forwarded to the SDK."""
-        assert gpt_image_call_kwargs["prompt"] == "A castle on a hill"
-
-    def test_gpt_image_passes_size(self, gpt_image_call_kwargs):
-        """Size is forwarded to the SDK."""
-        assert gpt_image_call_kwargs["size"] == "1536x1024"
-
-    def test_gpt_image_passes_quality(self, gpt_image_call_kwargs):
-        """Quality is forwarded to the SDK."""
-        assert gpt_image_call_kwargs["quality"] == "medium"
-
-    def test_gpt_image_uses_output_format_webp(self, gpt_image_call_kwargs):
-        """GPT Image models use output_format=png."""
-        assert gpt_image_call_kwargs["output_format"] == "png"
+        kwargs = mock_openai.images.generate.call_args.kwargs
+        assert kwargs["model"] == "gpt-image-1.5"
+        assert kwargs["prompt"] == "A castle on a hill"
+        assert kwargs["size"] == "1536x1024"
+        assert kwargs["quality"] == "medium"
+        assert kwargs["output_format"] == "png"
 
 
 # ---------------------------------------------------------------------------
@@ -394,27 +353,14 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
 class TestGenerateImageHappyPath:
     """generate_image() writes image file and updates state."""
 
-    def test_generate_image_creates_file(self, project_state, fake_provider):
-        """Image file is created on disk."""
+    def test_happy_path(self, project_state, fake_provider):
+        """Image file is created with correct bytes and state is updated."""
         scene = project_state.metadata.scenes[0]
         generate_image(scene, project_state, fake_provider)
 
         image_path = project_state.project_dir / "images" / "scene_001.png"
         assert image_path.exists()
-
-    def test_generate_image_writes_correct_bytes(self, project_state, fake_provider):
-        """Image file contains the correct bytes from the provider."""
-        scene = project_state.metadata.scenes[0]
-        generate_image(scene, project_state, fake_provider)
-
-        image_path = project_state.project_dir / "images" / "scene_001.png"
         assert image_path.read_bytes() == FAKE_PNG
-
-    def test_generate_image_updates_state(self, project_state, fake_provider):
-        """Scene asset_status.image is COMPLETED after generation."""
-        scene = project_state.metadata.scenes[0]
-        generate_image(scene, project_state, fake_provider)
-
         assert scene.asset_status.image == SceneStatus.COMPLETED
 
 
@@ -443,29 +389,15 @@ class TestGenerateImageStylePrefixPrepended:
 class TestGenerateImageConfigParamsPassedToProvider:
     """generate_image() passes image config values to the provider."""
 
-    def test_generate_image_passes_size(self, project_state, fake_provider):
-        """size from config is passed to provider.generate."""
+    def test_config_params_shape(self, project_state, fake_provider):
+        """All image config values are forwarded to the provider."""
         scene = project_state.metadata.scenes[0]
         generate_image(scene, project_state, fake_provider)
 
-        call_kwargs = fake_provider.generate.call_args.kwargs
-        assert call_kwargs["size"] == "1536x1024"
-
-    def test_generate_image_passes_quality(self, project_state, fake_provider):
-        """quality from config is passed to provider.generate."""
-        scene = project_state.metadata.scenes[0]
-        generate_image(scene, project_state, fake_provider)
-
-        call_kwargs = fake_provider.generate.call_args.kwargs
-        assert call_kwargs["quality"] == "medium"
-
-    def test_generate_image_passes_style(self, project_state, fake_provider):
-        """style from config is passed to provider.generate."""
-        scene = project_state.metadata.scenes[0]
-        generate_image(scene, project_state, fake_provider)
-
-        call_kwargs = fake_provider.generate.call_args.kwargs
-        assert call_kwargs["style"] is None
+        kwargs = fake_provider.generate.call_args.kwargs
+        assert kwargs["size"] == "1536x1024"
+        assert kwargs["quality"] == "medium"
+        assert kwargs["style"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -488,31 +420,6 @@ class TestGenerateImageNoImagePromptRaises:
 # ---------------------------------------------------------------------------
 # generate_image — always writes PNG
 # ---------------------------------------------------------------------------
-
-
-class TestGenerateImageAlwaysWritesPng:
-    """generate_image() always writes PNG files regardless of config."""
-
-    def test_generate_image_always_writes_png(self, tmp_path, fake_provider):
-        """File extension is always .png."""
-        config = AppConfig(
-            images=ImageConfig(
-                style_prefix="Art:",
-                size="1536x1024",
-                quality="high",
-            )
-        )
-        state = ProjectState.create("png-test", InputMode.ADAPT, config, tmp_path)
-        state.add_scene(1, "Scene One", "Some text.")
-        state.metadata.scenes[0].image_prompt = "A sunrise"
-        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
-        state.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
-
-        scene = state.metadata.scenes[0]
-        generate_image(scene, state, fake_provider)
-
-        image_path = state.project_dir / "images" / "scene_001.png"
-        assert image_path.exists()
 
 
 # ---------------------------------------------------------------------------

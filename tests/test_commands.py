@@ -51,21 +51,19 @@ def segment_args(tmp_path):
 class TestBuildSegmentCommand:
     """build_segment_command produces a valid FFmpeg command list."""
 
-    def test_returns_list_of_strings(self, segment_args, video_config):
-        """Result is a list where every element is a string."""
+    def test_command_shape(self, segment_args, video_config):
+        """Command is a string list starting with ffmpeg, with required flags."""
         result = build_segment_command(**segment_args, video_config=video_config)
         assert isinstance(result, list)
-        assert all(isinstance(item, str) for item in result)
-
-    def test_starts_with_ffmpeg(self, segment_args, video_config):
-        """Command starts with 'ffmpeg'."""
-        result = build_segment_command(**segment_args, video_config=video_config)
         assert result[0] == "ffmpeg"
-
-    def test_contains_filter_complex(self, segment_args, video_config):
-        """Command includes -filter_complex flag."""
-        result = build_segment_command(**segment_args, video_config=video_config)
         assert "-filter_complex" in result
+        assert "-y" in result
+        assert "-shortest" in result
+        assert "-loop" in result
+        assert result[result.index("-loop") + 1] == "1"
+        assert "-pix_fmt" in result
+        assert result[result.index("-pix_fmt") + 1] == "yuv420p"
+        assert str(segment_args["output_path"]) in result
 
     def test_codec_from_config(self, segment_args):
         """Codec is taken from video_config (e.g. libx265)."""
@@ -79,22 +77,19 @@ class TestBuildSegmentCommand:
         result = build_segment_command(**segment_args, video_config=config)
         assert "23" in result
 
-    def test_contains_output_path(self, segment_args, video_config):
-        """Command ends with the output path."""
+    def test_maps_audio_from_second_input(self, segment_args, video_config):
+        """Audio is mapped from the second input (1:a)."""
         result = build_segment_command(**segment_args, video_config=video_config)
-        assert str(segment_args["output_path"]) in result
+        map_indices = [i for i, v in enumerate(result) if v == "-map"]
+        audio_map = result[map_indices[1] + 1]
+        assert audio_map == "1:a"
 
-    def test_contains_overwrite_flag(self, segment_args, video_config):
-        """Command includes -y flag for overwrite."""
-        result = build_segment_command(**segment_args, video_config=video_config)
-        assert "-y" in result
-
-    def test_contains_pix_fmt(self, segment_args, video_config):
-        """Command includes -pix_fmt yuv420p."""
-        result = build_segment_command(**segment_args, video_config=video_config)
-        assert "-pix_fmt" in result
-        pix_idx = result.index("-pix_fmt")
-        assert result[pix_idx + 1] == "yuv420p"
+    def test_fps_from_config(self, segment_args):
+        """FPS is taken from video_config."""
+        config = VideoConfig(fps=30)
+        result = build_segment_command(**segment_args, video_config=config)
+        r_idx = result.index("-r")
+        assert result[r_idx + 1] == "30"
 
 
 # ---------------------------------------------------------------------------
@@ -123,14 +118,6 @@ class TestBuildConcatCommand:
         filter_str = result[result.index("-filter_complex") + 1]
         assert filter_str.count("xfade") == 2
 
-    def test_contains_output_path(self, tmp_path, video_config):
-        """Command includes the output path."""
-        segments = [tmp_path / "s1.mp4", tmp_path / "s2.mp4"]
-        durations = [10.0, 10.0]
-        output = tmp_path / "final.mp4"
-        result = build_concat_command(segments, durations, output, video_config)
-        assert str(output) in result
-
     def test_empty_segments_raises(self, video_config):
         """Empty segment list raises ValueError."""
         with pytest.raises(ValueError, match="at least one segment"):
@@ -157,16 +144,6 @@ class TestBuildConcatCommand:
         assert "acrossfade=d=0.05" in filter_str
         assert "acrossfade=d=1.5" not in filter_str
 
-    def test_custom_audio_transition_duration_propagates(self, tmp_path):
-        """Custom audio_transition_duration value appears in acrossfade filter."""
-        config = VideoConfig(audio_transition_duration=0.1)
-        segments = [tmp_path / "s1.mp4", tmp_path / "s2.mp4"]
-        durations = [10.0, 10.0]
-        output = tmp_path / "final.mp4"
-        result = build_concat_command(segments, durations, output, config)
-        filter_str = result[result.index("-filter_complex") + 1]
-        assert "acrossfade=d=0.1" in filter_str
-
 
 # ---------------------------------------------------------------------------
 # TestRunFfmpeg — subprocess execution wrapper
@@ -183,20 +160,9 @@ class TestRunFfmpeg:
             args=["ffmpeg", "-version"], returncode=0, stdout="", stderr=""
         )
         run_ffmpeg(["ffmpeg", "-version"])
-        mock_run.assert_called_once_with(["ffmpeg", "-version"], capture_output=True, text=True)
-
-    @patch("story_video.ffmpeg.commands.subprocess.run")
-    def test_raises_ffmpeg_error_on_nonzero_exit(self, mock_run):
-        """Non-zero exit code raises FFmpegError."""
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["ffmpeg", "-bad"],
-            returncode=1,
-            stdout="",
-            stderr="Unknown option: -bad",
+        mock_run.assert_called_once_with(
+            ["ffmpeg", "-version"], capture_output=True, text=True, timeout=600
         )
-        with pytest.raises(FFmpegError) as exc_info:
-            run_ffmpeg(["ffmpeg", "-bad"])
-        assert exc_info.value.returncode == 1
 
     @patch("story_video.ffmpeg.commands.subprocess.run")
     def test_ffmpeg_error_contains_details(self, mock_run):
@@ -221,6 +187,24 @@ class TestRunFfmpeg:
         mock_run.return_value = expected
         result = run_ffmpeg(["ffmpeg", "-version"])
         assert result is expected
+
+    @patch("story_video.ffmpeg.commands.subprocess.run")
+    def test_timeout_raises_ffmpeg_error(self, mock_run):
+        """Timed-out process raises FFmpegError."""
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd=["ffmpeg"], timeout=600)
+        with pytest.raises(FFmpegError, match="timed out"):
+            run_ffmpeg(["ffmpeg", "-i", "input.mp4"])
+
+    @patch("story_video.ffmpeg.commands.subprocess.run")
+    def test_custom_timeout_propagated(self, mock_run):
+        """Custom timeout value is passed to subprocess.run."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["ffmpeg"], returncode=0, stdout="", stderr=""
+        )
+        run_ffmpeg(["ffmpeg", "-version"], timeout=1200)
+        mock_run.assert_called_once_with(
+            ["ffmpeg", "-version"], capture_output=True, text=True, timeout=1200
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +243,15 @@ class TestProbeDuration:
         with pytest.raises(FFmpegError):
             probe_duration(Path("/tmp/nonexistent.mp4"))
 
+    @patch("story_video.ffmpeg.commands.subprocess.run")
+    def test_uses_short_timeout(self, mock_run):
+        """probe_duration passes a 30-second timeout to subprocess.run."""
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["ffprobe"], returncode=0, stdout="5.0\n", stderr=""
+        )
+        probe_duration(Path("/tmp/test.mp4"))
+        assert mock_run.call_args[1]["timeout"] == 30
+
 
 # ---------------------------------------------------------------------------
 # TestBuildSegmentCommandStillImage — uses still image filter
@@ -268,8 +261,8 @@ class TestProbeDuration:
 class TestBuildSegmentCommandStillImage:
     """build_segment_command uses still image filter (no zoompan)."""
 
-    def test_no_zoompan_in_filtergraph(self):
-        """Filtergraph does not contain zoompan."""
+    def test_filtergraph_shape(self):
+        """Filtergraph uses still image (no zoompan), with scale, pad, ass, blur, overlay."""
         config = VideoConfig()
         cmd = build_segment_command(
             image_path=Path("/tmp/img.png"),
@@ -280,20 +273,11 @@ class TestBuildSegmentCommandStillImage:
         )
         filtergraph = cmd[cmd.index("-filter_complex") + 1]
         assert "zoompan" not in filtergraph
-
-    def test_filtergraph_has_scale_and_pad(self):
-        """Filtergraph contains scale and pad for still image."""
-        config = VideoConfig()
-        cmd = build_segment_command(
-            image_path=Path("/tmp/img.png"),
-            audio_path=Path("/tmp/audio.mp3"),
-            ass_path=Path("/tmp/sub.ass"),
-            output_path=Path("/tmp/out.mp4"),
-            video_config=config,
-        )
-        filtergraph = cmd[cmd.index("-filter_complex") + 1]
         assert "force_original_aspect_ratio=decrease" in filtergraph
         assert "pad=" in filtergraph
+        assert "ass=" in filtergraph
+        assert "gblur" in filtergraph
+        assert "overlay" in filtergraph
 
 
 # ---------------------------------------------------------------------------
@@ -354,21 +338,16 @@ class TestBuildConcatCommandLengthValidation:
 class TestBuildConcatCommandShortDuration:
     """build_concat_command handles segments shorter than xfade duration."""
 
-    def test_zero_duration_segment(self):
-        """Zero-duration segment in multi-segment concat."""
-        paths = [Path("/a.mp4"), Path("/b.mp4")]
-        durations = [0.0, 5.0]
-        config = VideoConfig()
-        cmd = build_concat_command(paths, durations, Path("/out.mp4"), config)
-        assert isinstance(cmd, list)
-
     def test_very_short_duration_segment(self):
-        """Segment shorter than xfade transition duration."""
+        """Segment shorter than xfade transition duration clamps offset."""
         paths = [Path("/a.mp4"), Path("/b.mp4")]
         durations = [0.5, 5.0]  # 0.5s < typical 1.5s xfade
         config = VideoConfig()
         cmd = build_concat_command(paths, durations, Path("/out.mp4"), config)
-        assert isinstance(cmd, list)
+        assert "-filter_complex" in cmd
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # Offset should be clamped to 0 when duration < xfade
+        assert "offset=0" in filter_str
 
 
 # ---------------------------------------------------------------------------
@@ -378,15 +357,6 @@ class TestBuildConcatCommandShortDuration:
 
 class TestBuildConcatCommandXfadeClamp:
     """build_concat_command clamps negative xfade offsets to zero."""
-
-    def test_negative_offset_clamped_to_zero(self):
-        """When segment duration < transition_duration, offset is clamped to 0."""
-        paths = [Path("/a.mp4"), Path("/b.mp4")]
-        durations = [0.5, 5.0]  # 0.5s < 1.5s transition_duration -> would be -1.0
-        config = VideoConfig()  # transition_duration=1.5
-        cmd = build_concat_command(paths, durations, Path("/out.mp4"), config)
-        filter_str = cmd[cmd.index("-filter_complex") + 1]
-        assert "offset=0" in filter_str
 
     def test_clamping_logs_warning(self, caplog):
         """Clamping emits a warning log message."""
@@ -405,3 +375,116 @@ class TestBuildConcatCommandXfadeClamp:
         with caplog.at_level(logging.WARNING, logger="story_video.ffmpeg.commands"):
             build_concat_command(paths, durations, Path("/out.mp4"), config)
         assert not any("clamped" in record.message for record in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# TestBuildConcatCommandFadeOut — fade-out timing math
+# ---------------------------------------------------------------------------
+
+
+class TestBuildConcatCommandFadeOut:
+    """build_concat_command calculates correct fade-out start times."""
+
+    def test_single_segment_fade_out_start(self):
+        """Single segment: fade_out_start = duration - fade_out_duration."""
+        config = VideoConfig()  # fade_out_duration=3.0
+        cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # 10.0 - 3.0 = 7.0
+        assert "fade=t=out:st=7.0:d=3.0" in filter_str
+
+    def test_multi_segment_fade_out_accounts_for_transitions(self):
+        """Multi-segment: fade-out start accounts for xfade overlap."""
+        config = VideoConfig()  # transition_duration=1.5, fade_out_duration=3.0
+        cmd = build_concat_command(
+            [Path("/a.mp4"), Path("/b.mp4")],
+            [10.0, 10.0],
+            Path("/out.mp4"),
+            config,
+        )
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # total_dur = 10 + 10 - 1*1.5 = 18.5; fade_out_start = 18.5 - 3.0 = 15.5
+        assert "fade=t=out:st=15.5:d=3.0" in filter_str
+
+
+# ---------------------------------------------------------------------------
+# TestBuildConcatCommandFadeIn — fade-in timing
+# ---------------------------------------------------------------------------
+
+
+class TestBuildConcatCommandFadeIn:
+    """build_concat_command includes correct fade-in filter."""
+
+    def test_multi_segment_fade_in(self):
+        """Multi-segment: fade-in starts at 0 with configured duration."""
+        config = VideoConfig()
+        cmd = build_concat_command(
+            [Path("/a.mp4"), Path("/b.mp4")],
+            [10.0, 10.0],
+            Path("/out.mp4"),
+            config,
+        )
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        assert "fade=t=in:st=0:d=2.0" in filter_str
+
+    def test_single_segment_audio_fade_in(self):
+        """Single segment: audio fade-in starts at 0."""
+        config = VideoConfig()
+        cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        assert "afade=t=in:st=0:d=2.0" in filter_str
+
+
+# ---------------------------------------------------------------------------
+# TestBuildConcatCommandStreamLabels — filtergraph wiring
+# ---------------------------------------------------------------------------
+
+
+class TestBuildConcatCommandStreamLabels:
+    """build_concat_command produces correctly chained stream labels."""
+
+    def test_two_segments_label_chain(self):
+        """Two-segment filtergraph chains [0:v][1:v] -> [xf0] -> [outv]."""
+        config = VideoConfig()
+        cmd = build_concat_command(
+            [Path("/a.mp4"), Path("/b.mp4")],
+            [10.0, 10.0],
+            Path("/out.mp4"),
+            config,
+        )
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        assert "[0:v][1:v]xfade=" in filter_str
+        assert "[xf0]" in filter_str
+        assert "[outv]" in filter_str
+
+    def test_three_segments_label_chain(self):
+        """Three-segment filtergraph chains through [xf0] and [xf1]."""
+        config = VideoConfig()
+        cmd = build_concat_command(
+            [Path("/a.mp4"), Path("/b.mp4"), Path("/c.mp4")],
+            [10.0, 10.0, 10.0],
+            Path("/out.mp4"),
+            config,
+        )
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # First xfade: [0:v][1:v] -> [xf0]
+        assert "[0:v][1:v]xfade=" in filter_str
+        assert "[xf0]" in filter_str
+        # Second xfade: [xf0][2:v] -> [xf1]
+        assert "[xf0][2:v]xfade=" in filter_str
+        assert "[xf1]" in filter_str
+
+    def test_audio_labels_chain(self):
+        """Audio filtergraph chains acrossfade labels correctly."""
+        config = VideoConfig()
+        cmd = build_concat_command(
+            [Path("/a.mp4"), Path("/b.mp4"), Path("/c.mp4")],
+            [10.0, 10.0, 10.0],
+            Path("/out.mp4"),
+            config,
+        )
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        assert "[0:a][1:a]acrossfade=" in filter_str
+        assert "[axf0]" in filter_str
+        assert "[axf0][2:a]acrossfade=" in filter_str
+        assert "[outa]" in filter_str

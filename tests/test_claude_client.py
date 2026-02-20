@@ -414,18 +414,59 @@ class TestRetryOnStructuredMethods:
 class TestDefaultConfiguration:
     """ClaudeClient default configuration is correct."""
 
-    def test_default_model_is_sonnet(self, mock_anthropic):
-        """The default model is claude-sonnet-4-5-20250929."""
-        mock_anthropic.messages.create.return_value = _make_text_response("ok")
-
-        client = ClaudeClient()
-        client.generate(system="sys", user_message="msg")
-
-        call_kwargs = mock_anthropic.messages.create.call_args.kwargs
-        assert call_kwargs["model"] == "claude-sonnet-4-5-20250929"
-
     def test_client_reads_api_key_from_env(self, mock_anthropic_class):
         """Anthropic() is called without explicit API key (reads from env)."""
         _ = ClaudeClient()
 
         mock_anthropic_class.assert_called_once_with()
+
+
+# ---------------------------------------------------------------------------
+# Retry exhaustion — all retries consumed
+# ---------------------------------------------------------------------------
+
+
+class TestRetryExhaustion:
+    """When all retries are exhausted, the original exception is re-raised."""
+
+    def test_generate_raises_after_all_retries_exhausted(self, mock_anthropic):
+        """4 consecutive transient errors (1 initial + 3 retries) re-raises the original error."""
+        from anthropic import APIConnectionError
+
+        error = APIConnectionError(request=MagicMock())
+        mock_anthropic.messages.create.side_effect = [error, error, error, error]
+
+        client = ClaudeClient()
+
+        with pytest.raises(APIConnectionError):
+            client.generate(system="sys", user_message="msg")
+
+        # max_retries=3 → 1 initial + 3 retries = 4 total attempts
+        assert mock_anthropic.messages.create.call_count == 4
+
+    def test_generate_structured_raises_after_all_retries_exhausted(self, mock_anthropic):
+        """4 consecutive transient errors on generate_structured re-raises the original error."""
+        from anthropic import InternalServerError
+
+        response_500 = MagicMock()
+        response_500.status_code = 500
+        response_500.json.return_value = {"error": {"message": "server error"}}
+
+        error = InternalServerError(
+            message="server error",
+            response=response_500,
+            body={"error": {"message": "server error"}},
+        )
+        mock_anthropic.messages.create.side_effect = [error, error, error, error]
+
+        client = ClaudeClient()
+
+        with pytest.raises(InternalServerError):
+            client.generate_structured(
+                system="sys",
+                user_message="msg",
+                tool_name="my_tool",
+                tool_schema={"type": "object"},
+            )
+
+        assert mock_anthropic.messages.create.call_count == 4

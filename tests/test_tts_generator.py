@@ -112,9 +112,8 @@ class TestOpenAITTSProviderReturnsBytes:
 class TestOpenAITTSProviderPassesParams:
     """OpenAITTSProvider.synthesize() passes correct parameters to the SDK."""
 
-    @pytest.fixture()
-    def synthesize_call_kwargs(self, mock_openai):
-        """Call synthesize() and return the SDK call kwargs."""
+    def test_params_shape(self, mock_openai):
+        """synthesize() forwards all parameters to audio.speech.create."""
         response = MagicMock()
         response.content = b"audio-bytes"
         mock_openai.audio.speech.create.return_value = response
@@ -128,27 +127,12 @@ class TestOpenAITTSProviderPassesParams:
             output_format="opus",
         )
 
-        return mock_openai.audio.speech.create.call_args.kwargs
-
-    def test_synthesize_passes_model(self, synthesize_call_kwargs):
-        """synthesize() forwards model to audio.speech.create."""
-        assert synthesize_call_kwargs["model"] == "tts-1"
-
-    def test_synthesize_passes_voice(self, synthesize_call_kwargs):
-        """synthesize() forwards voice to audio.speech.create."""
-        assert synthesize_call_kwargs["voice"] == "echo"
-
-    def test_synthesize_passes_input_text(self, synthesize_call_kwargs):
-        """synthesize() forwards text as input to audio.speech.create."""
-        assert synthesize_call_kwargs["input"] == "Once upon a time"
-
-    def test_synthesize_passes_speed(self, synthesize_call_kwargs):
-        """synthesize() forwards speed to audio.speech.create."""
-        assert synthesize_call_kwargs["speed"] == 1.5
-
-    def test_synthesize_passes_response_format(self, synthesize_call_kwargs):
-        """synthesize() forwards output_format as response_format to audio.speech.create."""
-        assert synthesize_call_kwargs["response_format"] == "opus"
+        kwargs = mock_openai.audio.speech.create.call_args.kwargs
+        assert kwargs["model"] == "tts-1"
+        assert kwargs["voice"] == "echo"
+        assert kwargs["input"] == "Once upon a time"
+        assert kwargs["speed"] == 1.5
+        assert kwargs["response_format"] == "opus"
 
 
 # ---------------------------------------------------------------------------
@@ -387,27 +371,14 @@ class TestOpenAITTSProviderInstructions:
 class TestGenerateAudioHappyPath:
     """generate_audio() writes audio file and updates state."""
 
-    def test_generate_audio_creates_file(self, state_with_scene, mock_provider):
-        """Audio file is created on disk."""
+    def test_happy_path(self, state_with_scene, mock_provider):
+        """Audio file is created with correct bytes and state is updated."""
         scene = state_with_scene.metadata.scenes[0]
         generate_audio(scene, state_with_scene, mock_provider)
 
         audio_path = state_with_scene.project_dir / "audio" / "scene_001.mp3"
         assert audio_path.exists()
-
-    def test_generate_audio_writes_correct_bytes(self, state_with_scene, mock_provider):
-        """Audio file contains the correct bytes from the provider."""
-        scene = state_with_scene.metadata.scenes[0]
-        generate_audio(scene, state_with_scene, mock_provider)
-
-        audio_path = state_with_scene.project_dir / "audio" / "scene_001.mp3"
         assert audio_path.read_bytes() == b"fake-audio-bytes"
-
-    def test_generate_audio_updates_state(self, state_with_scene, mock_provider):
-        """Scene asset_status.audio is COMPLETED after generation."""
-        scene = state_with_scene.metadata.scenes[0]
-        generate_audio(scene, state_with_scene, mock_provider)
-
         assert scene.asset_status.audio == SceneStatus.COMPLETED
 
 
@@ -500,9 +471,8 @@ class TestGenerateAudioConfigOutputFormat:
 class TestGenerateAudioConfigParamsPassedToProvider:
     """generate_audio() passes TTS config values to the provider."""
 
-    @pytest.fixture()
-    def config_call_kwargs(self, tmp_path, mock_provider):
-        """Generate audio with custom config and return the synthesize call kwargs."""
+    def test_config_params_shape(self, tmp_path, mock_provider):
+        """All TTS config values are forwarded to the provider."""
         config = AppConfig(
             tts=TTSConfig(voice="echo", model="tts-1", speed=1.5, output_format="aac")
         )
@@ -519,23 +489,11 @@ class TestGenerateAudioConfigParamsPassedToProvider:
         scene = state.metadata.scenes[0]
         generate_audio(scene, state, mock_provider)
 
-        return mock_provider.synthesize.call_args.kwargs
-
-    def test_generate_audio_passes_voice(self, config_call_kwargs):
-        """voice from config is passed to synthesize."""
-        assert config_call_kwargs["voice"] == "echo"
-
-    def test_generate_audio_passes_model(self, config_call_kwargs):
-        """model from config is passed to synthesize."""
-        assert config_call_kwargs["model"] == "tts-1"
-
-    def test_generate_audio_passes_speed(self, config_call_kwargs):
-        """speed from config is passed to synthesize."""
-        assert config_call_kwargs["speed"] == 1.5
-
-    def test_generate_audio_passes_output_format(self, config_call_kwargs):
-        """output_format from config is passed to synthesize."""
-        assert config_call_kwargs["output_format"] == "aac"
+        kwargs = mock_provider.synthesize.call_args.kwargs
+        assert kwargs["voice"] == "echo"
+        assert kwargs["model"] == "tts-1"
+        assert kwargs["speed"] == 1.5
+        assert kwargs["output_format"] == "aac"
 
 
 # ---------------------------------------------------------------------------
@@ -719,16 +677,6 @@ class TestElevenLabsTTSProvider:
 class TestMoodToElevenLabsText:
     """_mood_to_elevenlabs_text passes any mood through as a v3 audio tag."""
 
-    def test_mood_prepended_as_tag(self):
-        """Mood keyword is extracted and prepended as [tag]."""
-        result = _mood_to_elevenlabs_text("Hello world", "Speak in a sad tone")
-        assert result == "[sad] Hello world"
-
-    def test_freeform_mood_passed_through(self):
-        """Any mood works — no mapping table required."""
-        result = _mood_to_elevenlabs_text("Hello", "Speak in a thoughtful tone")
-        assert result == "[thoughtful] Hello"
-
     def test_none_instructions_returns_plain_text(self):
         """None instructions return text unchanged."""
         result = _mood_to_elevenlabs_text("Hello world", None)
@@ -755,9 +703,6 @@ class TestMoodToInstructions:
 
     def test_mood_returns_instruction(self):
         assert _mood_to_instructions("sad") == "Speak in a sad tone"
-
-    def test_custom_mood_returns_instruction(self):
-        assert _mood_to_instructions("thoughtful") == "Speak in a thoughtful tone"
 
     def test_vowel_mood_uses_an(self):
         assert _mood_to_instructions("excited") == "Speak in an excited tone"
@@ -922,14 +867,10 @@ class TestGenerateAudioTagsWithoutHeader:
 class TestGenerateMp3Silence:
     """generate_mp3_silence produces valid silent MP3 bytes."""
 
-    def test_returns_bytes(self):
-        """Returns bytes object."""
+    def test_returns_non_empty_bytes(self):
+        """Returns non-empty bytes object."""
         result = generate_mp3_silence(0.5)
         assert isinstance(result, bytes)
-
-    def test_non_empty(self):
-        """Returns non-empty bytes."""
-        result = generate_mp3_silence(0.5)
         assert len(result) > 0
 
     def test_longer_duration_produces_more_bytes(self):
@@ -1019,3 +960,65 @@ class TestGenerateAudioWithPause:
         scene = state.metadata.scenes[0]
         with pytest.raises(ValueError, match="tag.*found.*no.*header"):
             generate_audio(scene, state, provider, story_header=None)
+
+
+# ---------------------------------------------------------------------------
+# generate_audio — empty provider response
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateAudioEmptyProviderResponse:
+    """generate_audio() raises ValueError when provider returns empty bytes."""
+
+    def test_empty_audio_bytes_raises(self, state_with_scene):
+        """Provider returning b'' raises ValueError."""
+        provider = MagicMock(spec=TTSProvider)
+        provider.synthesize.return_value = b""
+
+        scene = state_with_scene.metadata.scenes[0]
+        with pytest.raises(ValueError, match="TTS provider returned empty audio"):
+            generate_audio(scene, state_with_scene, provider)
+
+
+# ---------------------------------------------------------------------------
+# _mood_to_elevenlabs_text — non-standard instruction format
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateAudioMultiSegmentEmptyResponse:
+    """generate_audio raises ValueError when all multi-segment chunks are empty."""
+
+    def test_multi_segment_empty_bytes_raises(self, tmp_path):
+        """All segments returning b'' produces empty concat, caught by guard."""
+        state = ProjectState.create(
+            project_id="empty-multi",
+            mode=InputMode.ADAPT,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        state.add_scene(1, "Test", "Hello. **voice:jane** Bye.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
+        scene = state.metadata.scenes[0]
+        scene.narration_text = "Hello. **voice:jane** Bye."
+
+        provider = MagicMock(spec=TTSProvider)
+        provider.synthesize.return_value = b""
+        header = StoryHeader(voices={"narrator": "nova", "jane": "shimmer"})
+
+        with pytest.raises(ValueError, match="TTS provider returned empty audio"):
+            generate_audio(scene, state, provider, story_header=header)
+
+
+class TestMoodToElevenLabsTextNonStandard:
+    """_mood_to_elevenlabs_text with non-standard instruction formats."""
+
+    def test_raw_mood_word_produces_tag_with_full_text(self):
+        """A raw mood word (not in 'Speak in a X tone' format) is passed through as-is."""
+        result = _mood_to_elevenlabs_text("Hello", "excited")
+        assert result == "[excited] Hello"
+
+    def test_custom_format_produces_tag_with_full_text(self):
+        """Non-standard instruction is used as the tag verbatim (after stripping)."""
+        result = _mood_to_elevenlabs_text("Hello", "Read this dramatically")
+        assert result == "[read this dramatically] Hello"

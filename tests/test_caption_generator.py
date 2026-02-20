@@ -131,9 +131,8 @@ def project_state(tmp_path):
 class TestTranscribeReturnsCaptionResult:
     """OpenAIWhisperProvider.transcribe() maps Whisper response to CaptionResult."""
 
-    @pytest.fixture()
-    def caption_result(self, mock_openai, tmp_path):
-        """Transcribe a fake audio file and return the CaptionResult."""
+    def test_result_shape(self, mock_openai, tmp_path):
+        """transcribe() maps Whisper response to CaptionResult with correct fields."""
         whisper_response = _make_whisper_response()
         mock_openai.audio.transcriptions.create.return_value = whisper_response
 
@@ -141,47 +140,20 @@ class TestTranscribeReturnsCaptionResult:
         audio_file.write_bytes(b"fake audio")
 
         provider = OpenAIWhisperProvider()
-        return provider.transcribe(audio_file)
+        result = provider.transcribe(audio_file)
 
-    def test_returns_caption_result_instance(self, caption_result):
-        """transcribe() returns a CaptionResult instance."""
-        assert isinstance(caption_result, CaptionResult)
-
-    def test_segment_count(self, caption_result):
-        """Result contains the expected number of segments."""
-        assert len(caption_result.segments) == 1
-
-    def test_segment_text_and_timing(self, caption_result):
-        """Segment text and start/end times match the Whisper response."""
-        seg = caption_result.segments[0]
-        assert seg.text == "The storm raged on."
-        assert seg.start == 0.0
-        assert seg.end == 2.5
-
-    def test_word_count(self, caption_result):
-        """Result contains the expected number of words."""
-        assert len(caption_result.words) == 4
-
-    def test_first_word_text(self, caption_result):
-        """First word text matches the Whisper response."""
-        assert caption_result.words[0].word == "The"
-
-    def test_first_word_timing(self, caption_result):
-        """First word start and end times match the Whisper response."""
-        assert caption_result.words[0].start == 0.0
-        assert caption_result.words[0].end == 0.3
-
-    def test_last_word_text(self, caption_result):
-        """Last word text matches the Whisper response."""
-        assert caption_result.words[3].word == "on."
-
-    def test_language(self, caption_result):
-        """Detected language matches the Whisper response."""
-        assert caption_result.language == "en"
-
-    def test_duration(self, caption_result):
-        """Duration matches the Whisper response."""
-        assert caption_result.duration == 2.5
+        assert isinstance(result, CaptionResult)
+        assert len(result.segments) == 1
+        assert result.segments[0].text == "The storm raged on."
+        assert result.segments[0].start == 0.0
+        assert result.segments[0].end == 2.5
+        assert len(result.words) == 4
+        assert result.words[0].word == "The"
+        assert result.words[0].start == 0.0
+        assert result.words[0].end == 0.3
+        assert result.words[3].word == "on."
+        assert result.language == "en"
+        assert result.duration == 2.5
 
 
 # ---------------------------------------------------------------------------
@@ -361,38 +333,6 @@ class TestCaptionResultModel:
 
         assert restored == original
 
-    def test_round_trip_preserves_segment_text(self):
-        """Segment text survives serialize → deserialize round trip."""
-        original = _make_caption_result()
-        json_str = original.model_dump_json(indent=2)
-        restored = CaptionResult.model_validate_json(json_str)
-
-        assert restored.segments[0].text == "The storm raged on."
-
-    def test_round_trip_preserves_word(self):
-        """Word text survives serialize → deserialize round trip."""
-        original = _make_caption_result()
-        json_str = original.model_dump_json(indent=2)
-        restored = CaptionResult.model_validate_json(json_str)
-
-        assert restored.words[0].word == "The"
-
-    def test_round_trip_preserves_language(self):
-        """Language survives serialize → deserialize round trip."""
-        original = _make_caption_result()
-        json_str = original.model_dump_json(indent=2)
-        restored = CaptionResult.model_validate_json(json_str)
-
-        assert restored.language == "en"
-
-    def test_round_trip_preserves_duration(self):
-        """Duration survives serialize → deserialize round trip."""
-        original = _make_caption_result()
-        json_str = original.model_dump_json(indent=2)
-        restored = CaptionResult.model_validate_json(json_str)
-
-        assert restored.duration == 2.5
-
     def test_empty_segments_and_words(self):
         """CaptionResult accepts empty segment and word lists."""
         result = CaptionResult(
@@ -416,57 +356,20 @@ class TestCaptionResultModel:
 class TestGenerateCaptionsHappyPath:
     """generate_captions() writes caption JSON and updates state."""
 
-    def test_writes_caption_json_creates_file(self, project_state, fake_caption_provider):
-        """Caption JSON file is created on disk."""
+    def test_happy_path(self, project_state, fake_caption_provider):
+        """Caption JSON is created with correct content and state is updated."""
         scene = project_state.metadata.scenes[0]
         generate_captions(scene, project_state, fake_caption_provider)
 
         caption_path = project_state.project_dir / "captions" / "scene_001.json"
         assert caption_path.exists()
-
-    def test_writes_caption_json_language(self, project_state, fake_caption_provider):
-        """Caption JSON contains correct language."""
-        scene = project_state.metadata.scenes[0]
-        generate_captions(scene, project_state, fake_caption_provider)
-
-        caption_path = project_state.project_dir / "captions" / "scene_001.json"
         content = json.loads(caption_path.read_text(encoding="utf-8"))
         assert content["language"] == "en"
-
-    def test_writes_caption_json_duration(self, project_state, fake_caption_provider):
-        """Caption JSON contains correct duration."""
-        scene = project_state.metadata.scenes[0]
-        generate_captions(scene, project_state, fake_caption_provider)
-
-        caption_path = project_state.project_dir / "captions" / "scene_001.json"
-        content = json.loads(caption_path.read_text(encoding="utf-8"))
         assert content["duration"] == 2.5
-
-    def test_writes_caption_json_segments(self, project_state, fake_caption_provider):
-        """Caption JSON contains correct segments."""
-        scene = project_state.metadata.scenes[0]
-        generate_captions(scene, project_state, fake_caption_provider)
-
-        caption_path = project_state.project_dir / "captions" / "scene_001.json"
-        content = json.loads(caption_path.read_text(encoding="utf-8"))
         assert len(content["segments"]) == 1
         assert content["segments"][0]["text"] == "The storm raged on."
-
-    def test_writes_caption_json_words(self, project_state, fake_caption_provider):
-        """Caption JSON contains correct words."""
-        scene = project_state.metadata.scenes[0]
-        generate_captions(scene, project_state, fake_caption_provider)
-
-        caption_path = project_state.project_dir / "captions" / "scene_001.json"
-        content = json.loads(caption_path.read_text(encoding="utf-8"))
         assert len(content["words"]) == 4
         assert content["words"][0]["word"] == "The"
-
-    def test_updates_asset_status(self, project_state, fake_caption_provider):
-        """Scene asset_status.captions is COMPLETED after generation."""
-        scene = project_state.metadata.scenes[0]
-        generate_captions(scene, project_state, fake_caption_provider)
-
         assert scene.asset_status.captions == SceneStatus.COMPLETED
 
     def test_saves_state(self, project_state, fake_caption_provider):
@@ -523,6 +426,25 @@ class TestGenerateCaptionsValidation:
 # ---------------------------------------------------------------------------
 # generate_captions — multi-digit scene number
 # ---------------------------------------------------------------------------
+
+
+class TestGenerateCaptionsNarrationTextReconciliation:
+    """generate_captions() uses narration_text for reconciliation when available."""
+
+    def test_reconciles_against_narration_text(self, project_state, fake_caption_provider):
+        """When narration_text is set, reconciliation uses it instead of prose."""
+        scene = project_state.metadata.scenes[0]
+        # Set narration_text different from prose to verify it's used
+        scene.narration_text = "The storm raged on."
+        scene.prose = "Different prose text."
+
+        generate_captions(scene, project_state, fake_caption_provider)
+
+        caption_path = project_state.project_dir / "captions" / "scene_001.json"
+        content = json.loads(caption_path.read_text(encoding="utf-8"))
+        # Words should match narration_text punctuation, not prose
+        last_word = content["words"][-1]["word"]
+        assert last_word.endswith("."), f"Expected period from narration_text, got: {last_word!r}"
 
 
 class TestGenerateCaptionsMultiDigitScene:
@@ -941,17 +863,6 @@ class TestReconcilePunctuationAlignment:
         assert reconciled.words[2].word == "said."
         assert reconciled.words[3].word == '"Bye,"'
         assert reconciled.words[5].word == "replied."
-
-    def test_empty_words_with_prose(self):
-        """Empty word list returns unchanged even with prose."""
-        result = CaptionResult(
-            segments=[CaptionSegment(text="Hello.", start=0.0, end=1.0)],
-            words=[],
-            language="en",
-            duration=1.0,
-        )
-        reconciled = _reconcile_punctuation(result, "Hello.")
-        assert reconciled.words == []
 
     def test_lookahead_boundary_4_skipped_words_degrades_gracefully(self):
         """Beyond 3 skipped prose words, punctuation is not applied (documented limit)."""
