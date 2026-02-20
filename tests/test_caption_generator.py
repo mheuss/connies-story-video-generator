@@ -21,6 +21,11 @@ from story_video.pipeline.caption_generator import (
     generate_captions,
 )
 from story_video.state import ProjectState
+from tests.error_factories import (
+    make_openai_connection_error,
+    make_openai_rate_limit_error,
+    make_openai_server_error,
+)
 
 # ---------------------------------------------------------------------------
 # Test data
@@ -208,14 +213,17 @@ class TestTranscribePassesCorrectParams:
 class TestTranscribeRetryBehavior:
     """OpenAIWhisperProvider.transcribe() retries on transient API errors."""
 
-    def test_retries_on_connection_error(self, mock_openai, tmp_path):
-        """transcribe() retries on APIConnectionError then succeeds."""
-        from tests.error_factories import make_openai_connection_error
-
+    @pytest.mark.parametrize(
+        "error_factory",
+        [make_openai_connection_error, make_openai_rate_limit_error, make_openai_server_error],
+        ids=["connection", "rate_limit", "server"],
+    )
+    def test_transcribe_retries_on_transient_error(self, mock_openai, tmp_path, error_factory):
+        """transcribe() retries on transient error then succeeds."""
         whisper_response = _make_whisper_response()
 
         mock_openai.audio.transcriptions.create.side_effect = [
-            make_openai_connection_error(),
+            error_factory(),
             whisper_response,
         ]
 
@@ -228,58 +236,29 @@ class TestTranscribeRetryBehavior:
         assert isinstance(result, CaptionResult)
         assert mock_openai.audio.transcriptions.create.call_count == 2
 
-    def test_retries_on_rate_limit(self, mock_openai, tmp_path):
-        """transcribe() retries on RateLimitError then succeeds."""
-        from tests.error_factories import make_openai_rate_limit_error
+    @pytest.mark.parametrize(
+        "error_name,status,message",
+        [
+            ("AuthenticationError", 401, "invalid key"),
+            ("PermissionDeniedError", 403, "permission denied"),
+        ],
+        ids=["auth", "permission"],
+    )
+    def test_transcribe_no_retry_on_permanent_error(
+        self, mock_openai, tmp_path, error_name, status, message
+    ):
+        """transcribe() does not retry on permanent error."""
+        import openai
 
-        whisper_response = _make_whisper_response()
+        error_cls = getattr(openai, error_name)
+        mock_response = MagicMock()
+        mock_response.status_code = status
+        mock_response.json.return_value = {"error": {"message": message}}
 
-        mock_openai.audio.transcriptions.create.side_effect = [
-            make_openai_rate_limit_error(),
-            whisper_response,
-        ]
-
-        audio_file = tmp_path / "test.mp3"
-        audio_file.write_bytes(b"fake audio")
-
-        provider = OpenAIWhisperProvider()
-        result = provider.transcribe(audio_file)
-
-        assert isinstance(result, CaptionResult)
-        assert mock_openai.audio.transcriptions.create.call_count == 2
-
-    def test_retries_on_server_error(self, mock_openai, tmp_path):
-        """transcribe() retries on InternalServerError then succeeds."""
-        from tests.error_factories import make_openai_server_error
-
-        whisper_response = _make_whisper_response()
-
-        mock_openai.audio.transcriptions.create.side_effect = [
-            make_openai_server_error(),
-            whisper_response,
-        ]
-
-        audio_file = tmp_path / "test.mp3"
-        audio_file.write_bytes(b"fake audio")
-
-        provider = OpenAIWhisperProvider()
-        result = provider.transcribe(audio_file)
-
-        assert isinstance(result, CaptionResult)
-        assert mock_openai.audio.transcriptions.create.call_count == 2
-
-    def test_no_retry_on_auth_error(self, mock_openai, tmp_path):
-        """transcribe() does not retry on AuthenticationError."""
-        from openai import AuthenticationError
-
-        response_401 = MagicMock()
-        response_401.status_code = 401
-        response_401.json.return_value = {"error": {"message": "invalid key"}}
-
-        mock_openai.audio.transcriptions.create.side_effect = AuthenticationError(
-            message="invalid key",
-            response=response_401,
-            body={"error": {"message": "invalid key"}},
+        mock_openai.audio.transcriptions.create.side_effect = error_cls(
+            message=message,
+            response=mock_response,
+            body={"error": {"message": message}},
         )
 
         audio_file = tmp_path / "test.mp3"
@@ -287,31 +266,7 @@ class TestTranscribeRetryBehavior:
 
         provider = OpenAIWhisperProvider()
 
-        with pytest.raises(AuthenticationError):
-            provider.transcribe(audio_file)
-
-        assert mock_openai.audio.transcriptions.create.call_count == 1
-
-    def test_no_retry_on_permission_error(self, mock_openai, tmp_path):
-        """transcribe() does not retry on PermissionDeniedError."""
-        from openai import PermissionDeniedError
-
-        response_403 = MagicMock()
-        response_403.status_code = 403
-        response_403.json.return_value = {"error": {"message": "permission denied"}}
-
-        mock_openai.audio.transcriptions.create.side_effect = PermissionDeniedError(
-            message="permission denied",
-            response=response_403,
-            body={"error": {"message": "permission denied"}},
-        )
-
-        audio_file = tmp_path / "test.mp3"
-        audio_file.write_bytes(b"fake audio")
-
-        provider = OpenAIWhisperProvider()
-
-        with pytest.raises(PermissionDeniedError):
+        with pytest.raises(error_cls):
             provider.transcribe(audio_file)
 
         assert mock_openai.audio.transcriptions.create.call_count == 1
