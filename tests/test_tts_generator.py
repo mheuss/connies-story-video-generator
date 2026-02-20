@@ -19,6 +19,11 @@ from story_video.pipeline.tts_generator import (
     generate_mp3_silence,
 )
 from story_video.state import ProjectState
+from tests.error_factories import (
+    make_openai_connection_error,
+    make_openai_rate_limit_error,
+    make_openai_server_error,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -162,65 +167,17 @@ class TestOpenAITTSProviderReadsApiKeyFromEnv:
 class TestOpenAITTSProviderRetryOnTransientErrors:
     """OpenAITTSProvider.synthesize() retries on transient API errors."""
 
-    def test_synthesize_retries_on_connection_error(self, mock_openai):
-        """synthesize() retries on APIConnectionError then succeeds."""
-        from tests.error_factories import make_openai_connection_error
-
+    @pytest.mark.parametrize(
+        "error_factory",
+        [make_openai_connection_error, make_openai_rate_limit_error, make_openai_server_error],
+        ids=["connection", "rate_limit", "server"],
+    )
+    def test_synthesize_retries_on_transient_error(self, mock_openai, error_factory):
+        """synthesize() retries on transient error then succeeds."""
         response = MagicMock()
         response.content = b"recovered-audio"
 
-        mock_openai.audio.speech.create.side_effect = [
-            make_openai_connection_error(),
-            response,
-        ]
-
-        provider = OpenAITTSProvider()
-        result = provider.synthesize(
-            text="test",
-            voice="nova",
-            model="tts-1-hd",
-            speed=1.0,
-            output_format="mp3",
-        )
-
-        assert result == b"recovered-audio"
-        assert mock_openai.audio.speech.create.call_count == 2
-
-    def test_synthesize_retries_on_rate_limit(self, mock_openai):
-        """synthesize() retries on RateLimitError then succeeds."""
-        from tests.error_factories import make_openai_rate_limit_error
-
-        audio_response = MagicMock()
-        audio_response.content = b"recovered-audio"
-
-        mock_openai.audio.speech.create.side_effect = [
-            make_openai_rate_limit_error(),
-            audio_response,
-        ]
-
-        provider = OpenAITTSProvider()
-        result = provider.synthesize(
-            text="test",
-            voice="nova",
-            model="tts-1-hd",
-            speed=1.0,
-            output_format="mp3",
-        )
-
-        assert result == b"recovered-audio"
-        assert mock_openai.audio.speech.create.call_count == 2
-
-    def test_synthesize_retries_on_server_error(self, mock_openai):
-        """synthesize() retries on InternalServerError then succeeds."""
-        from tests.error_factories import make_openai_server_error
-
-        audio_response = MagicMock()
-        audio_response.content = b"recovered-audio"
-
-        mock_openai.audio.speech.create.side_effect = [
-            make_openai_server_error(),
-            audio_response,
-        ]
+        mock_openai.audio.speech.create.side_effect = [error_factory(), response]
 
         provider = OpenAITTSProvider()
         result = provider.synthesize(
@@ -243,77 +200,33 @@ class TestOpenAITTSProviderRetryOnTransientErrors:
 class TestOpenAITTSProviderNoRetryOnPermanentErrors:
     """OpenAITTSProvider.synthesize() does NOT retry on permanent API errors."""
 
-    def test_synthesize_no_retry_on_auth_error(self, mock_openai):
-        """synthesize() does not retry on AuthenticationError."""
-        from openai import AuthenticationError
+    @pytest.mark.parametrize(
+        "error_name,status,message",
+        [
+            ("AuthenticationError", 401, "invalid key"),
+            ("BadRequestError", 400, "bad request"),
+            ("PermissionDeniedError", 403, "permission denied"),
+        ],
+        ids=["auth", "bad_request", "permission"],
+    )
+    def test_synthesize_no_retry_on_permanent_error(self, mock_openai, error_name, status, message):
+        """synthesize() does not retry on permanent error."""
+        import openai
 
-        response_401 = MagicMock()
-        response_401.status_code = 401
-        response_401.json.return_value = {"error": {"message": "invalid key"}}
+        error_cls = getattr(openai, error_name)
+        mock_response = MagicMock()
+        mock_response.status_code = status
+        mock_response.json.return_value = {"error": {"message": message}}
 
-        mock_openai.audio.speech.create.side_effect = AuthenticationError(
-            message="invalid key",
-            response=response_401,
-            body={"error": {"message": "invalid key"}},
+        mock_openai.audio.speech.create.side_effect = error_cls(
+            message=message,
+            response=mock_response,
+            body={"error": {"message": message}},
         )
 
         provider = OpenAITTSProvider()
 
-        with pytest.raises(AuthenticationError):
-            provider.synthesize(
-                text="test",
-                voice="nova",
-                model="tts-1-hd",
-                speed=1.0,
-                output_format="mp3",
-            )
-
-        assert mock_openai.audio.speech.create.call_count == 1
-
-    def test_synthesize_no_retry_on_bad_request(self, mock_openai):
-        """synthesize() does not retry on BadRequestError."""
-        from openai import BadRequestError
-
-        response_400 = MagicMock()
-        response_400.status_code = 400
-        response_400.json.return_value = {"error": {"message": "bad request"}}
-
-        mock_openai.audio.speech.create.side_effect = BadRequestError(
-            message="bad request",
-            response=response_400,
-            body={"error": {"message": "bad request"}},
-        )
-
-        provider = OpenAITTSProvider()
-
-        with pytest.raises(BadRequestError):
-            provider.synthesize(
-                text="test",
-                voice="nova",
-                model="tts-1-hd",
-                speed=1.0,
-                output_format="mp3",
-            )
-
-        assert mock_openai.audio.speech.create.call_count == 1
-
-    def test_synthesize_no_retry_on_permission_error(self, mock_openai):
-        """synthesize() does not retry on PermissionDeniedError."""
-        from openai import PermissionDeniedError
-
-        response_403 = MagicMock()
-        response_403.status_code = 403
-        response_403.json.return_value = {"error": {"message": "permission denied"}}
-
-        mock_openai.audio.speech.create.side_effect = PermissionDeniedError(
-            message="permission denied",
-            response=response_403,
-            body={"error": {"message": "permission denied"}},
-        )
-
-        provider = OpenAITTSProvider()
-
-        with pytest.raises(PermissionDeniedError):
+        with pytest.raises(error_cls):
             provider.synthesize(
                 text="test",
                 voice="nova",
