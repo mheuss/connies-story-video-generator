@@ -40,6 +40,18 @@ class TestValidateTagsPreserved:
         modified = "**voice:narrator** Hello **mood:sad** world."
         assert _validate_tags_preserved(original, modified) is False
 
+    def test_pause_tag_counted_in_validation(self):
+        """Pause tags are included in the tag validation check."""
+        original = "Hello. **pause:0.5** Goodbye."
+        modified = "Hello. **pause:0.5** Goodbye."
+        assert _validate_tags_preserved(original, modified) is True
+
+    def test_pause_tag_removed_fails_validation(self):
+        """Removing a pause tag fails validation."""
+        original = "Hello. **pause:0.5** Goodbye."
+        modified = "Hello. Goodbye."
+        assert _validate_tags_preserved(original, modified) is False
+
     def test_no_tags_both_sides_valid(self):
         assert _validate_tags_preserved("Plain text.", "Different plain text.") is True
 

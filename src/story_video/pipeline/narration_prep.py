@@ -45,7 +45,7 @@ _SYSTEM_PROMPT = (
     '"one thousand eight hundred forty-seven" for quantities)\n'
     "- Smooth punctuation for speech flow (e.g., em dashes → commas or pauses)\n"
     "- Handle unusual names or terms using the pronunciation guide\n"
-    "- Preserve all **voice:X** and **mood:X** tags exactly as they appear — "
+    "- Preserve all **voice:X**, **mood:X**, and **pause:N** tags exactly as they appear — "
     "do not move, add, remove, or modify any tag"
 )
 
@@ -186,9 +186,10 @@ def prepare_narration_llm(
     if not _validate_tags_preserved(text, modified_text):
         logger.warning("Scene %d: tags not preserved, retrying with correction", scene_number)
         corrective = (
-            user_message + "\n\nIMPORTANT: Your previous response modified the voice/mood tags. "
-            "You must preserve ALL **voice:X** and **mood:X** tags exactly as they "
-            "appear in the original text — same tags, same positions, same order."
+            user_message + "\n\nIMPORTANT: Your previous response modified the voice/mood/pause "
+            "tags. You must preserve ALL **voice:X**, **mood:X**, and **pause:N** "
+            "tags exactly as they appear in the original text — same tags, same "
+            "positions, same order."
         )
         result = claude_client.generate_structured(
             system=_SYSTEM_PROMPT,
