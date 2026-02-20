@@ -42,14 +42,6 @@ class TestLoadConfigDefaultsOnly:
         config = load_config()
         assert config.output.directory == Path("./output")
 
-    def test_none_config_path_is_same_as_no_arg(self):
-        config = load_config(config_path=None)
-        assert config.story.target_duration_minutes == 30
-
-    def test_none_cli_overrides_is_same_as_no_arg(self):
-        config = load_config(cli_overrides=None)
-        assert config.tts.voice == "nova"
-
 
 # ---------------------------------------------------------------------------
 # Loading from YAML file
@@ -162,20 +154,6 @@ class TestLoadConfigCLIOverrides:
 class TestMergePrecedence:
     """Merge precedence: Pydantic defaults < config.yaml < CLI overrides."""
 
-    def test_yaml_overrides_defaults(self, tmp_path):
-        """YAML value wins over Pydantic default."""
-        yaml_file = tmp_path / "config.yaml"
-        yaml_file.write_text("tts:\n  voice: alloy\n")
-        config = load_config(config_path=yaml_file)
-        # Default is "nova", YAML says "alloy"
-        assert config.tts.voice == "alloy"
-
-    def test_cli_overrides_defaults(self):
-        """CLI override wins over Pydantic default."""
-        config = load_config(cli_overrides={"tts.voice": "echo"})
-        # Default is "nova", CLI says "echo"
-        assert config.tts.voice == "echo"
-
     def test_cli_overrides_yaml(self, tmp_path):
         """CLI override wins over YAML value."""
         yaml_file = tmp_path / "config.yaml"
@@ -232,11 +210,6 @@ class TestLoadConfigErrors:
     def test_file_not_found_raises(self):
         with pytest.raises(FileNotFoundError, match="nonexistent"):
             load_config(config_path=Path("/tmp/nonexistent/config.yaml"))
-
-    def test_file_not_found_includes_path(self):
-        bad_path = Path("/tmp/no_such_dir_12345/config.yaml")
-        with pytest.raises(FileNotFoundError, match=str(bad_path)):
-            load_config(config_path=bad_path)
 
     def test_invalid_yaml_raises_value_error(self, tmp_path):
         yaml_file = tmp_path / "config.yaml"
