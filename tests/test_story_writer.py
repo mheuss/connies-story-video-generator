@@ -116,117 +116,62 @@ def state_with_header(tmp_path):
 
 
 class TestSplitScenesHappyPath:
-    """split_scenes() correctly splits a story into scenes."""
+    """split_scenes() correctly splits a story into scenes via Claude."""
 
     def test_split_scenes_happy_path(self, sample_state, mock_client):
-        """Source with known text produces 3 scenes; state has 3 scenes, .md files exist."""
+        """Source with known text produces 3 scenes with correct state, files, and Claude params."""
         split_scenes(sample_state, mock_client)
 
-        assert len(sample_state.metadata.scenes) == 3
+        # Scene count and details
+        scenes = sample_state.metadata.scenes
+        assert len(scenes) == 3
 
+        assert scenes[0].scene_number == 1
+        assert scenes[0].title == "The Storm"
+        assert scenes[0].prose == "Part one of the story. It was a dark and stormy night."
+        assert scenes[1].scene_number == 2
+        assert scenes[1].title == "The Journey"
+        assert scenes[1].prose == "Part two of the story. The hero ventured forth bravely."
+        assert scenes[2].scene_number == 3
+        assert scenes[2].title == "The Ending"
+        assert scenes[2].prose == "Part three of the story. And they all lived happily ever after."
+
+        # TEXT asset status
+        for scene in scenes:
+            assert scene.asset_status.text == SceneStatus.COMPLETED
+
+        # Markdown files written with correct content
         scenes_dir = sample_state.project_dir / "scenes"
         assert (scenes_dir / "scene_001.md").exists()
         assert (scenes_dir / "scene_002.md").exists()
         assert (scenes_dir / "scene_003.md").exists()
 
-
-# ---------------------------------------------------------------------------
-# State updates
-# ---------------------------------------------------------------------------
-
-
-class TestSplitScenesStateUpdated:
-    """split_scenes() updates project state correctly."""
-
-    def test_split_scenes_state_updated(self, sample_state, mock_client):
-        """Verify add_scene() called with correct scene_number, title, prose."""
-        split_scenes(sample_state, mock_client)
-
-        scenes = sample_state.metadata.scenes
-        assert scenes[0].scene_number == 1
-        assert scenes[0].title == "The Storm"
-        assert scenes[0].prose == "Part one of the story. It was a dark and stormy night."
-
-        assert scenes[1].scene_number == 2
-        assert scenes[1].title == "The Journey"
-        assert scenes[1].prose == "Part two of the story. The hero ventured forth bravely."
-
-        assert scenes[2].scene_number == 3
-        assert scenes[2].title == "The Ending"
-        assert scenes[2].prose == "Part three of the story. And they all lived happily ever after."
-
-
-# ---------------------------------------------------------------------------
-# Asset status
-# ---------------------------------------------------------------------------
-
-
-class TestSplitScenesAssetStatus:
-    """split_scenes() sets TEXT asset to COMPLETED for each scene."""
-
-    def test_split_scenes_asset_status_completed(self, sample_state, mock_client):
-        """Verify TEXT asset set to COMPLETED for each scene."""
-        split_scenes(sample_state, mock_client)
-
-        for scene in sample_state.metadata.scenes:
-            assert scene.asset_status.text == SceneStatus.COMPLETED
-
-
-# ---------------------------------------------------------------------------
-# Markdown files
-# ---------------------------------------------------------------------------
-
-
-class TestSplitScenesMdFilesWritten:
-    """split_scenes() writes correctly formatted .md files."""
-
-    def test_split_scenes_md_files_written(self, sample_state, mock_client):
-        """Verify scene_001.md, scene_002.md content matches expected format."""
-        split_scenes(sample_state, mock_client)
-
-        scenes_dir = sample_state.project_dir / "scenes"
-
         content_01 = (scenes_dir / "scene_001.md").read_text()
-        expected_01 = (
+        assert content_01 == (
             "# Scene 1: The Storm\n\nPart one of the story. It was a dark and stormy night.\n"
         )
-        assert content_01 == expected_01
-
         content_02 = (scenes_dir / "scene_002.md").read_text()
-        expected_02 = (
+        assert content_02 == (
             "# Scene 2: The Journey\n\nPart two of the story. The hero ventured forth bravely.\n"
         )
-        assert content_02 == expected_02
-
         content_03 = (scenes_dir / "scene_003.md").read_text()
-        expected_03 = (
+        assert content_03 == (
             "# Scene 3: The Ending\n\n"
             "Part three of the story. And they all lived happily ever after.\n"
         )
-        assert content_03 == expected_03
 
-
-# ---------------------------------------------------------------------------
-# State persistence
-# ---------------------------------------------------------------------------
-
-
-class TestSplitScenesStateSaved:
-    """split_scenes() persists state to project.json."""
-
-    def test_split_scenes_state_saved(self, sample_state, mock_client):
-        """Verify state.save() called (check project.json is updated)."""
-        split_scenes(sample_state, mock_client)
-
-        # Reload state from disk and verify scenes are persisted
+        # State persisted to disk
         reloaded = ProjectState.load(sample_state.project_dir)
         assert len(reloaded.metadata.scenes) == 3
         assert reloaded.metadata.scenes[0].title == "The Storm"
 
-
-# ---------------------------------------------------------------------------
-# Preservation check — passing
-# ---------------------------------------------------------------------------
+        # Claude called with correct source text and parameters
+        mock_client.generate_structured.assert_called_once()
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        assert call_kwargs["user_message"] == SOURCE_TEXT
+        assert call_kwargs["system"] == SCENE_SPLIT_SYSTEM
+        assert call_kwargs["tool_name"] == "split_into_scenes"
+        assert call_kwargs["tool_schema"] == SCENE_SPLIT_SCHEMA
 
 
 # ---------------------------------------------------------------------------
@@ -314,42 +259,6 @@ class TestSplitScenesSourceFileMissing:
 
         with pytest.raises(FileNotFoundError, match="source_story.txt"):
             split_scenes(state, mock_client)
-
-
-# ---------------------------------------------------------------------------
-# Source file path
-# ---------------------------------------------------------------------------
-
-
-class TestSplitScenesReadsCorrectFile:
-    """split_scenes() reads source_story.txt from the correct project directory."""
-
-    def test_split_scenes_reads_source_from_project_dir(self, sample_state, mock_client):
-        """Verify correct file path used by checking Claude receives the source text."""
-        split_scenes(sample_state, mock_client)
-
-        call_kwargs = mock_client.generate_structured.call_args.kwargs
-        assert call_kwargs["user_message"] == SOURCE_TEXT
-
-
-# ---------------------------------------------------------------------------
-# Claude call parameters
-# ---------------------------------------------------------------------------
-
-
-class TestSplitScenesClaudeParams:
-    """split_scenes() calls Claude with correct system prompt, tool name, and schema."""
-
-    def test_split_scenes_calls_claude_with_correct_params(self, sample_state, mock_client):
-        """Verify system prompt, tool name, schema passed to generate_structured."""
-        split_scenes(sample_state, mock_client)
-
-        mock_client.generate_structured.assert_called_once()
-        call_kwargs = mock_client.generate_structured.call_args.kwargs
-
-        assert call_kwargs["system"] == SCENE_SPLIT_SYSTEM
-        assert call_kwargs["tool_name"] == "split_into_scenes"
-        assert call_kwargs["tool_schema"] == SCENE_SPLIT_SCHEMA
 
 
 # ---------------------------------------------------------------------------
@@ -484,19 +393,16 @@ class TestSplitBySceneTagsNoTags:
 class TestSplitBySceneTagsBasic:
     """_split_by_scene_tags splits text on scene tags."""
 
-    def test_three_scenes(self):
+    def test_three_scenes_with_titles_and_text(self):
+        """Scene tags produce correct count, titles, and text extraction."""
         result = _split_by_scene_tags(SOURCE_WITH_SCENE_TAGS)
         assert result is not None
         assert len(result) == 3
 
-    def test_scene_titles_extracted(self):
-        result = _split_by_scene_tags(SOURCE_WITH_SCENE_TAGS)
         assert result[0]["title"] == "The Storm"
         assert result[1]["title"] == "The Journey"
         assert result[2]["title"] == "The Ending"
 
-    def test_scene_text_extracted(self):
-        result = _split_by_scene_tags(SOURCE_WITH_SCENE_TAGS)
         assert result[0]["text"] == "Part one of the story. It was a dark and stormy night."
         assert result[1]["text"] == "Part two of the story. The hero ventured forth bravely."
         assert (
@@ -513,16 +419,11 @@ class TestSplitBySceneTagsOpeningText:
     """_split_by_scene_tags handles text before the first scene tag."""
 
     def test_opening_text_becomes_opening_scene(self):
+        """Text before first tag creates 'Opening' scene with correct content."""
         result = _split_by_scene_tags(SOURCE_WITH_OPENING_BEFORE_FIRST_TAG)
         assert result is not None
         assert len(result) == 3
-
-    def test_opening_scene_title(self):
-        result = _split_by_scene_tags(SOURCE_WITH_OPENING_BEFORE_FIRST_TAG)
         assert result[0]["title"] == "Opening"
-
-    def test_opening_scene_text(self):
-        result = _split_by_scene_tags(SOURCE_WITH_OPENING_BEFORE_FIRST_TAG)
         assert result[0]["text"] == "Once upon a time, in a land far away."
 
 
@@ -578,7 +479,8 @@ class TestSplitBySceneTagsTitleStrip:
 class TestSplitScenesWithSceneTags:
     """split_scenes() skips Claude call when scene tags present."""
 
-    def test_claude_not_called(self, tmp_path, mock_client):
+    def test_tag_based_splitting(self, tmp_path, mock_client):
+        """Scene tags bypass Claude, create correct scenes, and write .md files."""
         state = ProjectState.create(
             project_id="tagged-project",
             mode=InputMode.ADAPT,
@@ -592,34 +494,10 @@ class TestSplitScenesWithSceneTags:
 
         mock_client.generate_structured.assert_not_called()
 
-    def test_scenes_created_from_tags(self, tmp_path, mock_client):
-        state = ProjectState.create(
-            project_id="tagged-project",
-            mode=InputMode.ADAPT,
-            config=AppConfig(),
-            output_dir=tmp_path,
-        )
-        source = tmp_path / "tagged-project" / "source_story.txt"
-        source.write_text(SOURCE_WITH_SCENE_TAGS, encoding="utf-8")
-
-        split_scenes(state, mock_client)
-
         assert len(state.metadata.scenes) == 3
         assert state.metadata.scenes[0].title == "The Storm"
         assert state.metadata.scenes[1].title == "The Journey"
         assert state.metadata.scenes[2].title == "The Ending"
-
-    def test_md_files_written(self, tmp_path, mock_client):
-        state = ProjectState.create(
-            project_id="tagged-project",
-            mode=InputMode.ADAPT,
-            config=AppConfig(),
-            output_dir=tmp_path,
-        )
-        source = tmp_path / "tagged-project" / "source_story.txt"
-        source.write_text(SOURCE_WITH_SCENE_TAGS, encoding="utf-8")
-
-        split_scenes(state, mock_client)
 
         scenes_dir = state.project_dir / "scenes"
         assert (scenes_dir / "scene_001.md").exists()
@@ -752,18 +630,46 @@ def autonomous_state(tmp_path):
 
 
 class TestFlagNarrationHappyPathWithFlags:
-    """flag_narration() writes a flags file when issues are found."""
+    """flag_narration() writes flags file, builds correct message, and calls Claude correctly."""
 
     def test_flag_narration_happy_path_with_flags(self, state_with_scenes, flagging_client):
-        """Flags returned -> flags file written with content."""
+        """Flags returned -> correct Claude call, user message, and flags file format."""
         flag_narration(state_with_scenes, flagging_client)
 
+        # Claude called with correct parameters
+        flagging_client.generate_structured.assert_called_once()
+        call_kwargs = flagging_client.generate_structured.call_args.kwargs
+        assert call_kwargs["system"] == NARRATION_FLAGS_SYSTEM
+        assert call_kwargs["tool_name"] == "flag_narration_issues"
+        assert call_kwargs["tool_schema"] == NARRATION_FLAGS_SCHEMA
+
+        # User message contains numbered scenes
+        user_msg = call_kwargs["user_message"]
+        assert "=== Scene 1: The Storm ===" in user_msg
+        assert "=== Scene 2: The Journey ===" in user_msg
+        assert "=== Scene 3: The Ending ===" in user_msg
+        assert "The storm raged" in user_msg
+        assert "They all lived happily ever after." in user_msg
+
+        # Flags file written with correct format
         flags_file = state_with_scenes.project_dir / "narration_flags.md"
         assert flags_file.exists()
         content = flags_file.read_text()
         assert "# Narration Flags" in content
         assert "footnote" in content
         assert "as noted in [1]" in content
+
+        # Detailed format elements for first flag
+        assert "## Scene 1: footnote" in content
+        assert "**Location:** paragraph 1, sentence 2" in content
+        assert "**Severity:** must_fix" in content
+        assert "**Original:** as noted in [1]" in content
+        assert "**Suggested fix:** as noted in the first reference" in content
+
+        # Second flag
+        assert "## Scene 2: typography" in content
+        assert "**Severity:** should_fix" in content
+        assert "---" in content
 
 
 # ---------------------------------------------------------------------------
@@ -806,28 +712,6 @@ class TestFlagNarrationNoScenesRaises:
 
         with pytest.raises(ValueError, match="No scenes in project"):
             flag_narration(state, flagging_client)
-
-
-# ---------------------------------------------------------------------------
-# Narration flagging — user message format
-# ---------------------------------------------------------------------------
-
-
-class TestFlagNarrationBuildsUserMessage:
-    """flag_narration() builds correctly formatted user message with numbered scenes."""
-
-    def test_flag_narration_builds_user_message_correctly(self, state_with_scenes, flagging_client):
-        """Verify numbered scene format sent to Claude."""
-        flag_narration(state_with_scenes, flagging_client)
-
-        call_kwargs = flagging_client.generate_structured.call_args.kwargs
-        user_msg = call_kwargs["user_message"]
-
-        assert "=== Scene 1: The Storm ===" in user_msg
-        assert "=== Scene 2: The Journey ===" in user_msg
-        assert "=== Scene 3: The Ending ===" in user_msg
-        assert "The storm raged" in user_msg
-        assert "They all lived happily ever after." in user_msg
 
 
 # ---------------------------------------------------------------------------
@@ -905,65 +789,34 @@ class TestFlagNarrationStripsVoiceTags:
 
 
 # ---------------------------------------------------------------------------
-# Narration flagging — Claude call parameters
-# ---------------------------------------------------------------------------
-
-
-class TestFlagNarrationClaudeParams:
-    """flag_narration() calls Claude with correct system prompt, tool name, and schema."""
-
-    def test_flag_narration_calls_claude_with_correct_params(
-        self, state_with_scenes, flagging_client
-    ):
-        """Verify system prompt, tool name, schema passed to generate_structured."""
-        flag_narration(state_with_scenes, flagging_client)
-
-        flagging_client.generate_structured.assert_called_once()
-        call_kwargs = flagging_client.generate_structured.call_args.kwargs
-
-        assert call_kwargs["system"] == NARRATION_FLAGS_SYSTEM
-        assert call_kwargs["tool_name"] == "flag_narration_issues"
-        assert call_kwargs["tool_schema"] == NARRATION_FLAGS_SCHEMA
-
-
-# ---------------------------------------------------------------------------
 # Narration flagging — autonomous applies fixes
 # ---------------------------------------------------------------------------
 
 
-class TestFlagNarrationAutonomousAppliesFixes:
-    """flag_narration() in autonomous mode applies suggested fixes to narration_text."""
+class TestFlagNarrationAutonomous:
+    """flag_narration() in autonomous mode copies prose, applies fixes, and updates status."""
 
     def test_flag_narration_autonomous_applies_fixes(self, autonomous_state, flagging_client):
-        """autonomous=True -> narration_text updated with fix."""
-        flag_narration(autonomous_state, flagging_client)
-
-        scene1 = autonomous_state.metadata.scenes[0]
-        assert scene1.narration_text is not None
-        assert "as noted in the first reference" in scene1.narration_text
-        assert "as noted in [1]" not in scene1.narration_text
-
-
-# ---------------------------------------------------------------------------
-# Narration flagging — autonomous copies prose first
-# ---------------------------------------------------------------------------
-
-
-class TestFlagNarrationAutonomousCopiesProseFirst:
-    """flag_narration() copies prose to narration_text before applying fix."""
-
-    def test_flag_narration_autonomous_copies_prose_first(self, autonomous_state, flagging_client):
-        """narration_text is None -> copies from prose, then applies fix."""
+        """autonomous=True -> prose copied, fix applied, status updated."""
         # Confirm narration_text starts as None
         scene1 = autonomous_state.metadata.scenes[0]
         assert scene1.narration_text is None
 
         flag_narration(autonomous_state, flagging_client)
 
+        # Fix applied
         scene1 = autonomous_state.metadata.scenes[0]
-        # Should contain the rest of the prose with the fix applied
+        assert scene1.narration_text is not None
+        assert "as noted in the first reference" in scene1.narration_text
+        assert "as noted in [1]" not in scene1.narration_text
+
+        # Prose was copied before fix (rest of prose present)
         assert "The storm raged" in scene1.narration_text
         assert "and the wind howled" in scene1.narration_text
+
+        # NARRATION_TEXT status updated
+        for scene in autonomous_state.metadata.scenes:
+            assert scene.asset_status.narration_text == SceneStatus.COMPLETED
 
 
 # ---------------------------------------------------------------------------
@@ -1084,41 +937,6 @@ class TestFlagNarrationAutonomousFixNotFound:
 
 
 # ---------------------------------------------------------------------------
-# Narration flagging — flags file format
-# ---------------------------------------------------------------------------
-
-
-class TestFlagNarrationFlagsFileFormat:
-    """flag_narration() writes flags file with correct format."""
-
-    def test_flag_narration_flags_file_format(self, state_with_scenes, flagging_client):
-        """Verify flags file contains scene number, category, original, fix."""
-        flag_narration(state_with_scenes, flagging_client)
-
-        flags_file = state_with_scenes.project_dir / "narration_flags.md"
-        content = flags_file.read_text()
-
-        # Check format elements for first flag
-        assert "## Scene 1: footnote" in content
-        assert "**Location:** paragraph 1, sentence 2" in content
-        assert "**Severity:** must_fix" in content
-        assert "**Original:** as noted in [1]" in content
-        assert "**Suggested fix:** as noted in the first reference" in content
-
-        # Check format elements for second flag
-        assert "## Scene 2: typography" in content
-        assert "**Severity:** should_fix" in content
-
-        # Check separator
-        assert "---" in content
-
-
-# ---------------------------------------------------------------------------
-# Narration flagging — state saved
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # Narration flagging — multiple flags same scene
 # ---------------------------------------------------------------------------
 
@@ -1168,13 +986,6 @@ class TestFlagNarrationMultipleFlagsSameScene:
 
 class TestFlagNarrationUpdatesNarrationTextStatus:
     """flag_narration() updates NARRATION_TEXT asset status."""
-
-    def test_autonomous_marks_narration_text_completed(self, autonomous_state, flagging_client):
-        """In autonomous mode, NARRATION_TEXT status is COMPLETED for flagged scenes."""
-        flag_narration(autonomous_state, flagging_client)
-
-        for scene in autonomous_state.metadata.scenes:
-            assert scene.asset_status.narration_text == SceneStatus.COMPLETED
 
     def test_semi_auto_marks_narration_text_completed(self, state_with_scenes, flagging_client):
         """In semi-auto mode, NARRATION_TEXT status is also COMPLETED."""
@@ -1281,15 +1092,47 @@ def original_state(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-class TestAnalyzeSourceCallsClaude:
-    """analyze_source() sends source material to Claude."""
+class TestAnalyzeSourceInspiredBy:
+    """analyze_source() in INSPIRED_BY mode sends source, writes JSON with all fields."""
 
-    def test_source_text_in_user_message(self, inspired_state, analysis_client):
-        """Source material is included in the user message to Claude."""
+    def test_analyzes_source_material(self, inspired_state, analysis_client):
+        """Source text sent to Claude; analysis.json written with all fields."""
         analyze_source(inspired_state, analysis_client)
 
+        # Source text in user message
         call_kwargs = analysis_client.generate_structured.call_args.kwargs
         assert SOURCE_TEXT in call_kwargs["user_message"]
+
+        # analysis.json written with expected keys
+        analysis_path = inspired_state.project_dir / "analysis.json"
+        assert analysis_path.exists()
+        data = json.loads(analysis_path.read_text())
+        assert "craft_notes" in data
+        assert "thematic_brief" in data
+        assert "source_stats" in data
+        assert "word_count" in data["source_stats"]
+        assert "scene_count_estimate" in data["source_stats"]
+
+        # Craft notes fields
+        craft = data["craft_notes"]
+        assert "sentence_structure" in craft
+        assert "vocabulary" in craft
+        assert "tone" in craft
+        assert "pacing" in craft
+        assert "narrative_voice" in craft
+
+        # Thematic brief fields
+        brief = data["thematic_brief"]
+        assert "themes" in brief
+        assert "emotional_arc" in brief
+        assert "central_tension" in brief
+        assert "mood" in brief
+
+        # Characters
+        assert "characters" in data
+        assert len(data["characters"]) == 1
+        assert data["characters"][0]["name"] == "The Keeper"
+        assert "visual_description" in data["characters"][0]
 
 
 class TestAnalyzeSourceStripsYamlHeader:
@@ -1316,54 +1159,6 @@ class TestAnalyzeSourceStripsYamlHeader:
         assert user_message.startswith("Part one of the story")
 
 
-class TestAnalyzeSourceWritesJson:
-    """analyze_source() writes analysis.json to project directory."""
-
-    def test_analysis_json_written(self, inspired_state, analysis_client):
-        """analysis.json exists after call and contains expected keys."""
-        analyze_source(inspired_state, analysis_client)
-
-        analysis_path = inspired_state.project_dir / "analysis.json"
-        assert analysis_path.exists()
-        data = json.loads(analysis_path.read_text())
-        assert "craft_notes" in data
-        assert "thematic_brief" in data
-        assert "source_stats" in data
-        assert "word_count" in data["source_stats"]
-        assert "scene_count_estimate" in data["source_stats"]
-
-
-class TestAnalyzeSourceCraftNotes:
-    """analyze_source() stores craft notes with all required fields."""
-
-    def test_craft_notes_fields(self, inspired_state, analysis_client):
-        """Craft notes contain sentence_structure, vocabulary, tone, pacing, narrative_voice."""
-        analyze_source(inspired_state, analysis_client)
-
-        data = json.loads((inspired_state.project_dir / "analysis.json").read_text())
-        craft = data["craft_notes"]
-        assert "sentence_structure" in craft
-        assert "vocabulary" in craft
-        assert "tone" in craft
-        assert "pacing" in craft
-        assert "narrative_voice" in craft
-
-
-class TestAnalyzeSourceThematicBrief:
-    """analyze_source() stores thematic brief with all required fields."""
-
-    def test_thematic_brief_fields(self, inspired_state, analysis_client):
-        """Thematic brief contains themes, emotional_arc, central_tension, mood."""
-        analyze_source(inspired_state, analysis_client)
-
-        data = json.loads((inspired_state.project_dir / "analysis.json").read_text())
-        brief = data["thematic_brief"]
-        assert "themes" in brief
-        assert "emotional_arc" in brief
-        assert "central_tension" in brief
-        assert "mood" in brief
-
-
 class TestAnalyzeSourceMissingFile:
     """analyze_source() raises FileNotFoundError when source_story.txt is missing."""
 
@@ -1379,50 +1174,24 @@ class TestAnalyzeSourceMissingFile:
             analyze_source(state, analysis_client)
 
 
-class TestAnalyzeSourceCharacters:
-    """analyze_source() stores character descriptions."""
-
-    def test_characters_present_in_analysis(self, inspired_state, analysis_client):
-        """analysis.json contains characters array."""
-        analyze_source(inspired_state, analysis_client)
-
-        data = json.loads((inspired_state.project_dir / "analysis.json").read_text())
-        assert "characters" in data
-        assert len(data["characters"]) == 1
-        assert data["characters"][0]["name"] == "The Keeper"
-        assert "visual_description" in data["characters"][0]
-
-
 class TestAnalyzeSourceOriginalMode:
     """analyze_source() in ORIGINAL mode interprets a creative brief."""
 
-    def test_uses_brief_analysis_prompt(self, original_state, analysis_client):
-        """ORIGINAL mode uses BRIEF_ANALYSIS_SYSTEM, not ANALYSIS_SYSTEM."""
+    def test_uses_brief_prompt_with_brief_text(self, original_state, analysis_client):
+        """ORIGINAL mode uses BRIEF_ANALYSIS_SYSTEM and includes brief in user message."""
         analyze_source(original_state, analysis_client)
         call_kwargs = analysis_client.generate_structured.call_args.kwargs
         assert "creative brief" in call_kwargs["system"].lower()
-
-    def test_brief_text_in_user_message(self, original_state, analysis_client):
-        """Brief content is included in user message."""
-        analyze_source(original_state, analysis_client)
-        call_kwargs = analysis_client.generate_structured.call_args.kwargs
         assert "love and sacrifice" in call_kwargs["user_message"]
 
     def test_source_stats_from_config(self, original_state, analysis_client):
-        """source_stats are computed from config, not from Claude response."""
+        """source_stats computed from config: word_count and scene_count_estimate."""
         analyze_source(original_state, analysis_client)
         analysis_path = original_state.project_dir / "analysis.json"
         analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
         # Default config: target_duration_minutes=30, words_per_minute=150
-        # -> word_count = 30 * 150 = 4500
+        # -> word_count = 30 * 150 = 4500, scene_count = 4500 / 600 = 7
         assert analysis["source_stats"]["word_count"] == 4500
-
-    def test_scene_count_from_word_count(self, original_state, analysis_client):
-        """scene_count_estimate derived from word_count / WORDS_PER_SCENE_ESTIMATE."""
-        analyze_source(original_state, analysis_client)
-        analysis_path = original_state.project_dir / "analysis.json"
-        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
-        # 4500 / 600 = 7
         assert analysis["source_stats"]["scene_count_estimate"] == 7
 
 
@@ -1443,23 +1212,16 @@ def adapt_state(tmp_path):
 class TestAnalyzeSourceAdaptMode:
     """analyze_source() in ADAPT mode extracts characters from existing story."""
 
-    def test_uses_adapt_analysis_prompt(self, adapt_state, analysis_client):
-        """ADAPT mode uses ADAPT_ANALYSIS_SYSTEM."""
+    def test_adapt_analysis(self, adapt_state, analysis_client):
+        """ADAPT mode uses adapt prompt, sends source text, and stores characters."""
         analyze_source(adapt_state, analysis_client)
+
         call_kwargs = analysis_client.generate_structured.call_args.kwargs
         assert "adapting" in call_kwargs["system"].lower() or (
             "adaptation" in call_kwargs["system"].lower()
         )
-
-    def test_source_text_in_user_message(self, adapt_state, analysis_client):
-        """Source story text is included in user message."""
-        analyze_source(adapt_state, analysis_client)
-        call_kwargs = analysis_client.generate_structured.call_args.kwargs
         assert SOURCE_TEXT in call_kwargs["user_message"]
 
-    def test_characters_in_analysis_json(self, adapt_state, analysis_client):
-        """analysis.json contains characters for adapt mode."""
-        analyze_source(adapt_state, analysis_client)
         data = json.loads((adapt_state.project_dir / "analysis.json").read_text())
         assert "characters" in data
 
@@ -1529,25 +1291,19 @@ def state_with_analysis(inspired_state, analysis_client):
 # ---------------------------------------------------------------------------
 
 
-class TestCreateStoryBibleCallsClaude:
-    """create_story_bible() sends analysis context to Claude."""
+class TestCreateStoryBibleHappyPath:
+    """create_story_bible() sends analysis to Claude and writes story_bible.json."""
 
-    def test_craft_notes_in_context(self, state_with_analysis, bible_client):
-        """Craft notes from analysis are included in the user message."""
+    def test_creates_story_bible(self, state_with_analysis, bible_client):
+        """Craft notes sent to Claude; story_bible.json written correctly."""
         create_story_bible(state_with_analysis, bible_client)
 
+        # Craft notes in context
         call_kwargs = bible_client.generate_structured.call_args.kwargs
         assert "sentence_structure" in call_kwargs["user_message"]
         assert "Short declarative" in call_kwargs["user_message"]
 
-
-class TestCreateStoryBibleWritesJson:
-    """create_story_bible() writes story_bible.json."""
-
-    def test_bible_json_written(self, state_with_analysis, bible_client):
-        """story_bible.json exists and contains characters and setting."""
-        create_story_bible(state_with_analysis, bible_client)
-
+        # JSON written with expected keys
         bible_path = state_with_analysis.project_dir / "story_bible.json"
         assert bible_path.exists()
         data = json.loads(bible_path.read_text())
@@ -1652,24 +1408,19 @@ def state_with_bible(state_with_analysis, bible_client):
 # ---------------------------------------------------------------------------
 
 
-class TestCreateOutlineCallsClaude:
-    """create_outline() sends bible and analysis to Claude."""
+class TestCreateOutlineHappyPath:
+    """create_outline() sends bible/analysis to Claude and writes outline.json."""
 
-    def test_bible_in_context(self, state_with_bible, outline_client):
-        """Story bible is included in the user message."""
+    def test_creates_outline(self, state_with_bible, outline_client):
+        """Bible and source stats in context; outline.json written with scene beats."""
         create_outline(state_with_bible, outline_client)
 
+        # Bible content and source stats in user message
         call_kwargs = outline_client.generate_structured.call_args.kwargs
         assert "Maren" in call_kwargs["user_message"]
+        assert "90" in call_kwargs["user_message"]
 
-
-class TestCreateOutlineWritesJson:
-    """create_outline() writes outline.json."""
-
-    def test_outline_json_written(self, state_with_bible, outline_client):
-        """outline.json exists and contains scenes array."""
-        create_outline(state_with_bible, outline_client)
-
+        # outline.json written with scenes
         outline_path = state_with_bible.project_dir / "outline.json"
         assert outline_path.exists()
         data = json.loads(outline_path.read_text())
@@ -1677,32 +1428,12 @@ class TestCreateOutlineWritesJson:
         assert len(data["scenes"]) == 3
         assert "total_target_words" in data
 
-
-class TestCreateOutlineSceneBeats:
-    """create_outline() scenes have required fields."""
-
-    def test_scene_beat_fields(self, state_with_bible, outline_client):
-        """Each scene beat has scene_number, title, beat, target_words."""
-        create_outline(state_with_bible, outline_client)
-
-        data = json.loads((state_with_bible.project_dir / "outline.json").read_text())
+        # Scene beat fields
         scene = data["scenes"][0]
         assert "scene_number" in scene
         assert "title" in scene
         assert "beat" in scene
         assert "target_words" in scene
-
-
-class TestCreateOutlineSourceStats:
-    """create_outline() includes source stats for length targeting."""
-
-    def test_source_stats_in_context(self, state_with_bible, outline_client):
-        """Source word count and scene estimate are in the user message."""
-        create_outline(state_with_bible, outline_client)
-
-        call_kwargs = outline_client.generate_structured.call_args.kwargs
-        # source_stats from ANALYSIS_RESPONSE: word_count=90, scene_count_estimate=3
-        assert "90" in call_kwargs["user_message"]
 
 
 class TestCreateOutlineMissingBible:
@@ -1785,37 +1516,37 @@ def state_with_outline(state_with_bible, outline_client):
 # ---------------------------------------------------------------------------
 
 
-class TestWriteSceneProseCreatesScenes:
-    """write_scene_prose() creates scenes in state."""
+class TestWriteSceneProseHappyPath:
+    """write_scene_prose() creates scenes with correct prose, files, summaries, and status."""
 
-    def test_scenes_created(self, state_with_outline, prose_client):
-        """One scene created per outline beat."""
+    def test_writes_scene_prose(self, state_with_outline, prose_client):
+        """3 scenes created with correct prose, .md files, summaries, and TEXT status."""
         write_scene_prose(state_with_outline, prose_client)
 
-        assert len(state_with_outline.metadata.scenes) == 3
-
-
-class TestWriteSceneProseContent:
-    """write_scene_prose() stores correct prose in each scene."""
-
-    def test_scene_prose_matches_response(self, state_with_outline, prose_client):
-        """Scene prose matches Claude response."""
-        write_scene_prose(state_with_outline, prose_client)
-
+        # Scene count and Claude calls
         scenes = state_with_outline.metadata.scenes
+        assert len(scenes) == 3
+        assert prose_client.generate_structured.call_count == 3
+
+        # Prose content matches Claude responses
         assert scenes[0].prose == PROSE_RESPONSE_1["prose"]
         assert scenes[1].prose == PROSE_RESPONSE_2["prose"]
         assert scenes[2].prose == PROSE_RESPONSE_3["prose"]
 
+        # Summaries stored
+        assert scenes[0].summary == PROSE_RESPONSE_1["summary"]
+        assert scenes[1].summary == PROSE_RESPONSE_2["summary"]
+        assert scenes[2].summary == PROSE_RESPONSE_3["summary"]
 
-class TestWriteSceneProseCallsPerScene:
-    """write_scene_prose() makes one Claude call per outline scene."""
+        # TEXT asset status
+        for scene in scenes:
+            assert scene.asset_status.text == SceneStatus.COMPLETED
 
-    def test_one_call_per_scene(self, state_with_outline, prose_client):
-        """Claude called once per scene beat."""
-        write_scene_prose(state_with_outline, prose_client)
-
-        assert prose_client.generate_structured.call_count == 3
+        # Markdown files written
+        scenes_dir = state_with_outline.project_dir / "scenes"
+        assert (scenes_dir / "scene_001.md").exists()
+        assert (scenes_dir / "scene_002.md").exists()
+        assert (scenes_dir / "scene_003.md").exists()
 
 
 class TestWriteSceneProseRunningSummary:
@@ -1834,30 +1565,6 @@ class TestWriteSceneProseRunningSummary:
         assert PROSE_RESPONSE_1["summary"] in second_call["user_message"]
 
 
-class TestWriteSceneProseWritesMdFiles:
-    """write_scene_prose() writes scene .md files."""
-
-    def test_md_files_created(self, state_with_outline, prose_client):
-        """scenes/*.md files are written for each scene."""
-        write_scene_prose(state_with_outline, prose_client)
-
-        scenes_dir = state_with_outline.project_dir / "scenes"
-        assert (scenes_dir / "scene_001.md").exists()
-        assert (scenes_dir / "scene_002.md").exists()
-        assert (scenes_dir / "scene_003.md").exists()
-
-
-class TestWriteSceneProseAssetStatus:
-    """write_scene_prose() sets TEXT asset to COMPLETED."""
-
-    def test_text_asset_completed(self, state_with_outline, prose_client):
-        """TEXT asset status is COMPLETED for each scene."""
-        write_scene_prose(state_with_outline, prose_client)
-
-        for scene in state_with_outline.metadata.scenes:
-            assert scene.asset_status.text == SceneStatus.COMPLETED
-
-
 class TestWriteSceneProseSavesPerScene:
     """write_scene_prose() persists state after each scene for resume support."""
 
@@ -1868,19 +1575,6 @@ class TestWriteSceneProseSavesPerScene:
         write_scene_prose(state_with_outline, prose_client)
 
         assert spy.call_count == 3
-
-
-class TestWriteSceneProseSummaryStored:
-    """write_scene_prose() persists summary from Claude response."""
-
-    def test_summary_stored_on_scene(self, state_with_outline, prose_client):
-        """Scene summary matches Claude response."""
-        write_scene_prose(state_with_outline, prose_client)
-
-        scenes = state_with_outline.metadata.scenes
-        assert scenes[0].summary == PROSE_RESPONSE_1["summary"]
-        assert scenes[1].summary == PROSE_RESPONSE_2["summary"]
-        assert scenes[2].summary == PROSE_RESPONSE_3["summary"]
 
 
 class TestWriteSceneProseResume:
@@ -2003,27 +1697,36 @@ def state_with_prose(state_with_outline, prose_client):
 # ---------------------------------------------------------------------------
 
 
-class TestCritiqueAndReviseUpdatesProse:
-    """critique_and_revise() overwrites scene prose with revised version."""
+class TestCritiqueAndReviseHappyPath:
+    """critique_and_revise() revises prose, writes changelogs, and updates .md files."""
 
-    def test_prose_overwritten(self, state_with_prose, critique_client):
-        """Each scene's prose is replaced with the revised version."""
+    def test_critiques_and_revises(self, state_with_prose, critique_client):
+        """Prose overwritten, changelogs written, craft notes in context."""
         critique_and_revise(state_with_prose, critique_client)
 
+        # Prose overwritten with revised versions
         scenes = state_with_prose.metadata.scenes
         assert scenes[0].prose == CRITIQUE_RESPONSE_1["revised_prose"]
         assert scenes[1].prose == CRITIQUE_RESPONSE_2["revised_prose"]
         assert scenes[2].prose == CRITIQUE_RESPONSE_3["revised_prose"]
 
-
-class TestCritiqueAndReviseCallsPerScene:
-    """critique_and_revise() makes one Claude call per scene."""
-
-    def test_one_call_per_scene(self, state_with_prose, critique_client):
-        """Claude called once per scene."""
-        critique_and_revise(state_with_prose, critique_client)
-
+        # One Claude call per scene
         assert critique_client.generate_structured.call_count == 3
+
+        # Craft notes included in context
+        call_kwargs = critique_client.generate_structured.call_args_list[0].kwargs
+        assert "sentence_structure" in call_kwargs["user_message"]
+
+        # Changelog files written
+        critique_dir = state_with_prose.project_dir / "critique"
+        assert (critique_dir / "scene_001_changes.md").exists()
+        content = (critique_dir / "scene_001_changes.md").read_text()
+        assert "Shortened the opening" in content
+
+        # Scene .md files updated with revised prose
+        scenes_dir = state_with_prose.project_dir / "scenes"
+        md_content = (scenes_dir / "scene_001.md").read_text()
+        assert CRITIQUE_RESPONSE_1["revised_prose"] in md_content
 
 
 class TestCritiqueAndReviseSavesPerScene:
@@ -2036,30 +1739,6 @@ class TestCritiqueAndReviseSavesPerScene:
         critique_and_revise(state_with_prose, critique_client)
 
         assert spy.call_count == 3
-
-
-class TestCritiqueAndReviseWritesChangelog:
-    """critique_and_revise() writes change notes to critique/ directory."""
-
-    def test_changelog_files_written(self, state_with_prose, critique_client):
-        """critique/scene_01_changes.md exists with change descriptions."""
-        critique_and_revise(state_with_prose, critique_client)
-
-        critique_dir = state_with_prose.project_dir / "critique"
-        assert (critique_dir / "scene_001_changes.md").exists()
-        content = (critique_dir / "scene_001_changes.md").read_text()
-        assert "Shortened the opening" in content
-
-
-class TestCritiqueAndReviseCraftNotesInContext:
-    """critique_and_revise() includes craft notes in Claude calls."""
-
-    def test_craft_notes_in_user_message(self, state_with_prose, critique_client):
-        """Craft notes are in the user message for consistency checking."""
-        critique_and_revise(state_with_prose, critique_client)
-
-        call_kwargs = critique_client.generate_structured.call_args_list[0].kwargs
-        assert "sentence_structure" in call_kwargs["user_message"]
 
 
 class TestCritiqueAndReviseMissingAnalysis:
@@ -2091,18 +1770,6 @@ class TestCritiqueAndReviseNoScenes:
         )
         with pytest.raises(ValueError, match="No scenes"):
             critique_and_revise(inspired_state, critique_client)
-
-
-class TestCritiqueAndReviseUpdatesMdFiles:
-    """critique_and_revise() updates the scene .md files with revised prose."""
-
-    def test_md_files_updated(self, state_with_prose, critique_client):
-        """scenes/*.md files contain revised prose after critique."""
-        critique_and_revise(state_with_prose, critique_client)
-
-        scenes_dir = state_with_prose.project_dir / "scenes"
-        content = (scenes_dir / "scene_001.md").read_text()
-        assert CRITIQUE_RESPONSE_1["revised_prose"] in content
 
 
 class TestCritiqueAndReviseResume:
