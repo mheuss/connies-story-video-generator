@@ -849,7 +849,10 @@ def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
         if scene_num in existing_scene_numbers:
             # Scene already created (resume). Still need its summary for context.
             existing = next(s for s in state.metadata.scenes if s.scene_number == scene_num)
-            running_summary.append(f"Scene {scene_num}: {existing.title}")
+            if existing.summary:
+                running_summary.append(f"Scene {scene_num} ({existing.title}): {existing.summary}")
+            else:
+                running_summary.append(f"Scene {scene_num}: {existing.title}")
             continue
 
         # Build user message
@@ -880,7 +883,7 @@ def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
         )
 
         # Create scene in state
-        state.add_scene(scene_num, beat["title"], result["prose"])
+        state.add_scene(scene_num, beat["title"], result["prose"], summary=result["summary"])
         state.update_scene_asset(scene_num, AssetType.TEXT, SceneStatus.IN_PROGRESS)
         state.update_scene_asset(scene_num, AssetType.TEXT, SceneStatus.COMPLETED)
 

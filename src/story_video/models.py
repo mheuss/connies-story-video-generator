@@ -580,6 +580,7 @@ class Scene(BaseModel):
         scene_number: 1-based scene index.
         title: Scene title or beat description.
         prose: The actual story text for this scene.
+        summary: Brief summary for running context across scenes (set during prose generation).
         narration_text: TTS-optimized version of the prose (set during narration prep).
         image_prompt: Image generation prompt for scene illustration
             (set during image prompt generation).
@@ -591,6 +592,7 @@ class Scene(BaseModel):
     scene_number: int = Field(gt=0)
     title: str = Field(min_length=1)
     prose: str = Field(min_length=1)
+    summary: str | None = Field(default=None)
     narration_text: str | None = Field(default=None)
     image_prompt: str | None = Field(default=None)
     asset_status: SceneAssetStatus = Field(default_factory=SceneAssetStatus)

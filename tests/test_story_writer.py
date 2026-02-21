@@ -1805,6 +1805,19 @@ class TestWriteSceneProseSavesPerScene:
         assert spy.call_count == 3
 
 
+class TestWriteSceneProseSummaryStored:
+    """write_scene_prose() persists summary from Claude response."""
+
+    def test_summary_stored_on_scene(self, state_with_outline, prose_client):
+        """Scene summary matches Claude response."""
+        write_scene_prose(state_with_outline, prose_client)
+
+        scenes = state_with_outline.metadata.scenes
+        assert scenes[0].summary == PROSE_RESPONSE_1["summary"]
+        assert scenes[1].summary == PROSE_RESPONSE_2["summary"]
+        assert scenes[2].summary == PROSE_RESPONSE_3["summary"]
+
+
 class TestWriteSceneProseResume:
     """write_scene_prose() skips already-created scenes on resume."""
 
@@ -1828,6 +1841,41 @@ class TestWriteSceneProseResume:
         # Scenes 2 and 3 from Claude
         assert state_with_outline.metadata.scenes[1].prose == PROSE_RESPONSE_2["prose"]
         assert prose_client.generate_structured.call_count == 2
+
+    def test_resume_uses_stored_summary_for_context(self, state_with_outline, prose_client):
+        """On resume, stored summary used instead of title-only for running context."""
+        # Scene 1 already has a summary
+        state_with_outline.add_scene(
+            1, "The Arrival", "Pre-existing prose.", summary="Maren arrives on the island."
+        )
+        state_with_outline.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        prose_client.generate_structured.side_effect = [
+            PROSE_RESPONSE_2,
+            PROSE_RESPONSE_3,
+        ]
+
+        write_scene_prose(state_with_outline, prose_client)
+
+        # Second call (scene 2) should use stored summary, not just title
+        first_call = prose_client.generate_structured.call_args_list[0].kwargs
+        assert "Maren arrives on the island." in first_call["user_message"]
+
+    def test_resume_falls_back_to_title_when_no_summary(self, state_with_outline, prose_client):
+        """On resume, falls back to title-only when summary is None (backward compat)."""
+        # Scene 1 without summary (backward compat)
+        state_with_outline.add_scene(1, "The Arrival", "Pre-existing prose.")
+        state_with_outline.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        prose_client.generate_structured.side_effect = [
+            PROSE_RESPONSE_2,
+            PROSE_RESPONSE_3,
+        ]
+
+        write_scene_prose(state_with_outline, prose_client)
+
+        first_call = prose_client.generate_structured.call_args_list[0].kwargs
+        assert "The Arrival" in first_call["user_message"]
 
 
 class TestWriteSceneProseMissingOutline:

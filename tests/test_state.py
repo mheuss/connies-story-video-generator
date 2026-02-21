@@ -378,6 +378,16 @@ class TestAddScene:
         with pytest.raises(ValueError, match="Scene 1 already exists"):
             project_state.add_scene(1, "Scene One Again", "Different prose.")
 
+    def test_summary_stored_when_provided(self, project_state):
+        project_state.add_scene(1, "Opening", "The story begins.", summary="Hero arrives.")
+        scene = project_state.metadata.scenes[0]
+        assert scene.summary == "Hero arrives."
+
+    def test_summary_defaults_to_none(self, project_state):
+        project_state.add_scene(1, "Opening", "The story begins.")
+        scene = project_state.metadata.scenes[0]
+        assert scene.summary is None
+
 
 # ---------------------------------------------------------------------------
 # update_scene_asset — status updates and dependency enforcement

@@ -293,6 +293,19 @@ class TestScene:
         with pytest.raises(ValidationError):
             Scene(scene_number=1, title="Title", prose="")
 
+    def test_summary_defaults_to_none(self):
+        scene = Scene(scene_number=1, title="Opening", prose="The story begins.")
+        assert scene.summary is None
+
+    def test_summary_stored_when_provided(self):
+        scene = Scene(
+            scene_number=1,
+            title="Opening",
+            prose="The story begins.",
+            summary="Hero arrives at the castle.",
+        )
+        assert scene.summary == "Hero arrives at the castle."
+
     def test_json_roundtrip(self):
         scene = Scene(
             scene_number=2,
@@ -302,6 +315,17 @@ class TestScene:
         json_str = scene.model_dump_json()
         restored = Scene.model_validate_json(json_str)
         assert restored == scene
+
+    def test_json_roundtrip_with_summary(self):
+        scene = Scene(
+            scene_number=2,
+            title="The Journey",
+            prose="They walked for miles...",
+            summary="The group travels across the plains.",
+        )
+        json_str = scene.model_dump_json()
+        restored = Scene.model_validate_json(json_str)
+        assert restored.summary == "The group travels across the plains."
 
 
 # ---------------------------------------------------------------------------

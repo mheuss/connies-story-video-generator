@@ -327,13 +327,20 @@ class ProjectState:
     # Scene management
     # -------------------------------------------------------------------
 
-    def add_scene(self, scene_number: int, title: str, prose: str) -> None:
+    def add_scene(
+        self,
+        scene_number: int,
+        title: str,
+        prose: str,
+        summary: str | None = None,
+    ) -> None:
         """Add a scene to the project.
 
         Args:
             scene_number: 1-based scene index.
             title: Scene title or beat description.
             prose: The actual story text for this scene.
+            summary: Optional brief summary for running context across scenes.
 
         Raises:
             ValueError: If a scene with the given number already exists.
@@ -342,7 +349,7 @@ class ProjectState:
             if existing.scene_number == scene_number:
                 msg = f"Scene {scene_number} already exists in project."
                 raise ValueError(msg)
-        scene = Scene(scene_number=scene_number, title=title, prose=prose)
+        scene = Scene(scene_number=scene_number, title=title, prose=prose, summary=summary)
         self._metadata.scenes.append(scene)
 
     def update_scene_asset(
