@@ -142,15 +142,18 @@ class TestRunFfmpeg:
     """run_ffmpeg wraps subprocess.run with error handling."""
 
     @patch("story_video.ffmpeg.commands.subprocess.run")
-    def test_calls_subprocess_run(self, mock_run):
-        """run_ffmpeg calls subprocess.run with the provided command."""
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["ffmpeg", "-version"], returncode=0, stdout="", stderr=""
+    def test_success_calls_subprocess_and_returns_result(self, mock_run):
+        """Successful run calls subprocess.run correctly and returns CompletedProcess."""
+        expected = subprocess.CompletedProcess(
+            args=["ffmpeg", "-version"], returncode=0, stdout="ffmpeg version 6", stderr=""
         )
-        run_ffmpeg(["ffmpeg", "-version"])
+        mock_run.return_value = expected
+        result = run_ffmpeg(["ffmpeg", "-version"])
+
         mock_run.assert_called_once_with(
             ["ffmpeg", "-version"], capture_output=True, text=True, timeout=600
         )
+        assert result is expected
 
     @patch("story_video.ffmpeg.commands.subprocess.run")
     def test_ffmpeg_error_contains_details(self, mock_run):
@@ -165,16 +168,6 @@ class TestRunFfmpeg:
         assert err.cmd == cmd
         assert err.returncode == 2
         assert err.stderr == "Some error"
-
-    @patch("story_video.ffmpeg.commands.subprocess.run")
-    def test_returns_completed_process_on_success(self, mock_run):
-        """Successful run returns the CompletedProcess object."""
-        expected = subprocess.CompletedProcess(
-            args=["ffmpeg", "-version"], returncode=0, stdout="ffmpeg version 6", stderr=""
-        )
-        mock_run.return_value = expected
-        result = run_ffmpeg(["ffmpeg", "-version"])
-        assert result is expected
 
     @patch("story_video.ffmpeg.commands.subprocess.run")
     def test_timeout_raises_ffmpeg_error(self, mock_run):
@@ -204,23 +197,16 @@ class TestProbeDuration:
     """probe_duration extracts duration from ffprobe output."""
 
     @patch("story_video.ffmpeg.commands.subprocess.run")
-    def test_returns_float_from_stdout(self, mock_run):
-        """Parses ffprobe stdout as a float."""
+    def test_happy_path(self, mock_run):
+        """Calls ffprobe with short timeout, parses stdout as float."""
         mock_run.return_value = subprocess.CompletedProcess(
             args=["ffprobe"], returncode=0, stdout="12.345\n", stderr=""
         )
         result = probe_duration(Path("/tmp/test.mp4"))
-        assert result == pytest.approx(12.345)
 
-    @patch("story_video.ffmpeg.commands.subprocess.run")
-    def test_command_contains_ffprobe(self, mock_run):
-        """The command passed to subprocess.run starts with 'ffprobe'."""
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["ffprobe"], returncode=0, stdout="5.0\n", stderr=""
-        )
-        probe_duration(Path("/tmp/test.mp4"))
-        called_cmd = mock_run.call_args[0][0]
-        assert called_cmd[0] == "ffprobe"
+        assert result == pytest.approx(12.345)
+        assert mock_run.call_args[0][0][0] == "ffprobe"
+        assert mock_run.call_args[1]["timeout"] == 30
 
     @patch("story_video.ffmpeg.commands.subprocess.run")
     def test_raises_ffmpeg_error_on_failure(self, mock_run):
@@ -230,15 +216,6 @@ class TestProbeDuration:
         )
         with pytest.raises(FFmpegError):
             probe_duration(Path("/tmp/nonexistent.mp4"))
-
-    @patch("story_video.ffmpeg.commands.subprocess.run")
-    def test_uses_short_timeout(self, mock_run):
-        """probe_duration passes a 30-second timeout to subprocess.run."""
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["ffprobe"], returncode=0, stdout="5.0\n", stderr=""
-        )
-        probe_duration(Path("/tmp/test.mp4"))
-        assert mock_run.call_args[1]["timeout"] == 30
 
 
 # ---------------------------------------------------------------------------
