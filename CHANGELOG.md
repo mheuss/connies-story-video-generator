@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - CLI flag `--source-material` renamed to `--input` — applies to all three modes (adapt, iWenspired_by, original). Clean break, no deprecated alias.
+- `TTSProvider.synthesize()` accepts optional `mood` parameter — BREAKING for custom provider implementations
+
+### Removed
+- `OutputConfig` and `output:` config section — BREAKING: users with custom config.yaml files containing `output:` must remove that section
+
+### Fixed
+- Scene summaries now persist across resume — subsequent scenes get full prose summary context instead of title-only
 
 ## [0.4.0] — 2026-02-18
 
