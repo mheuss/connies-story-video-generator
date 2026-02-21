@@ -198,25 +198,25 @@ Acknowledged items not yet scheduled.
 - [x] [chore] Add ElevenLabs TTS provider option (merged to main)
 - [x] [test] Boundary value tests for `_int_to_words` and `_year_to_words` — no longer applicable, regex code deleted (T8)
 - [ ] [feature] Add async retry support when async API calls are introduced (R4)
-- [ ] [chore] Consider exporting rate constants in cost.py `__all__` if needed by CLI layer (C4)
-- [ ] [docs] Update design.md TTS cost example ($7.41 → $7.42) to match mathematically correct rounding (C5)
+- [x] [chore] Consider exporting rate constants in cost.py `__all__` if needed by CLI layer (C4) — rate constants not imported outside cost.py; no action needed
+- [x] [docs] Update design.md TTS cost example ($7.41 → $7.42) to match mathematically correct rounding (C5) — fixed $7.41 → $7.43 in design.md (local-only, file is gitignored)
 - [x] [test] Add tests for partial override behavior in estimate_cost (only scene_count or only character_count) (C7)
 - [x] [test] Strengthen adapt mode format test to verify Claude rate range, not just string containment (C8)
-- [ ] [test] Add retry exhaustion test for ClaudeClient (4 consecutive transient errors → original exception) (CC-S2)
-- [ ] [chore] Consider exporting `TRANSIENT_ERRORS` in claude_client.py `__all__` if needed by orchestrator (CC-S3)
-- [ ] [test] Add explicit encoding="utf-8" to test fixture source file writes for consistency (SW-S1)
-- [ ] [test] Add Unicode content test for preservation check (accented chars, em dashes, curly quotes) (SW-S3)
-- [ ] [refactor] Consider defensive access for missing "scenes" key in Claude response (SW-S4)
-- [ ] [test] Add test for original_text not found in scene narration_text during autonomous fix (FN-S2)
-- [ ] [refactor] Extract flags file writing into `_write_flags_report()` helper if format grows (FN-S3)
+- [x] [test] Add retry exhaustion test for ClaudeClient (4 consecutive transient errors → original exception) (CC-S2) — already implemented at test_claude_client.py:398-438 (both generate and generate_structured)
+- [x] [chore] Consider exporting `TRANSIENT_ERRORS` in claude_client.py `__all__` if needed by orchestrator (CC-S3) — TRANSIENT_ERRORS not imported outside claude_client.py; no action needed
+- [x] [test] Add explicit encoding="utf-8" to test fixture source file writes for consistency (SW-S1) — added encoding="utf-8" to all 17 .write_text() calls in test fixtures
+- [x] [test] Add Unicode content test for preservation check (accented chars, em dashes, curly quotes) (SW-S3) — added TestPreservationCheckUnicode with accented chars and Unicode punctuation tests
+- [x] [refactor] Consider defensive access for missing "scenes" key in Claude response (SW-S4) — direct dict access is fail-fast by design; .get() would mask malformed Claude responses
+- [x] [test] Add test for original_text not found in scene narration_text during autonomous fix (FN-S2) — added TestFlagNarrationAutonomousFixNotFound with warning log assertion
+- [x] [refactor] Extract flags file writing into `_write_flags_report()` helper if format grows (FN-S3) — 18 lines, 5 fields, no reuse; extraction not warranted yet
 - [ ] [feature] Batched concatenation for 60+ segment videos — group segments into chapters of 10-15, concat each chapter, then concat chapters. Only needed if single-pass xfade chain hits FFmpeg limits with very long videos. Current single-pass approach works fine for 25-scene videos. (VA-D1)
 - [ ] [test] Add @pytest.mark.slow integration tests that run actual FFmpeg on tiny inputs (1s silent audio, 10x10 image) to catch filter graph syntax errors and codec issues. Requires FFmpeg installed. (VA-D2)
 - [x] [refactor] Extract `_make_tts_provider()` helper to deduplicate provider instantiation in create/resume commands (CLI-S1)
-- [ ] [chore] `_find_most_recent_project` compares ISO 8601 timestamp strings lexicographically — fragile if hand-edited project.json uses non-ISO format (CLI-S2)
-- [ ] [chore] Add `exists=True` to `--config` Typer option in create and estimate commands for immediate path validation (CLI-S4)
-- [ ] [test] Add direct unit tests for `_status_icon` covering all 4 statuses and fallback path (CLI-S5)
+- [x] [chore] `_find_most_recent_project` compares ISO 8601 timestamp strings lexicographically — fragile if hand-edited project.json uses non-ISO format (CLI-S2) — ISO 8601 is lexicographically sortable; comparison is correct by design
+- [x] [chore] Add `exists=True` to `--config` Typer option in create and estimate commands for immediate path validation (CLI-S4) — added exists=True to both create and estimate --config options
+- [x] [test] Add direct unit tests for `_status_icon` covering all 4 statuses and fallback path (CLI-S5) — added test_fallback_for_unknown_status covering unknown status path
 - [x] [refactor] Narrow `create` command exception handler from bare `Exception` to `FileExistsError` for `ProjectState.create()` (CLI-S7)
-- [ ] [chore] Verify GPT Image 1.5 pricing — current code rates (low: $0.020, medium: $0.050, high: $0.200) may not match latest OpenAI pricing (CR-8)
+- [x] [chore] Verify GPT Image 1.5 pricing — current code rates (low: $0.020, medium: $0.050, high: $0.200) may not match latest OpenAI pricing (CR-8) — updated low tier from $0.020 to $0.013, added verification date 2026-02-21
 - [ ] [refactor] Cost rate table key collision risk — IMAGE_COST_PER_IMAGE dict merges GPT Image tiers (low/medium/high) and DALL-E tiers (standard/hd) in one flat dict; if a future model reuses a tier name, values would collide. Consider nested dict keyed by model family. (CR-9)
 
 ## Resolved
