@@ -53,9 +53,10 @@ TTS_COST_PER_MILLION_CHARS: dict[str, float] = {
 
 # Image generation cost per image by quality tier.
 # Covers GPT Image 1.5 (low/medium/high) and DALL-E 3 (standard/hd).
+# GPT Image 1.5 rates are for 1536x1024 (project default). Verified 2026-02-21.
 IMAGE_COST_PER_IMAGE: dict[str, float] = {
     # GPT Image 1.5
-    "low": 0.020,
+    "low": 0.013,
     "medium": 0.050,
     "high": 0.200,
     # DALL-E 3
