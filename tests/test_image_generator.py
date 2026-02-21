@@ -264,53 +264,35 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
 
 
 class TestGenerateImageHappyPath:
-    """generate_image() writes image file and updates state."""
+    """generate_image() writes image file, updates state, passes correct params."""
 
     def test_happy_path(self, project_state, fake_provider):
-        """Image file is created with correct bytes and state is updated."""
+        """Image file created, state updated, style prefix prepended, config forwarded."""
         scene = project_state.metadata.scenes[0]
         generate_image(scene, project_state, fake_provider)
 
+        # File written with correct bytes
         image_path = project_state.project_dir / "images" / "scene_001.png"
         assert image_path.exists()
         assert image_path.read_bytes() == FAKE_PNG
+
+        # Status updated
         assert scene.asset_status.image == SceneStatus.COMPLETED
 
-
-# ---------------------------------------------------------------------------
-# generate_image — style prefix prepended to prompt
-# ---------------------------------------------------------------------------
-
-
-class TestGenerateImageStylePrefixPrepended:
-    """generate_image() prepends the style prefix to the image prompt."""
-
-    def test_generate_image_prepends_style_prefix(self, project_state, fake_provider):
-        """The full prompt is style_prefix + space + image_prompt."""
-        scene = project_state.metadata.scenes[0]
-        generate_image(scene, project_state, fake_provider)
-
+        # Style prefix prepended to prompt
         call_args = fake_provider.generate.call_args
         assert call_args[0][0] == "Cinematic: A dark forest at night"
 
-
-# ---------------------------------------------------------------------------
-# generate_image — config params passed to provider
-# ---------------------------------------------------------------------------
-
-
-class TestGenerateImageConfigParamsPassedToProvider:
-    """generate_image() passes image config values to the provider."""
-
-    def test_config_params_shape(self, project_state, fake_provider):
-        """All image config values are forwarded to the provider."""
-        scene = project_state.metadata.scenes[0]
-        generate_image(scene, project_state, fake_provider)
-
-        kwargs = fake_provider.generate.call_args.kwargs
+        # Config params forwarded
+        kwargs = call_args.kwargs
         assert kwargs["size"] == "1536x1024"
         assert kwargs["quality"] == "medium"
         assert kwargs["style"] is None
+        assert kwargs["model"] == "gpt-image-1.5"
+
+        # State persisted to disk
+        reloaded = ProjectState.load(project_state.project_dir)
+        assert reloaded.metadata.scenes[0].asset_status.image == SceneStatus.COMPLETED
 
 
 # ---------------------------------------------------------------------------
@@ -328,11 +310,6 @@ class TestGenerateImageNoImagePromptRaises:
 
         with pytest.raises(ValueError, match="Scene 1 has no image prompt"):
             generate_image(scene, project_state, fake_provider)
-
-
-# ---------------------------------------------------------------------------
-# generate_image — always writes PNG
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -363,37 +340,3 @@ class TestGenerateImageMultiDigitSceneNumber:
 
         image_path = state.project_dir / "images" / "scene_012.png"
         assert image_path.exists()
-
-
-# ---------------------------------------------------------------------------
-# generate_image — state saved
-# ---------------------------------------------------------------------------
-
-
-class TestGenerateImageStateSaved:
-    """generate_image() persists state via state.save()."""
-
-    def test_generate_image_state_saved(self, project_state, fake_provider):
-        """Verify state.save() is called by reloading from disk."""
-        scene = project_state.metadata.scenes[0]
-        generate_image(scene, project_state, fake_provider)
-
-        reloaded = ProjectState.load(project_state.project_dir)
-        assert reloaded.metadata.scenes[0].asset_status.image == SceneStatus.COMPLETED
-
-
-# ---------------------------------------------------------------------------
-# generate_image — passes model from config
-# ---------------------------------------------------------------------------
-
-
-class TestGenerateImagePassesModelFromConfig:
-    """generate_image() passes the model from ImageConfig to the provider."""
-
-    def test_passes_model_from_config(self, project_state, fake_provider):
-        """model kwarg passed to provider.generate matches ImageConfig.model."""
-        scene = project_state.metadata.scenes[0]
-        generate_image(scene, project_state, fake_provider)
-
-        call_kwargs = fake_provider.generate.call_args.kwargs
-        assert call_kwargs["model"] == "gpt-image-1.5"  # default from ImageConfig
