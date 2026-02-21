@@ -419,6 +419,24 @@ class TestPreservationCheckNormalizesWhitespace:
             _check_preservation(original, scenes)
 
 
+class TestPreservationCheckUnicode:
+    """_check_preservation() preserves Unicode characters through normalization."""
+
+    def test_accented_characters_preserved(self):
+        """Accented characters (e, n, u) survive whitespace normalization."""
+        text = "Caf\u00e9 r\u00e9sum\u00e9 \u2014 she whispered, \u201cBuenas noches.\u201d"
+        scenes = [{"title": "A", "text": text}]
+        _check_preservation(text, scenes)
+
+    def test_unicode_punctuation_preserved(self):
+        """Em dashes, curly quotes, and ellipsis survive normalization."""
+        text = (
+            "He paused\u2026 then said, \u201cIt\u2019s over.\u201d She\u2014stunned\u2014nodded."
+        )
+        scenes = [{"title": "A", "text": text}]
+        _check_preservation(text, scenes)
+
+
 # ---------------------------------------------------------------------------
 # Marker-based scene splitting — test data
 # ---------------------------------------------------------------------------
@@ -1020,6 +1038,46 @@ class TestFlagNarrationInvalidSceneNumberSkipped:
         # narration_text untouched since the only flag was invalid
         for scene in autonomous_state.metadata.scenes:
             assert scene.narration_text is None
+
+
+class TestFlagNarrationAutonomousFixNotFound:
+    """flag_narration() logs warning when original_text not found in narration_text."""
+
+    def test_original_text_not_found_logs_warning(self, tmp_path, caplog):
+        """When original_text doesn't match narration_text, warning is logged and text unchanged."""
+        config = AppConfig(pipeline=PipelineConfig(autonomous=True))
+        state = ProjectState.create(
+            project_id="fix-not-found-test",
+            mode=InputMode.ADAPT,
+            config=config,
+            output_dir=tmp_path,
+        )
+
+        client = MagicMock()
+        client.generate_structured.return_value = {
+            "flags": [
+                {
+                    "scene_number": 1,
+                    "category": "abbreviation",
+                    "location": "paragraph 1",
+                    "severity": "must_fix",
+                    "original_text": "text that does not exist in scene",
+                    "suggested_fix": "replacement text",
+                }
+            ]
+        }
+
+        state.add_scene(1, "Test Scene", "The actual scene prose.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        scene = state.metadata.scenes[0]
+        scene.narration_text = "The actual scene narration text."
+        original_narration = scene.narration_text
+
+        with caplog.at_level(logging.WARNING):
+            flag_narration(state, client)
+
+        assert any("not found" in r.message.lower() for r in caplog.records)
+        assert scene.narration_text == original_narration
 
 
 # ---------------------------------------------------------------------------

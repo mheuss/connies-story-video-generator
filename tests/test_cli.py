@@ -961,6 +961,13 @@ class TestStatusIcon:
         for expected in expected_substrings:
             assert expected in result
 
+    def test_fallback_for_unknown_status(self):
+        """Unknown status returns the status value string."""
+        fake_status = MagicMock()
+        fake_status.value = "reviewing"
+        result = _status_icon(fake_status)
+        assert result == "reviewing"
+
 
 class TestValidateMode:
     """_validate_mode parses mode strings into InputMode enums."""
