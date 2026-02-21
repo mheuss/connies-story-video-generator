@@ -279,40 +279,26 @@ class TestLineWrapping:
 class TestDialogueEvents:
     """generate_ass_content produces a valid [Events] section."""
 
-    def test_contains_events_and_dialogue(self):
-        """Output contains [Events] section with Dialogue lines."""
+    def test_dialogue_events_facets(self):
+        """Events section has Dialogue lines with correct timing, format, and text."""
         result = generate_ass_content(
             _make_caption_result(), _default_subtitle_config(), _default_video_config()
         )
+
+        # Contains [Events] section with Dialogue lines
         assert "[Events]" in result
         assert "Dialogue:" in result
 
-    def test_dialogue_has_ass_time_format(self):
-        """Dialogue lines contain times in H:MM:SS.cc format."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
+        # Dialogue lines have ASS time format
         dialogue_lines = [ln for ln in result.split("\n") if ln.startswith("Dialogue:")]
         for line in dialogue_lines:
-            # Should contain at least two ASS timestamps
             times = re.findall(r"\d:\d{2}:\d{2}\.\d{2}", line)
             assert len(times) >= 2, f"Expected 2 timestamps in: {line}"
 
-    def test_dialogue_times_from_word_timestamps(self):
-        """Dialogue start/end times correspond to word start/end timestamps."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
-        dialogue_lines = [ln for ln in result.split("\n") if ln.startswith("Dialogue:")]
-        # First dialogue should start at 0:00:00.00 (first word starts at 0.0)
+        # First dialogue starts at word start time
         assert "0:00:00.00" in dialogue_lines[0]
 
-    def test_dialogue_contains_word_text(self):
-        """Dialogue lines contain the actual words from the caption."""
-        result = generate_ass_content(
-            _make_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
-        # All words should appear somewhere in the dialogue
+        # All words appear in the output
         for word in [
             "The",
             "storm",
@@ -367,20 +353,14 @@ class TestSubtitleFilter:
 class TestEmptyWords:
     """Empty word list produces valid ASS with no Dialogue lines."""
 
-    def test_empty_words_has_header(self):
-        """Empty caption result still produces script info and styles."""
+    def test_empty_words_has_sections_but_no_dialogue(self):
+        """Empty caption result produces valid ASS structure but no Dialogue lines."""
         result = generate_ass_content(
             _make_empty_caption_result(), _default_subtitle_config(), _default_video_config()
         )
         assert "[Script Info]" in result
         assert "[V4+ Styles]" in result
         assert "[Events]" in result
-
-    def test_empty_words_no_dialogue(self):
-        """Empty caption result produces no Dialogue lines."""
-        result = generate_ass_content(
-            _make_empty_caption_result(), _default_subtitle_config(), _default_video_config()
-        )
         assert "Dialogue:" not in result
 
 
