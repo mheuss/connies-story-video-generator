@@ -1875,7 +1875,9 @@ class TestWriteSceneProseResume:
         write_scene_prose(state_with_outline, prose_client)
 
         first_call = prose_client.generate_structured.call_args_list[0].kwargs
-        assert "The Arrival" in first_call["user_message"]
+        assert "Scene 1: The Arrival" in first_call["user_message"]
+        # Must NOT use summary format "Scene 1 (The Arrival): ..."
+        assert "(The Arrival)" not in first_call["user_message"]
 
 
 class TestWriteSceneProseMissingOutline:
