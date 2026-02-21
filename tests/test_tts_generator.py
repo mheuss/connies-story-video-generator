@@ -469,51 +469,24 @@ class TestElevenLabsTTSProvider:
         monkeypatch.setattr("story_video.pipeline.tts_generator.elevenlabs.ElevenLabs", mock_class)
         return mock_client
 
-    def test_mood_prepended_as_audio_tag(self, mock_elevenlabs):
-        """Any mood is passed through as a freeform v3 audio tag."""
+    @pytest.mark.parametrize(
+        "mood,expected_text",
+        [
+            ("sad", "[sad] Hello"),
+            ("thoughtful", "[thoughtful] Hello"),
+            (None, "Hello"),
+        ],
+        ids=["standard_mood", "freeform_mood", "no_mood"],
+    )
+    def test_mood_controls_text_sent(self, mock_elevenlabs, mood, expected_text):
+        """Mood input determines the text sent to the ElevenLabs API."""
         mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
 
         provider = ElevenLabsTTSProvider()
-        provider.synthesize(
-            "Hello",
-            "voice-id",
-            "eleven_v3",
-            1.0,
-            "mp3_44100_128",
-            mood="sad",
-        )
+        provider.synthesize("Hello", "voice-id", "eleven_v3", 1.0, "mp3_44100_128", mood=mood)
 
         call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
-        text_sent = call_kwargs["text"]
-        assert text_sent == "[sad] Hello"
-
-    def test_freeform_mood_passed_through(self, mock_elevenlabs):
-        """Freeform moods like 'thoughtful' are passed directly as tags."""
-        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
-
-        provider = ElevenLabsTTSProvider()
-        provider.synthesize(
-            "Hello",
-            "voice-id",
-            "eleven_v3",
-            1.0,
-            "mp3_44100_128",
-            mood="thoughtful",
-        )
-
-        call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
-        text_sent = call_kwargs["text"]
-        assert text_sent == "[thoughtful] Hello"
-
-    def test_no_mood_sends_plain_text(self, mock_elevenlabs):
-        mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
-
-        provider = ElevenLabsTTSProvider()
-        provider.synthesize("Hello", "voice-id", "eleven_v3", 1.0, "mp3_44100_128", mood=None)
-
-        call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
-        text_sent = call_kwargs["text"]
-        assert text_sent == "Hello"
+        assert call_kwargs["text"] == expected_text
 
     def test_speed_warning_logged(self, mock_elevenlabs, caplog):
         """Non-1.0 speed logs a warning since ElevenLabs ignores it."""
@@ -612,11 +585,17 @@ class TestMoodToInstructions:
     def test_none_returns_none(self):
         assert _mood_to_instructions(None) is None
 
-    def test_mood_returns_instruction(self):
-        assert _mood_to_instructions("sad") == "Speak in a sad tone"
-
-    def test_vowel_mood_uses_an(self):
-        assert _mood_to_instructions("excited") == "Speak in an excited tone"
+    @pytest.mark.parametrize(
+        "mood,expected",
+        [
+            ("sad", "Speak in a sad tone"),
+            ("excited", "Speak in an excited tone"),
+        ],
+        ids=["consonant_uses_a", "vowel_uses_an"],
+    )
+    def test_mood_produces_instruction_with_article(self, mood, expected):
+        """Mood string is converted to instruction with correct article."""
+        assert _mood_to_instructions(mood) == expected
 
     def test_angry_mood_uses_an(self):
         assert _mood_to_instructions("angry") == "Speak in an angry tone"
@@ -733,23 +712,19 @@ class TestGenerateAudioMultiSegment:
 class TestGenerateAudioTagsWithoutHeader:
     """generate_audio raises when text has voice/mood tags but no header."""
 
-    def test_voice_tag_without_header_raises(self, tmp_path):
-        """Voice tag in text with story_header=None raises ValueError."""
+    @pytest.mark.parametrize(
+        "narration_text",
+        [
+            "Hello. **voice:jane** Hi!",
+            "**mood:sad** Goodbye.",
+        ],
+        ids=["voice_tag", "mood_tag"],
+    )
+    def test_tag_without_header_raises(self, tmp_path, narration_text):
+        """Voice or mood tags without story_header raise ValueError."""
         provider = MagicMock(spec=TTSProvider)
         state = ProjectState.create("tag-check", InputMode.ADAPT, AppConfig(), tmp_path)
-        state.add_scene(1, "Scene", "Hello. **voice:jane** Hi!")
-        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
-        state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
-        scene = state.metadata.scenes[0]
-
-        with pytest.raises(ValueError, match="[Vv]oice.*tag.*found.*no.*header"):
-            generate_audio(scene, state, provider, story_header=None)
-
-    def test_mood_tag_without_header_raises(self, tmp_path):
-        """Mood tag in text with story_header=None raises ValueError."""
-        provider = MagicMock(spec=TTSProvider)
-        state = ProjectState.create("tag-check-2", InputMode.ADAPT, AppConfig(), tmp_path)
-        state.add_scene(1, "Scene", "**mood:sad** Goodbye.")
+        state.add_scene(1, "Scene", narration_text)
         state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
         state.update_scene_asset(1, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED)
         scene = state.metadata.scenes[0]
@@ -797,15 +772,11 @@ class TestGenerateMp3Silence:
         assert result[0] == 0xFF
         assert (result[1] & 0xE0) == 0xE0
 
-    def test_zero_duration_raises(self):
-        """Zero duration raises ValueError."""
+    @pytest.mark.parametrize("duration", [0.0, -1.0], ids=["zero", "negative"])
+    def test_invalid_duration_raises(self, duration):
+        """Zero or negative duration raises ValueError."""
         with pytest.raises(ValueError, match="must be positive"):
-            generate_mp3_silence(0.0)
-
-    def test_negative_duration_raises(self):
-        """Negative duration raises ValueError."""
-        with pytest.raises(ValueError, match="must be positive"):
-            generate_mp3_silence(-1.0)
+            generate_mp3_silence(duration)
 
 
 # ---------------------------------------------------------------------------
@@ -925,12 +896,15 @@ class TestGenerateAudioMultiSegmentEmptyResponse:
 class TestMoodToElevenLabsTextNonStandard:
     """_mood_to_elevenlabs_text with non-standard mood strings."""
 
-    def test_mood_word_produces_tag(self):
-        """A mood word is wrapped as an audio tag."""
-        result = _mood_to_elevenlabs_text("Hello", "excited")
-        assert result == "[excited] Hello"
-
-    def test_multi_word_mood_produces_tag(self):
-        """Multi-word moods are lowercased and wrapped as a tag."""
-        result = _mood_to_elevenlabs_text("Hello", "Deeply Sorrowful")
-        assert result == "[deeply sorrowful] Hello"
+    @pytest.mark.parametrize(
+        "mood,expected",
+        [
+            ("excited", "[excited] Hello"),
+            ("Deeply Sorrowful", "[deeply sorrowful] Hello"),
+        ],
+        ids=["single_word", "multi_word"],
+    )
+    def test_non_standard_mood_produces_tag(self, mood, expected):
+        """Non-standard mood strings are wrapped as audio tags."""
+        result = _mood_to_elevenlabs_text("Hello", mood)
+        assert result == expected
