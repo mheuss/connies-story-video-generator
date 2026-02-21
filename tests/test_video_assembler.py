@@ -89,49 +89,28 @@ class TestAssembleSceneHappyPath:
     """assemble_scene() renders a scene segment and updates state."""
 
     @patch("story_video.pipeline.video_assembler.run_ffmpeg")
-    def test_updates_asset_status_to_completed(self, mock_run, project_state):
-        """Scene asset_status.video_segment is COMPLETED after assembly."""
+    def test_happy_path(self, mock_run, project_state):
+        """assemble_scene renders segment, updates state, writes ASS, creates dirs."""
         scene = project_state.metadata.scenes[0]
         assemble_scene(scene, project_state)
 
+        # Status updated
         assert scene.asset_status.video_segment == SceneStatus.COMPLETED
 
-    @patch("story_video.pipeline.video_assembler.run_ffmpeg")
-    def test_saves_state_to_disk(self, mock_run, project_state):
-        """State is persisted — reload from disk, verify status."""
-        scene = project_state.metadata.scenes[0]
-        assemble_scene(scene, project_state)
-
+        # State persisted to disk
         reloaded = ProjectState.load(project_state.project_dir)
         assert reloaded.metadata.scenes[0].asset_status.video_segment == SceneStatus.COMPLETED
 
-    @patch("story_video.pipeline.video_assembler.run_ffmpeg")
-    def test_calls_run_ffmpeg_once(self, mock_run, project_state):
-        """run_ffmpeg is called exactly once for the segment render."""
-        scene = project_state.metadata.scenes[0]
-        assemble_scene(scene, project_state)
-
+        # FFmpeg called once
         mock_run.assert_called_once()
 
-    @patch("story_video.pipeline.video_assembler.run_ffmpeg")
-    def test_writes_ass_file(self, mock_run, project_state):
-        """ASS subtitle file is written to captions/scene_001.ass."""
-        scene = project_state.metadata.scenes[0]
-        assemble_scene(scene, project_state)
-
+        # ASS subtitle file written
         ass_path = project_state.project_dir / "captions" / "scene_001.ass"
         assert ass_path.exists()
-        content = ass_path.read_text(encoding="utf-8")
-        assert "[Script Info]" in content
+        assert "[Script Info]" in ass_path.read_text(encoding="utf-8")
 
-    @patch("story_video.pipeline.video_assembler.run_ffmpeg")
-    def test_creates_segments_directory(self, mock_run, project_state):
-        """segments/ directory is created for the output segment."""
-        scene = project_state.metadata.scenes[0]
-        assemble_scene(scene, project_state)
-
-        segments_dir = project_state.project_dir / "segments"
-        assert segments_dir.is_dir()
+        # Segments directory created
+        assert (project_state.project_dir / "segments").is_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -200,35 +179,18 @@ class TestAssembleVideoHappyPath:
 
     @patch("story_video.pipeline.video_assembler.probe_duration", return_value=10.0)
     @patch("story_video.pipeline.video_assembler.run_ffmpeg")
-    def test_returns_path_to_final_mp4(self, mock_run, mock_probe, project_state):
-        """assemble_video() returns the path to final.mp4."""
-        # Create a fake segment file
+    def test_returns_path_and_calls_ffmpeg(self, mock_run, mock_probe, project_state):
+        """assemble_video() returns final.mp4 path and calls run_ffmpeg once."""
         segments_dir = project_state.project_dir / "segments"
         segments_dir.mkdir(exist_ok=True)
         (segments_dir / "scene_001.mp4").write_bytes(b"segment")
 
-        # Mark video_segment as completed
         project_state.update_scene_asset(1, AssetType.VIDEO_SEGMENT, SceneStatus.COMPLETED)
         project_state.save()
 
         result = assemble_video(project_state)
 
-        expected = project_state.project_dir / "final.mp4"
-        assert result == expected
-
-    @patch("story_video.pipeline.video_assembler.probe_duration", return_value=10.0)
-    @patch("story_video.pipeline.video_assembler.run_ffmpeg")
-    def test_calls_run_ffmpeg_once(self, mock_run, mock_probe, project_state):
-        """run_ffmpeg is called exactly once for concatenation."""
-        segments_dir = project_state.project_dir / "segments"
-        segments_dir.mkdir(exist_ok=True)
-        (segments_dir / "scene_001.mp4").write_bytes(b"segment")
-
-        project_state.update_scene_asset(1, AssetType.VIDEO_SEGMENT, SceneStatus.COMPLETED)
-        project_state.save()
-
-        assemble_video(project_state)
-
+        assert result == project_state.project_dir / "final.mp4"
         mock_run.assert_called_once()
 
     @patch("story_video.pipeline.video_assembler.probe_duration", return_value=10.0)
