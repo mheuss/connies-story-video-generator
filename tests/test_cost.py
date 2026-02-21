@@ -63,7 +63,7 @@ class TestServiceCost:
 class TestCostEstimate:
     """CostEstimate frozen dataclass -- complete cost breakdown."""
 
-    def test_total_low_sums_service_lows(self):
+    def test_totals_sum_service_costs(self):
         services = [
             ServiceCost(service="A", description="a", low=1.0, high=2.0),
             ServiceCost(service="B", description="b", low=3.0, high=5.0),
@@ -76,19 +76,6 @@ class TestCostEstimate:
             services=services,
         )
         assert ce.total_low == pytest.approx(4.0)
-
-    def test_total_high_sums_service_highs(self):
-        services = [
-            ServiceCost(service="A", description="a", low=1.0, high=2.0),
-            ServiceCost(service="B", description="b", low=3.0, high=5.0),
-        ]
-        ce = CostEstimate(
-            mode=InputMode.ORIGINAL,
-            duration_minutes=30,
-            scene_count=25,
-            character_count=247500,
-            services=services,
-        )
         assert ce.total_high == pytest.approx(7.0)
 
     def test_is_frozen(self):
@@ -532,35 +519,8 @@ class TestServiceOrder:
 class TestFormatCostEstimate:
     """format_cost_estimate produces the display format from the design doc."""
 
-    @pytest.fixture()
-    def format_output(self):
-        """Shared formatted output for the default original-mode estimate."""
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=_config(),
-            scene_count=25,
-            character_count=247500,
-        )
-        return format_cost_estimate(est)
-
-    @pytest.mark.parametrize(
-        "expected_substrings",
-        [
-            ["Story Video Cost Estimate"],
-            ["original"],
-            ["30 minutes", "25 scenes"],
-            ["Claude", "TTS", "Images", "Whisper"],
-            ["Estimated total"],
-        ],
-        ids=["header", "mode", "duration_and_scenes", "service_names", "total"],
-    )
-    def test_format_contains(self, format_output, expected_substrings):
-        """Formatted output contains expected content."""
-        for substring in expected_substrings:
-            assert substring in format_output
-
-    def test_range_format_for_claude(self):
-        """When low != high, show as range: $X.XX - $Y.YY."""
+    def test_format_original_mode_output(self):
+        """Formatted output for original mode contains all expected facets."""
         est = estimate_cost(
             mode=InputMode.ORIGINAL,
             config=_config(),
@@ -568,33 +528,29 @@ class TestFormatCostEstimate:
             character_count=247500,
         )
         output = format_cost_estimate(est)
+
+        # Header, mode, duration/scenes, service names, total label
+        assert "Story Video Cost Estimate" in output
+        assert "original" in output
+        assert "30 minutes" in output
+        assert "25 scenes" in output
+        for name in ("Claude", "TTS", "Images", "Whisper"):
+            assert name in output
+        assert "Estimated total" in output
+
+        # Range format for Claude (low != high)
         assert "$2.00 - $5.00" in output
 
-    def test_exact_format_for_whisper(self):
-        """When low == high, show single value: $X.XX."""
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=_config(),
-            scene_count=25,
-            character_count=247500,
-        )
-        output = format_cost_estimate(est)
+        # Exact format for Whisper (low == high)
         assert "$0.18" in output
 
-    def test_total_range_shown(self):
-        """Total should show range when there's a range service."""
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=_config(),
-            scene_count=25,
-            character_count=247500,
-        )
-        output = format_cost_estimate(est)
-        # Total includes the Claude range, so it should be a range
-        total_low = est.total_low
-        total_high = est.total_high
-        assert f"${total_low:.2f}" in output
-        assert f"${total_high:.2f}" in output
+        # Total range values present
+        assert f"${est.total_low:.2f}" in output
+        assert f"${est.total_high:.2f}" in output
+
+        # Horizontal rules (box-drawing characters)
+        lines_with_rules = [line for line in output.split("\n") if "\u2500" in line]
+        assert len(lines_with_rules) >= 2
 
     def test_adapt_mode_format(self):
         """Adapt mode output shows adapt label and Claude cost range."""
@@ -609,19 +565,6 @@ class TestFormatCostEstimate:
         # At 25 scenes: low = $0.20, high = $0.50
         assert "$0.20" in output
         assert "$0.50" in output
-
-    def test_contains_horizontal_rules(self):
-        """Output contains separator lines using box-drawing characters."""
-        est = estimate_cost(
-            mode=InputMode.ORIGINAL,
-            config=_config(),
-            scene_count=25,
-            character_count=247500,
-        )
-        output = format_cost_estimate(est)
-        # Should have at least two horizontal rule lines
-        lines_with_rules = [line for line in output.split("\n") if "\u2500" in line]
-        assert len(lines_with_rules) >= 2
 
     def test_unknown_model_format(self):
         """Unknown TTS model shows 'not estimated' in formatted output."""
