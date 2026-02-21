@@ -69,19 +69,14 @@ def state_with_scenes(tmp_path):
 class TestGenerateImagePromptsHappyPath:
     """generate_image_prompts() correctly sets image prompts on scenes."""
 
-    def test_sets_image_prompt_on_scenes(self, state_with_scenes, mock_client):
-        """Scenes get image_prompt from Claude response."""
+    def test_sets_prompts_and_marks_completed(self, state_with_scenes, mock_client):
+        """Scenes get image_prompt from Claude response and asset marked COMPLETED."""
         generate_image_prompts(state_with_scenes, mock_client)
 
         scenes = state_with_scenes.metadata.scenes
         assert scenes[0].image_prompt == "A dark forest with towering pines under a stormy sky"
         assert scenes[1].image_prompt == "A castle on a hill bathed in golden sunset light"
-
-    def test_marks_image_prompt_asset_completed(self, state_with_scenes, mock_client):
-        """IMAGE_PROMPT asset COMPLETED for each scene."""
-        generate_image_prompts(state_with_scenes, mock_client)
-
-        for scene in state_with_scenes.metadata.scenes:
+        for scene in scenes:
             assert scene.asset_status.image_prompt == SceneStatus.COMPLETED
 
 
@@ -115,8 +110,8 @@ class TestGenerateImagePromptsStateSaved:
 class TestGenerateImagePromptsClaudeParams:
     """generate_image_prompts() calls Claude with correct params."""
 
-    def test_calls_claude_with_correct_params(self, state_with_scenes, mock_client):
-        """System, tool_name, schema verified."""
+    def test_claude_call_params_and_user_message(self, state_with_scenes, mock_client):
+        """System, tool_name, schema, and user message with numbered scenes verified."""
         generate_image_prompts(state_with_scenes, mock_client)
 
         mock_client.generate_structured.assert_called_once()
@@ -126,13 +121,7 @@ class TestGenerateImagePromptsClaudeParams:
         assert call_kwargs["tool_name"] == "generate_image_prompts"
         assert call_kwargs["tool_schema"] == IMAGE_PROMPT_SCHEMA
 
-    def test_user_message_contains_numbered_scenes(self, state_with_scenes, mock_client):
-        """Scene text included in user message with numbered headers."""
-        generate_image_prompts(state_with_scenes, mock_client)
-
-        call_kwargs = mock_client.generate_structured.call_args.kwargs
         user_msg = call_kwargs["user_message"]
-
         assert "=== Scene 1: The Forest ===" in user_msg
         assert "=== Scene 2: The Castle ===" in user_msg
         assert "The dark forest loomed ahead" in user_msg
@@ -198,7 +187,7 @@ class TestGenerateImagePromptsMissingScene:
 class TestGenerateImagePromptsSceneMissingFromResponse:
     """generate_image_prompts() raises ValueError when scenes are missing from response."""
 
-    def test_missing_scene_raises_value_error(self, state_with_scenes, mock_client):
+    def test_missing_scene_raises_and_marks_failed(self, state_with_scenes, mock_client):
         """Scene 2 not in response -> ValueError raised, missing scene marked FAILED."""
         mock_client.generate_structured.return_value = {
             "prompts": [
@@ -217,17 +206,6 @@ class TestGenerateImagePromptsSceneMissingFromResponse:
         # Scene 2 missing from response — marked FAILED
         assert scenes[1].image_prompt is None
         assert scenes[1].asset_status.image_prompt == SceneStatus.FAILED
-
-    def test_missing_scene_saves_state_before_raising(self, state_with_scenes, mock_client):
-        """State is saved before raising ValueError so FAILED status persists."""
-        mock_client.generate_structured.return_value = {
-            "prompts": [
-                {"scene_number": 1, "image_prompt": "A dark forest"},
-            ]
-        }
-
-        with pytest.raises(ValueError):
-            generate_image_prompts(state_with_scenes, mock_client)
 
 
 # ---------------------------------------------------------------------------
@@ -284,32 +262,22 @@ class TestGenerateImagePromptsCharacterReference:
         scene_pos = user_msg.index("=== Scene 1:")
         assert char_pos < scene_pos
 
-    def test_no_analysis_file_works(self, state_with_scenes, mock_client):
-        """No analysis.json — function works without character block."""
-        generate_image_prompts(state_with_scenes, mock_client)
-
-        call_kwargs = mock_client.generate_structured.call_args.kwargs
-        user_msg = call_kwargs["user_message"]
-        assert "Character Reference" not in user_msg
-        assert "=== Scene 1:" in user_msg
-
-    def test_empty_characters_no_block(self, state_with_scenes, mock_client):
-        """Empty characters array — no character block in message."""
-        analysis = {"characters": []}
-        analysis_path = state_with_scenes.project_dir / "analysis.json"
-        analysis_path.write_text(json.dumps(analysis), encoding="utf-8")
-
-        generate_image_prompts(state_with_scenes, mock_client)
-
-        call_kwargs = mock_client.generate_structured.call_args.kwargs
-        user_msg = call_kwargs["user_message"]
-        assert "Character Reference" not in user_msg
-
-    def test_analysis_without_characters_key(self, state_with_scenes, mock_client):
-        """Backward compat: analysis.json without characters key works."""
-        analysis = {"craft_notes": {}, "thematic_brief": {}, "source_stats": {}}
-        analysis_path = state_with_scenes.project_dir / "analysis.json"
-        analysis_path.write_text(json.dumps(analysis), encoding="utf-8")
+    @pytest.mark.parametrize(
+        "analysis_content",
+        [
+            None,
+            {"characters": []},
+            {"craft_notes": {}, "thematic_brief": {}, "source_stats": {}},
+        ],
+        ids=["no_file", "empty_array", "no_characters_key"],
+    )
+    def test_no_character_reference_in_message(
+        self, state_with_scenes, mock_client, analysis_content
+    ):
+        """No character block when analysis is absent, empty, or lacks characters key."""
+        if analysis_content is not None:
+            analysis_path = state_with_scenes.project_dir / "analysis.json"
+            analysis_path.write_text(json.dumps(analysis_content), encoding="utf-8")
 
         generate_image_prompts(state_with_scenes, mock_client)
 
