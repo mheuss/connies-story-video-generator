@@ -38,10 +38,6 @@ class TestLoadConfigDefaultsOnly:
         config = load_config()
         assert config.pipeline.autonomous is False
 
-    def test_output_defaults(self):
-        config = load_config()
-        assert config.output.directory == Path("./output")
-
 
 # ---------------------------------------------------------------------------
 # Loading from YAML file
@@ -127,10 +123,6 @@ class TestLoadConfigCLIOverrides:
         assert config.tts.voice == "alloy"
         assert config.video.fps == 60
         assert config.pipeline.autonomous is True
-
-    def test_override_output_directory(self):
-        config = load_config(cli_overrides={"output.directory": "/custom/path"})
-        assert config.output.directory == Path("/custom/path")
 
     def test_override_story_config(self):
         config = load_config(cli_overrides={"story.target_duration_minutes": 120})

@@ -49,6 +49,3 @@ pipeline:
   max_retries: 3
   retry_base_delay: 2
   save_originals_on_revision: true
-
-output:
-  directory: ./output

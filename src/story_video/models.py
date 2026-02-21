@@ -2,7 +2,7 @@
 
 This module defines all data shapes used across the application:
 - Enums for input modes, statuses, asset types, and pipeline phases
-- Config models for each subsystem (story, TTS, images, video, subtitles, pipeline, output)
+- Config models for each subsystem (story, TTS, images, video, subtitles, pipeline)
 - Scene and project metadata models
 
 Pure data definitions only — no file I/O, no business logic.
@@ -11,7 +11,6 @@ Pure data definitions only — no file I/O, no business logic.
 import re
 from datetime import datetime, timezone
 from enum import Enum
-from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -33,7 +32,6 @@ __all__ = [
     "InputMode",
     "KNOWN_TTS_PROVIDERS",
     "NarrationSegment",
-    "OutputConfig",
     "PhaseStatus",
     "PipelineConfig",
     "PipelinePhase",
@@ -445,18 +443,6 @@ class PipelineConfig(BaseModel):
     autonomous: bool = Field(default=False)
 
 
-class OutputConfig(BaseModel):
-    """Output directory configuration.
-
-    Fields:
-        directory: Base directory where project outputs are stored.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    directory: Path = Field(default=Path("./output"))
-
-
 class AppConfig(BaseModel):
     """Top-level application configuration combining all subsystem configs.
 
@@ -470,7 +456,6 @@ class AppConfig(BaseModel):
         video: Video assembly parameters.
         subtitles: Subtitle rendering parameters.
         pipeline: Pipeline behavior parameters.
-        output: Output directory configuration.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -481,7 +466,6 @@ class AppConfig(BaseModel):
     video: VideoConfig = Field(default_factory=VideoConfig)
     subtitles: SubtitleConfig = Field(default_factory=SubtitleConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
-    output: OutputConfig = Field(default_factory=OutputConfig)
 
 
 # ---------------------------------------------------------------------------
