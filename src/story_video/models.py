@@ -11,8 +11,12 @@ Pure data definitions only — no file I/O, no business logic.
 import re
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+# Sentinel for pre-commit auto-fix test — will be removed
+_PRE_COMMIT_TEST = Path(".")
 
 HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 RESOLUTION_RE = re.compile(r"^\d+x\d+$")
