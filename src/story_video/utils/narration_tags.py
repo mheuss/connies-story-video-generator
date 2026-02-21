@@ -151,6 +151,10 @@ def parse_narration_segments(
         msg = "voice_map must not be empty"
         raise ValueError(msg)
 
+    if not text.strip():
+        msg = f"Scene {scene_number}: narration text is empty or whitespace-only"
+        raise ValueError(msg)
+
     current_voice_label = default_voice
     current_mood: str | None = None
     segments: list[NarrationSegment] = []

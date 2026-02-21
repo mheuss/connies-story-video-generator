@@ -193,10 +193,15 @@ class TestParseNarrationSegmentsEdgeCases:
 
     VOICE_MAP = {"narrator": "nova"}
 
-    def test_empty_string_returns_empty(self):
-        """Empty string produces no segments."""
-        result = parse_narration_segments("", self.VOICE_MAP, "narrator", scene_number=1)
-        assert result == []
+    def test_empty_string_raises(self):
+        """Empty string raises ValueError."""
+        with pytest.raises(ValueError, match="empty or whitespace"):
+            parse_narration_segments("", self.VOICE_MAP, "narrator", scene_number=1)
+
+    def test_whitespace_only_raises(self):
+        """Whitespace-only string raises ValueError."""
+        with pytest.raises(ValueError, match="empty or whitespace"):
+            parse_narration_segments("   ", self.VOICE_MAP, "narrator", scene_number=1)
 
     def test_empty_voice_map_raises(self):
         """Empty voice_map raises ValueError."""
