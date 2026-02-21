@@ -10,9 +10,9 @@ Acknowledged items not yet scheduled.
 
 ### Fifth-Pass Review (PR5) — 2026-02-20
 
-- [ ] [refactor] `_mood_to_elevenlabs_text` reverse-parses the output of `_mood_to_instructions` — fragile coupling. Pass raw mood keyword alongside formatted instructions instead of formatting then un-formatting. (tts_generator.py:144-165)
-- [ ] [limitation] `write_scene_prose` resume: running summary for skipped scenes uses title-only context instead of full prose summary — weaker context for Claude on subsequent scenes after resume. Persist scene summaries to survive resume. (story_writer.py:849-853)
-- [ ] [bug] `OutputConfig.directory` is defined in `AppConfig` but never read — CLI hardcodes `Path("./output")` in every command. Wire config.output.directory into CLI as fallback for `--output-dir`, or remove `OutputConfig`. (models.py:448-457, cli.py)
+- [x] [refactor] `_mood_to_elevenlabs_text` reverse-parses the output of `_mood_to_instructions` — fragile coupling. Added `mood` param to `TTSProvider.synthesize()` Protocol and both providers. ElevenLabs uses `mood` directly; reverse-parsing eliminated. (PR5-1)
+- [x] [limitation] `write_scene_prose` resume: running summary for skipped scenes uses title-only context instead of full prose summary — added `summary` field to Scene model, persisted via `add_scene()`, used on resume with title-only fallback for backward compat. (PR5-2)
+- [x] [bug] `OutputConfig.directory` is defined in `AppConfig` but never read — removed `OutputConfig` class, `output` field from `AppConfig`, and `output:` section from config.yaml. (PR5-3)
 
 ### Third-Pass Review (PR4) — 2026-02-18
 
@@ -190,8 +190,6 @@ Acknowledged items not yet scheduled.
 
 - [x] [feature] LLM-based TTS text prep — replaced regex narration prep with Claude API calls for context-aware pronunciation preparation. Single `generate_structured()` call per scene handles abbreviations, numbers, punctuation, and unusual names. Produces JSON changelog. NARRATION_PREP is now a checkpoint phase. Old regex code deleted. (narration_prep.py, orchestrator.py)
 - [x] [feature] Implement inspired_by mode — analysis, bible, outline, prose, critique/revision (pipeline/story_writer.py, see docs/plans/2026-02-18-inspired-by-design.md)
-- [ ] [limitation] write_scene_prose resume: running summary for skipped scenes uses title-only context instead of full prose summary — weaker context for Claude on subsequent scenes after resume (story_writer.py)
-
 - [ ] [feature] Inline image tags — define image prompts in YAML header, reference with `**image:tag**` in story text. Decouples image transitions from scene boundaries, gives authors direct control over visuals. Requires video assembler refactor for multiple images per scene.
 
 - [ ] [feature] Background music / sound effects — overlay audio tracks at specified points in narration with volume and duration control. Music files supplied by user. FFmpeg amix filter for mixing. Most complex of the three inline tag features.
