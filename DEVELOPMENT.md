@@ -150,7 +150,7 @@ Significant technical decisions with context and rationale.
 - OpenAI TTS has a character limit per request — long scenes may need chunking
 - Multi-voice TTS concatenates raw MP3 bytes from multiple `synthesize()` calls. This works because MP3 frames are independently decodable. WAV/FLAC would need FFmpeg concat instead. A format guard in `generate_audio` raises `ValueError` if multi-segment mode is used with a format whose prefix is not in `_CONCAT_SAFE_PREFIXES` (mp3, opus).
 - ElevenLabs does not support the `speed` parameter — a warning is logged if speed != 1.0
-- ElevenLabs mood mapping uses `_mood_to_elevenlabs_text()` which extracts the mood keyword from the instruction string and wraps it as a freeform audio tag (e.g., `[excited]`) prepended to text.
+- ElevenLabs mood mapping uses `_mood_to_elevenlabs_text()` which receives the raw mood keyword directly via the `mood` parameter and wraps it as a freeform audio tag (e.g., `[excited]`) prepended to text.
 - FFmpeg filter complexity grows with video effects — blur background + still image overlay + subtitle rendering requires careful filter graph construction
 
 ### External Integrations

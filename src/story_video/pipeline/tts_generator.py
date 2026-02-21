@@ -79,6 +79,7 @@ class TTSProvider(Protocol):
         speed: float,
         output_format: str,
         instructions: str | None = None,
+        mood: str | None = None,
     ) -> bytes:
         """Convert text to audio bytes.
 
@@ -89,6 +90,7 @@ class TTSProvider(Protocol):
             speed: Playback speed multiplier.
             output_format: Audio format (mp3, wav, etc.).
             instructions: Optional style/mood instruction for the TTS engine.
+            mood: Optional raw mood keyword (used by ElevenLabs for audio tags).
 
         Returns:
             Raw audio bytes.
@@ -114,6 +116,7 @@ class OpenAITTSProvider:
         speed: float,
         output_format: str,
         instructions: str | None = None,
+        mood: str | None = None,
     ) -> bytes:
         """Convert text to audio bytes via OpenAI TTS.
 
@@ -124,6 +127,7 @@ class OpenAITTSProvider:
             speed: Playback speed multiplier (0.25 to 4.0).
             output_format: Audio format (mp3, opus, aac, flac).
             instructions: Optional style/mood instruction for the TTS engine.
+            mood: Optional raw mood keyword (unused by OpenAI, uses instructions instead).
 
         Returns:
             Raw audio bytes from the full API response.
@@ -141,28 +145,16 @@ class OpenAITTSProvider:
         return response.content
 
 
-def _mood_to_elevenlabs_text(text: str, instructions: str | None) -> str:
-    """Prepend an Eleven v3 audio tag for the mood instruction.
+def _mood_to_elevenlabs_text(text: str, mood: str | None) -> str:
+    """Prepend an Eleven v3 audio tag for the mood keyword.
 
     Eleven v3 supports freeform audio tags like ``[thoughtful]``,
-    ``[whispers]``, ``[excited]``. The mood keyword is extracted from
-    the ``instructions`` string and passed through directly as a tag —
-    no mapping table needed.
-
-    COUPLING NOTE: This function reverse-parses the format produced by
-    ``_mood_to_instructions`` ("Speak in a/an {mood} tone"). If that
-    format changes, update the prefix/suffix stripping here to match.
+    ``[whispers]``, ``[excited]``. The mood keyword is passed through
+    directly as a tag — no mapping table needed.
     """
-    if instructions is None:
+    if mood is None:
         return text
-    mood = (
-        instructions.removeprefix("Speak in a ")
-        .removeprefix("Speak in an ")
-        .removesuffix(" tone")
-        .strip()
-        .lower()
-    )
-    return f"[{mood}] {text}"
+    return f"[{mood.strip().lower()}] {text}"
 
 
 # ElevenLabs transient errors: network failures only.
@@ -192,6 +184,7 @@ class ElevenLabsTTSProvider:
         speed: float,
         output_format: str,
         instructions: str | None = None,
+        mood: str | None = None,
     ) -> bytes:
         """Convert text to audio bytes via ElevenLabs TTS.
 
@@ -201,7 +194,8 @@ class ElevenLabsTTSProvider:
             model: ElevenLabs model ID.
             speed: Playback speed (not supported by ElevenLabs API).
             output_format: ElevenLabs output format (mp3_44100_128, etc.).
-            instructions: Optional mood instruction, translated to audio tag.
+            instructions: Optional mood instruction (unused by ElevenLabs, uses mood instead).
+            mood: Optional raw mood keyword, translated to audio tag.
 
         Returns:
             Raw audio bytes from the streaming response.
@@ -212,7 +206,7 @@ class ElevenLabsTTSProvider:
                 speed,
             )
             self._speed_warned = True
-        tagged_text = _mood_to_elevenlabs_text(text, instructions)
+        tagged_text = _mood_to_elevenlabs_text(text, mood)
         audio_iter = self._client.text_to_speech.convert(
             voice_id=voice,
             model_id=model,
@@ -225,8 +219,8 @@ class ElevenLabsTTSProvider:
 def _mood_to_instructions(mood: str | None) -> str | None:
     """Convert a mood tag to a natural language TTS instruction.
 
-    Used by OpenAI TTS (``instructions`` parameter) and reverse-parsed by
-    ``_mood_to_elevenlabs_text`` to extract the mood keyword for audio tags.
+    Used by OpenAI TTS (``instructions`` parameter). ElevenLabs receives the
+    raw mood keyword directly via the ``mood`` parameter instead.
     """
     if not mood:
         return None
@@ -303,6 +297,7 @@ def generate_audio(
                     speed=tts_config.speed,
                     output_format=tts_config.output_format,
                     instructions=_mood_to_instructions(segment.mood),
+                    mood=segment.mood,
                 )
             audio_chunks.append(chunk)
         audio_bytes = b"".join(audio_chunks)

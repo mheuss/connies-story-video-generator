@@ -480,7 +480,7 @@ class TestElevenLabsTTSProvider:
             "eleven_v3",
             1.0,
             "mp3_44100_128",
-            instructions="Speak in a sad tone",
+            mood="sad",
         )
 
         call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
@@ -498,7 +498,7 @@ class TestElevenLabsTTSProvider:
             "eleven_v3",
             1.0,
             "mp3_44100_128",
-            instructions="Speak in a thoughtful tone",
+            mood="thoughtful",
         )
 
         call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
@@ -509,9 +509,7 @@ class TestElevenLabsTTSProvider:
         mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
 
         provider = ElevenLabsTTSProvider()
-        provider.synthesize(
-            "Hello", "voice-id", "eleven_v3", 1.0, "mp3_44100_128", instructions=None
-        )
+        provider.synthesize("Hello", "voice-id", "eleven_v3", 1.0, "mp3_44100_128", mood=None)
 
         call_kwargs = mock_elevenlabs.text_to_speech.convert.call_args.kwargs
         text_sent = call_kwargs["text"]
@@ -590,8 +588,8 @@ class TestElevenLabsTTSProvider:
 class TestMoodToElevenLabsText:
     """_mood_to_elevenlabs_text passes any mood through as a v3 audio tag."""
 
-    def test_none_instructions_returns_plain_text(self):
-        """None instructions return text unchanged."""
+    def test_none_mood_returns_plain_text(self):
+        """None mood returns text unchanged."""
         result = _mood_to_elevenlabs_text("Hello world", None)
         assert result == "Hello world"
 
@@ -599,7 +597,7 @@ class TestMoodToElevenLabsText:
         """All moods used in the two-voice test story produce audio tags."""
         story_moods = ["dry", "thoughtful", "warm", "surprised", "gentle", "amused"]
         for mood in story_moods:
-            result = _mood_to_elevenlabs_text("Hello", f"Speak in a {mood} tone")
+            result = _mood_to_elevenlabs_text("Hello", mood)
             assert result == f"[{mood}] Hello", f"Failed for mood={mood}"
 
 
@@ -671,8 +669,8 @@ class TestGenerateAudioMultiSegment:
         audio_path = state_with_header.project_dir / "audio" / "scene_001.mp3"
         assert audio_path.read_bytes() == b"chunk1chunk2"
 
-    def test_mood_passed_as_instructions(self, state_with_header, mock_provider):
-        """Mood tag is converted to instructions and passed to synthesize."""
+    def test_mood_passed_as_instructions_and_mood(self, state_with_header, mock_provider):
+        """Mood tag is converted to instructions and mood is passed directly."""
         scene = state_with_header.metadata.scenes[0]
         scene.narration_text = "**mood:sad** Goodbye."
         header = StoryHeader(voices={"narrator": "nova"})
@@ -680,6 +678,7 @@ class TestGenerateAudioMultiSegment:
 
         call_kwargs = mock_provider.synthesize.call_args.kwargs
         assert call_kwargs["instructions"] == "Speak in a sad tone"
+        assert call_kwargs["mood"] == "sad"
 
     def test_no_header_uses_config_voice(self, state_with_header, mock_provider):
         """Scene without story header uses config default voice."""
@@ -924,14 +923,14 @@ class TestGenerateAudioMultiSegmentEmptyResponse:
 
 
 class TestMoodToElevenLabsTextNonStandard:
-    """_mood_to_elevenlabs_text with non-standard instruction formats."""
+    """_mood_to_elevenlabs_text with non-standard mood strings."""
 
-    def test_raw_mood_word_produces_tag_with_full_text(self):
-        """A raw mood word (not in 'Speak in a X tone' format) is passed through as-is."""
+    def test_mood_word_produces_tag(self):
+        """A mood word is wrapped as an audio tag."""
         result = _mood_to_elevenlabs_text("Hello", "excited")
         assert result == "[excited] Hello"
 
-    def test_custom_format_produces_tag_with_full_text(self):
-        """Non-standard instruction is used as the tag verbatim (after stripping)."""
-        result = _mood_to_elevenlabs_text("Hello", "Read this dramatically")
-        assert result == "[read this dramatically] Hello"
+    def test_multi_word_mood_produces_tag(self):
+        """Multi-word moods are lowercased and wrapped as a tag."""
+        result = _mood_to_elevenlabs_text("Hello", "Deeply Sorrowful")
+        assert result == "[deeply sorrowful] Hello"
