@@ -207,6 +207,31 @@ class TestActualMode:
         assert est.character_count == 247500
         assert est.duration_minutes == 30
 
+    def test_scene_count_only_computes_character_count(self):
+        """Providing scene_count but not character_count computes characters from config."""
+        config = _config()
+        est = estimate_cost(
+            mode=InputMode.ORIGINAL,
+            config=config,
+            scene_count=10,
+        )
+        assert est.scene_count == 10
+        # character_count = scene_count * scene_word_target * CHARS_PER_WORD
+        # = 10 * 1800 * 5.5 = 99000
+        assert est.character_count == 99000
+
+    def test_character_count_only_computes_scene_count(self):
+        """Providing character_count but not scene_count computes scenes from config."""
+        config = _config()
+        est = estimate_cost(
+            mode=InputMode.ORIGINAL,
+            config=config,
+            character_count=100000,
+        )
+        # scene_count = ceil(30 * 150 / 1800) = ceil(2.5) = 3
+        assert est.scene_count == 3
+        assert est.character_count == 100000
+
 
 # ---------------------------------------------------------------------------
 # Claude API cost
@@ -572,7 +597,7 @@ class TestFormatCostEstimate:
         assert f"${total_high:.2f}" in output
 
     def test_adapt_mode_format(self):
-        """Adapt mode should show adapt in the output."""
+        """Adapt mode output shows adapt label and Claude cost range."""
         est = estimate_cost(
             mode=InputMode.ADAPT,
             config=_config(),
@@ -581,6 +606,9 @@ class TestFormatCostEstimate:
         )
         output = format_cost_estimate(est)
         assert "adapt" in output
+        # At 25 scenes: low = $0.20, high = $0.50
+        assert "$0.20" in output
+        assert "$0.50" in output
 
     def test_contains_horizontal_rules(self):
         """Output contains separator lines using box-drawing characters."""
