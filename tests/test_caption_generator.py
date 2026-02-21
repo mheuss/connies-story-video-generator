@@ -433,7 +433,13 @@ class TestGenerateCaptionsMultiDigitScene:
 
 
 class TestReconcilePunctuation:
-    """_reconcile_punctuation restores punctuation from segments to words."""
+    """_reconcile_punctuation restores punctuation from prose to caption words.
+
+    Deviation: tests a private helper directly. The two-pointer alignment
+    algorithm has many edge cases (mismatches, skips, quotes) that would
+    require elaborate Whisper mocks to cover through the public API.
+    Accepted per PR6 review.
+    """
 
     def test_appends_period_to_final_word(self):
         """Period from segment text is appended to matching word."""
@@ -562,7 +568,12 @@ class TestReconcilePunctuation:
 
 
 class TestTokenizeProse:
-    """_tokenize_prose splits prose words into (leading, bare, trailing) tuples."""
+    """_tokenize_prose splits prose words into (leading, bare, trailing) tuples.
+
+    Deviation: tests a private helper directly. The tokenizer is a prerequisite
+    for _reconcile_punctuation and has its own edge cases (quotes, punctuation
+    clusters) best tested in isolation. Accepted per PR6 review.
+    """
 
     @pytest.mark.parametrize(
         "input_text,expected",
@@ -616,7 +627,11 @@ class TestTokenizeProse:
 
 
 class TestReconcilePunctuationQuotes:
-    """_reconcile_punctuation restores quotation marks from prose."""
+    """_reconcile_punctuation restores quotation marks from prose.
+
+    Deviation: tests a private helper directly — see TestReconcilePunctuation
+    docstring for rationale. Accepted per PR6 review.
+    """
 
     def test_restores_opening_and_closing_double_quotes(self):
         """Double quotes around dialogue are restored from prose."""
@@ -730,7 +745,11 @@ class TestReconcilePunctuationQuotes:
 
 
 class TestReconcilePunctuationAlignment:
-    """_reconcile_punctuation handles word mismatches from narration prep."""
+    """_reconcile_punctuation handles word mismatches from narration prep.
+
+    Deviation: tests a private helper directly — see TestReconcilePunctuation
+    docstring for rationale. Accepted per PR6 review.
+    """
 
     def test_skipped_prose_word_resyncs(self):
         """Prose has extra word that Whisper didn't hear — alignment resyncs."""

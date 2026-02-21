@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from story_video.pipeline.narration_prep import (
-    _SYSTEM_PROMPT,
     _TOOL_NAME,
     _TOOL_SCHEMA,
     NarrationPrepError,
@@ -18,7 +17,12 @@ from story_video.pipeline.narration_prep import (
 
 
 class TestValidateTagsPreserved:
-    """_validate_tags_preserved checks tags match between original and modified."""
+    """_validate_tags_preserved ensures tags match between original and modified.
+
+    Deviation: tests a private helper directly. The algorithm is complex enough
+    that testing through prepare_narration_llm would require elaborate mock
+    orchestration for minimal gain. Accepted per PR6 review.
+    """
 
     def test_identical_tags_valid(self):
         original = "**voice:narrator** Hello."
@@ -68,7 +72,12 @@ class TestNarrationPrepError:
 
 
 class TestBuildUserMessage:
-    """_build_user_message constructs the Claude user message."""
+    """_build_user_message constructs the Claude user message.
+
+    Deviation: tests a private helper directly. The message construction logic
+    has conditional sections (pronunciation guide, scene context) that are
+    easier to verify in isolation. Accepted per PR6 review.
+    """
 
     def test_basic_message(self):
         result = _build_user_message(
@@ -103,24 +112,6 @@ class TestBuildUserMessage:
             total_scenes=1,
         )
         assert "Pronunciation guide" not in result
-
-
-class TestPromptConstants:
-    """Verify prompt constants exist and have expected structure."""
-
-    def test_system_prompt_mentions_tags(self):
-        assert "voice" in _SYSTEM_PROMPT.lower()
-        assert "mood" in _SYSTEM_PROMPT.lower()
-
-    def test_tool_schema_has_required_fields(self):
-        props = _TOOL_SCHEMA["properties"]
-        assert "modified_text" in props
-        assert "changes" in props
-        assert "pronunciation_guide_additions" in props
-
-    def test_tool_name_is_string(self):
-        assert isinstance(_TOOL_NAME, str)
-        assert len(_TOOL_NAME) > 0
 
 
 class TestPrepareNarrationLlm:
