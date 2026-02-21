@@ -31,7 +31,7 @@ Acknowledged items not yet scheduled.
 **Story writer:**
 
 - [x] [refactor] `split_scenes` and `write_scene_prose` skip IN_PROGRESS transition for TEXT asset — added IN_PROGRESS transition before COMPLETED for consistency (story_writer.py) (PR4-7)
-- [x] [docs] `critique_and_revise` resume heuristic is fragile — already documented in code comments at line 815-817; no further action needed (PR4-8)
+- [x] [docs] `critique_and_revise` resume heuristic is fragile — already documented in code comments at lines 938-940 (critique_and_revise resume heuristic); no further action needed (PR4-8)
 - [x] [docs] `flag_narration` `str.replace()` exact match may miss whitespace-variant Claude output — already documented with warning fallback at lines 496-508; no further action needed (PR4-9)
 
 **TTS generator:**
