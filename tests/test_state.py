@@ -126,15 +126,14 @@ class TestAssetDependencies:
 class TestProjectStateCreate:
     """ProjectState.create() — creates a new project with initial state."""
 
-    def test_project_dir_is_under_output_dir(self, output_dir, config):
+    def test_creates_project_with_correct_initial_state(self, output_dir, config):
+        """Project dir is under output_dir; metadata has correct defaults."""
         output_dir.mkdir(parents=True, exist_ok=True)
         state = ProjectState.create("my-project", InputMode.ORIGINAL, config, output_dir)
         assert state.project_dir == output_dir / "my-project"
 
-    def test_metadata_has_correct_initial_state(self, project_state, config):
-        """New project metadata has correct id, mode, status, and defaults."""
-        m = project_state.metadata
-        assert m.project_id == "test-project"
+        m = state.metadata
+        assert m.project_id == "my-project"
         assert m.mode == InputMode.ORIGINAL
         assert m.status == PhaseStatus.PENDING
         assert m.current_phase is None
@@ -147,10 +146,10 @@ class TestProjectStateCreate:
         with pytest.raises(FileExistsError):
             ProjectState.create("dup-project", InputMode.ORIGINAL, config, output_dir)
 
-    def test_adapt_mode_is_stored(self, adapt_project_state):
+    def test_stores_all_input_modes(self, adapt_project_state, output_dir, config):
+        """Both adapt and inspired_by modes are stored correctly."""
         assert adapt_project_state.metadata.mode == InputMode.ADAPT
 
-    def test_inspired_by_mode_is_stored(self, output_dir, config):
         output_dir.mkdir(parents=True, exist_ok=True)
         state = ProjectState.create("inspired", InputMode.INSPIRED_BY, config, output_dir)
         assert state.metadata.mode == InputMode.INSPIRED_BY
@@ -164,14 +163,13 @@ class TestProjectStateCreate:
 class TestProjectStateCreateDiskIO:
     """ProjectState.create() writes project.json and creates directories."""
 
-    def test_creates_project_structure(self, project_state):
-        """Creates project directory, project.json, and all subdirectories."""
+    def test_creates_structure_with_valid_json(self, project_state):
+        """Creates directories, subdirs, and valid project.json."""
         assert project_state.project_dir.is_dir()
         assert (project_state.project_dir / "project.json").is_file()
         for subdir in ("scenes", "audio", "images", "captions", "video", "segments"):
             assert (project_state.project_dir / subdir).is_dir(), f"Missing {subdir}/"
 
-    def test_project_json_contains_valid_data(self, project_state):
         json_path = project_state.project_dir / "project.json"
         content = json_path.read_text(encoding="utf-8")
         loaded = ProjectMetadata.model_validate_json(content)
@@ -268,12 +266,10 @@ class TestProjectStateSave:
 class TestPhaseTransitions:
     """Phase transition methods — start, complete, fail, await_review."""
 
-    def test_start_phase_sets_current_phase(self, project_state):
+    def test_start_phase_sets_phase_and_status(self, project_state):
+        """start_phase sets current_phase and status to IN_PROGRESS."""
         project_state.start_phase(PipelinePhase.ANALYSIS)
         assert project_state.metadata.current_phase == PipelinePhase.ANALYSIS
-
-    def test_start_phase_sets_status_to_in_progress(self, project_state):
-        project_state.start_phase(PipelinePhase.ANALYSIS)
         assert project_state.metadata.status == PhaseStatus.IN_PROGRESS
 
     def test_complete_phase_sets_status_to_completed(self, project_state):
@@ -359,13 +355,14 @@ class TestAddScene:
     """ProjectState.add_scene() — adds scenes to the project."""
 
     def test_adds_scene_with_correct_fields(self, project_state):
-        """Added scene has correct number, title, prose, and pending asset status."""
+        """Added scene has correct fields, pending status, and summary defaults to None."""
         project_state.add_scene(1, "Opening", "The story begins...")
         scene = project_state.metadata.scenes[0]
         assert scene.scene_number == 1
         assert scene.title == "Opening"
         assert scene.prose == "The story begins..."
         assert scene.asset_status.text == SceneStatus.PENDING
+        assert scene.summary is None
 
     def test_add_multiple_scenes(self, project_state):
         project_state.add_scene(1, "First", "First scene.")
@@ -382,11 +379,6 @@ class TestAddScene:
         project_state.add_scene(1, "Opening", "The story begins.", summary="Hero arrives.")
         scene = project_state.metadata.scenes[0]
         assert scene.summary == "Hero arrives."
-
-    def test_summary_defaults_to_none(self, project_state):
-        project_state.add_scene(1, "Opening", "The story begins.")
-        scene = project_state.metadata.scenes[0]
-        assert scene.summary is None
 
 
 # ---------------------------------------------------------------------------

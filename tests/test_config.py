@@ -47,17 +47,13 @@ class TestLoadConfigDefaultsOnly:
 class TestLoadConfigFromYaml:
     """load_config reads a YAML file and merges with defaults."""
 
-    def test_loads_values_from_yaml(self, tmp_path):
+    def test_loads_yaml_values_with_defaults_for_rest(self, tmp_path):
+        """YAML values loaded; unspecified fields get Pydantic defaults."""
         yaml_file = tmp_path / "config.yaml"
         yaml_file.write_text("tts:\n  voice: alloy\n")
         config = load_config(config_path=yaml_file)
         assert config.tts.voice == "alloy"
-
-    def test_unspecified_fields_get_pydantic_defaults(self, tmp_path):
-        yaml_file = tmp_path / "config.yaml"
-        yaml_file.write_text("tts:\n  voice: alloy\n")
-        config = load_config(config_path=yaml_file)
-        # voice is overridden, but other TTS fields get defaults
+        # Unspecified TTS fields get defaults
         assert config.tts.provider == "openai"
         assert config.tts.model == "gpt-4o-mini-tts"
         # Other sections are entirely defaults
@@ -79,18 +75,18 @@ class TestLoadConfigFromYaml:
         assert config.tts.voice == "echo"
         assert config.pipeline.autonomous is True
 
-    def test_empty_yaml_file_gives_defaults(self, tmp_path):
-        yaml_file = tmp_path / "config.yaml"
-        yaml_file.write_text("")
-        config = load_config(config_path=yaml_file)
+    def test_empty_or_comments_only_yaml_gives_defaults(self, tmp_path):
+        """Empty file and comments-only file both produce defaults."""
+        empty_file = tmp_path / "empty.yaml"
+        empty_file.write_text("")
+        config = load_config(config_path=empty_file)
         assert config.story.target_duration_minutes == 30
         assert config.tts.voice == "nova"
 
-    def test_yaml_with_only_comments_gives_defaults(self, tmp_path):
-        yaml_file = tmp_path / "config.yaml"
-        yaml_file.write_text("# This is a comment\n# Another comment\n")
-        config = load_config(config_path=yaml_file)
-        assert config.story.target_duration_minutes == 30
+        comments_file = tmp_path / "comments.yaml"
+        comments_file.write_text("# This is a comment\n# Another comment\n")
+        config2 = load_config(config_path=comments_file)
+        assert config2.story.target_duration_minutes == 30
 
     def test_unknown_yaml_keys_raise_validation_error(self, tmp_path):
         """Extra keys in YAML that don't match any config section are rejected."""
@@ -108,9 +104,12 @@ class TestLoadConfigFromYaml:
 class TestLoadConfigCLIOverrides:
     """CLI overrides (dotted keys) override both defaults and YAML values."""
 
-    def test_override_single_value_no_yaml(self):
+    def test_override_single_value_keeps_defaults(self):
+        """Single CLI override applied; unoverridden fields keep defaults."""
         config = load_config(cli_overrides={"tts.voice": "echo"})
         assert config.tts.voice == "echo"
+        assert config.tts.provider == "openai"
+        assert config.story.target_duration_minutes == 30
 
     def test_override_multiple_values_no_yaml(self):
         config = load_config(
@@ -127,11 +126,6 @@ class TestLoadConfigCLIOverrides:
     def test_override_story_config(self):
         config = load_config(cli_overrides={"story.target_duration_minutes": 120})
         assert config.story.target_duration_minutes == 120
-
-    def test_unoverridden_fields_keep_defaults(self):
-        config = load_config(cli_overrides={"tts.voice": "echo"})
-        assert config.tts.provider == "openai"
-        assert config.story.target_duration_minutes == 30
 
     def test_empty_overrides_dict_is_no_op(self):
         config = load_config(cli_overrides={})
