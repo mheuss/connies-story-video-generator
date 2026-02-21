@@ -343,7 +343,7 @@ def create(
     voice: str | None = typer.Option(None, help="TTS voice name"),
     autonomous: bool = typer.Option(False, help="Skip human review checkpoints"),
     output_dir: Path = typer.Option(Path("./output"), help="Output directory"),
-    config: Path | None = typer.Option(None, help="Path to config.yaml"),
+    config: Path | None = typer.Option(None, exists=True, help="Path to config.yaml"),
 ) -> None:
     """Start a new story video project."""
     input_mode = _validate_mode(mode)
@@ -464,7 +464,7 @@ def resume(
 def estimate(
     mode: str = typer.Option(..., help="Input mode: original, inspired_by, or adapt"),
     duration: int | None = typer.Option(None, help="Target duration in minutes"),
-    config: Path | None = typer.Option(None, help="Path to config.yaml"),
+    config: Path | None = typer.Option(None, exists=True, help="Path to config.yaml"),
 ) -> None:
     """Show cost estimate without starting generation."""
     input_mode = _validate_mode(mode)

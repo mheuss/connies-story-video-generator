@@ -92,7 +92,7 @@ def sample_state(tmp_path):
         output_dir=tmp_path,
     )
     source = tmp_path / "test-project" / "source_story.txt"
-    source.write_text(SOURCE_TEXT)
+    source.write_text(SOURCE_TEXT, encoding="utf-8")
     return state
 
 
@@ -106,7 +106,7 @@ def state_with_header(tmp_path):
         output_dir=tmp_path,
     )
     source = tmp_path / "header-test" / "source_story.txt"
-    source.write_text(SOURCE_TEXT_WITH_HEADER)
+    source.write_text(SOURCE_TEXT_WITH_HEADER, encoding="utf-8")
     return state
 
 
@@ -586,7 +586,7 @@ class TestSplitScenesWithSceneTags:
             output_dir=tmp_path,
         )
         source = tmp_path / "tagged-project" / "source_story.txt"
-        source.write_text(SOURCE_WITH_SCENE_TAGS)
+        source.write_text(SOURCE_WITH_SCENE_TAGS, encoding="utf-8")
 
         split_scenes(state, mock_client)
 
@@ -600,7 +600,7 @@ class TestSplitScenesWithSceneTags:
             output_dir=tmp_path,
         )
         source = tmp_path / "tagged-project" / "source_story.txt"
-        source.write_text(SOURCE_WITH_SCENE_TAGS)
+        source.write_text(SOURCE_WITH_SCENE_TAGS, encoding="utf-8")
 
         split_scenes(state, mock_client)
 
@@ -617,7 +617,7 @@ class TestSplitScenesWithSceneTags:
             output_dir=tmp_path,
         )
         source = tmp_path / "tagged-project" / "source_story.txt"
-        source.write_text(SOURCE_WITH_SCENE_TAGS)
+        source.write_text(SOURCE_WITH_SCENE_TAGS, encoding="utf-8")
 
         split_scenes(state, mock_client)
 
@@ -635,7 +635,10 @@ class TestSplitScenesWithSceneTags:
             output_dir=tmp_path,
         )
         source = tmp_path / "tagged-header" / "source_story.txt"
-        source.write_text("---\nvoices:\n  narrator: alloy\n---\n" + SOURCE_WITH_SCENE_TAGS)
+        source.write_text(
+            "---\nvoices:\n  narrator: alloy\n---\n" + SOURCE_WITH_SCENE_TAGS,
+            encoding="utf-8",
+        )
 
         split_scenes(state, mock_client)
 
@@ -651,7 +654,7 @@ class TestSplitScenesWithSceneTags:
             output_dir=tmp_path,
         )
         source = tmp_path / "tagged-log" / "source_story.txt"
-        source.write_text(SOURCE_WITH_SCENE_TAGS)
+        source.write_text(SOURCE_WITH_SCENE_TAGS, encoding="utf-8")
 
         with caplog.at_level(logging.INFO):
             split_scenes(state, mock_client)
@@ -1255,7 +1258,7 @@ def inspired_state(tmp_path):
         output_dir=tmp_path,
     )
     source = tmp_path / "inspired-test" / "source_story.txt"
-    source.write_text(SOURCE_TEXT)
+    source.write_text(SOURCE_TEXT, encoding="utf-8")
     return state
 
 
@@ -1269,7 +1272,7 @@ def original_state(tmp_path):
         output_dir=tmp_path,
     )
     brief = tmp_path / "original-test" / "source_story.txt"
-    brief.write_text("A story about love and sacrifice between a married couple.")
+    brief.write_text("A story about love and sacrifice between a married couple.", encoding="utf-8")
     return state
 
 
@@ -1301,7 +1304,7 @@ class TestAnalyzeSourceStripsYamlHeader:
             output_dir=tmp_path,
         )
         source = tmp_path / "header-analysis-test" / "source_story.txt"
-        source.write_text(SOURCE_TEXT_WITH_HEADER)
+        source.write_text(SOURCE_TEXT_WITH_HEADER, encoding="utf-8")
 
         analyze_source(state, analysis_client)
 
@@ -1433,7 +1436,7 @@ def adapt_state(tmp_path):
         output_dir=tmp_path,
     )
     source = tmp_path / "adapt-test" / "source_story.txt"
-    source.write_text(SOURCE_TEXT)
+    source.write_text(SOURCE_TEXT, encoding="utf-8")
     return state
 
 
@@ -1469,7 +1472,7 @@ class TestAnalyzeSourceAdaptMode:
             output_dir=tmp_path,
         )
         source = tmp_path / "adapt-header-test" / "source_story.txt"
-        source.write_text(SOURCE_TEXT_WITH_HEADER)
+        source.write_text(SOURCE_TEXT_WITH_HEADER, encoding="utf-8")
 
         analyze_source(state, analysis_client)
 
@@ -1558,7 +1561,9 @@ class TestCreateStoryBibleWithPremise:
 
     def test_premise_in_user_message(self, state_with_analysis, bible_client):
         """premise.txt content is included in the user message."""
-        (state_with_analysis.project_dir / "premise.txt").write_text("set it in space")
+        (state_with_analysis.project_dir / "premise.txt").write_text(
+            "set it in space", encoding="utf-8"
+        )
         create_story_bible(state_with_analysis, bible_client)
 
         call_kwargs = bible_client.generate_structured.call_args.kwargs
@@ -1715,7 +1720,9 @@ class TestCreateOutlineIncludesPremise:
 
     def test_premise_in_user_message(self, state_with_bible, outline_client):
         """Premise text appears in user message sent to Claude."""
-        (state_with_bible.project_dir / "premise.txt").write_text("set it in space")
+        (state_with_bible.project_dir / "premise.txt").write_text(
+            "set it in space", encoding="utf-8"
+        )
 
         create_outline(state_with_bible, outline_client)
 
@@ -2079,7 +2086,9 @@ class TestCritiqueAndReviseNoScenes:
     def test_no_scenes_raises(self, inspired_state, critique_client):
         """Empty scenes list raises ValueError."""
         # Write analysis.json so that's not the failure point
-        (inspired_state.project_dir / "analysis.json").write_text(json.dumps(ANALYSIS_RESPONSE))
+        (inspired_state.project_dir / "analysis.json").write_text(
+            json.dumps(ANALYSIS_RESPONSE), encoding="utf-8"
+        )
         with pytest.raises(ValueError, match="No scenes"):
             critique_and_revise(inspired_state, critique_client)
 
@@ -2105,7 +2114,8 @@ class TestCritiqueAndReviseResume:
         critique_dir = state_with_prose.project_dir / "critique"
         critique_dir.mkdir(exist_ok=True)
         (critique_dir / "scene_001_changes.md").write_text(
-            "# Scene 1: The Arrival — Changes\n\n- Already revised\n"
+            "# Scene 1: The Arrival — Changes\n\n- Already revised\n",
+            encoding="utf-8",
         )
 
         # Only 2 calls needed (scenes 2 and 3)
@@ -2160,7 +2170,7 @@ class TestInspiredByIntegration:
             output_dir=tmp_path,
         )
         source = tmp_path / "integration-test" / "source_story.txt"
-        source.write_text("A short story about a cat who learns to fly.")
+        source.write_text("A short story about a cat who learns to fly.", encoding="utf-8")
 
         client = MagicMock()
 
