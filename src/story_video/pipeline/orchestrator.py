@@ -319,7 +319,7 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
             )
             continue
 
-        text = scene.narration_text or scene.prose
+        text = scene.narration_text if scene.narration_text is not None else scene.prose
         if not text:
             logger.warning(
                 "Scene %d has no narration_text or prose — skipping narration prep",
@@ -358,6 +358,8 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
 
     if changelog:
         write_narration_changelog(changelog, state.project_dir)
+
+    state.save()
 
 
 def _run_per_scene(state: ProjectState, process_fn: Callable[[Scene], None]) -> None:

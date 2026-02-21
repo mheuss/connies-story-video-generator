@@ -676,6 +676,30 @@ class TestRunPipelineNarrationPrep:
         done_scenes = json.loads(done_path.read_text(encoding="utf-8"))
         assert sorted(done_scenes) == [1, 2]
 
+    @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
+    def test_narration_prep_saves_state_after_processing(self, mock_prep, tmp_path):
+        """State is saved to disk after narration prep so modifications persist."""
+        import json
+
+        mock_prep.return_value = {
+            "modified_text": "prepped narration",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        }
+
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.TEXT)
+
+        scene = state.metadata.scenes[0]
+        scene.narration_text = scene.prose
+
+        _run_narration_prep(state, MagicMock())
+
+        # Read project.json from disk and verify the modified narration_text persisted
+        project_json = json.loads((state.project_dir / "project.json").read_text(encoding="utf-8"))
+        saved_narration = project_json["scenes"][0]["narration_text"]
+        assert saved_narration == "prepped narration"
+
 
 class TestRunPipelineNarrationPrepCorruptDoneFile:
     """_run_narration_prep recovers from a corrupt done file."""
