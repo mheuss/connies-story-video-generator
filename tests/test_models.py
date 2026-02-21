@@ -236,21 +236,22 @@ class TestAppConfig:
 class TestSceneAssetStatus:
     """SceneAssetStatus — per-asset status tracking for a scene."""
 
-    def test_individual_status_update(self):
+    def test_construction_defaults_roundtrip_and_field_match(self):
+        """Individual status, defaults, serialization roundtrip, and field-AssetType match."""
         status = SceneAssetStatus(text=SceneStatus.COMPLETED)
         assert status.text == SceneStatus.COMPLETED
         assert status.audio == SceneStatus.PENDING
 
-    def test_serialization_roundtrip(self):
-        status = SceneAssetStatus(
+        # Serialization roundtrip
+        full = SceneAssetStatus(
             text=SceneStatus.COMPLETED,
             audio=SceneStatus.FAILED,
         )
-        data = status.model_dump()
+        data = full.model_dump()
         restored = SceneAssetStatus(**data)
-        assert restored == status
+        assert restored == full
 
-    def test_asset_status_fields_match_asset_type_members(self):
+        # Fields match AssetType members
         expected_fields = {member.value for member in AssetType}
         actual_fields = set(SceneAssetStatus.model_fields.keys())
         assert actual_fields == expected_fields
@@ -264,7 +265,8 @@ class TestSceneAssetStatus:
 class TestScene:
     """Scene — content and metadata for a single story scene."""
 
-    def test_all_fields_populated(self):
+    def test_valid_construction_and_roundtrip(self):
+        """All fields, summary defaults/provided, JSON roundtrip with and without summary."""
         scene = Scene(
             scene_number=3,
             title="The Confrontation",
@@ -281,6 +283,29 @@ class TestScene:
         assert scene.image_prompt is not None
         assert scene.asset_status.text == SceneStatus.COMPLETED
 
+        # Summary defaults to None
+        simple = Scene(scene_number=1, title="Opening", prose="The story begins.")
+        assert simple.summary is None
+
+        # Summary stored when provided
+        with_summary = Scene(
+            scene_number=1,
+            title="Opening",
+            prose="The story begins.",
+            summary="Hero arrives at the castle.",
+        )
+        assert with_summary.summary == "Hero arrives at the castle."
+
+        # JSON roundtrip
+        json_str = simple.model_dump_json()
+        restored = Scene.model_validate_json(json_str)
+        assert restored == simple
+
+        # JSON roundtrip with summary
+        json_str2 = with_summary.model_dump_json()
+        restored2 = Scene.model_validate_json(json_str2)
+        assert restored2.summary == "Hero arrives at the castle."
+
     def test_rejects_non_positive_scene_number(self):
         with pytest.raises(ValidationError):
             Scene(scene_number=0, title="Bad", prose="No")
@@ -293,40 +318,6 @@ class TestScene:
         with pytest.raises(ValidationError):
             Scene(scene_number=1, title="Title", prose="")
 
-    def test_summary_defaults_to_none(self):
-        scene = Scene(scene_number=1, title="Opening", prose="The story begins.")
-        assert scene.summary is None
-
-    def test_summary_stored_when_provided(self):
-        scene = Scene(
-            scene_number=1,
-            title="Opening",
-            prose="The story begins.",
-            summary="Hero arrives at the castle.",
-        )
-        assert scene.summary == "Hero arrives at the castle."
-
-    def test_json_roundtrip(self):
-        scene = Scene(
-            scene_number=2,
-            title="The Journey",
-            prose="They walked for miles...",
-        )
-        json_str = scene.model_dump_json()
-        restored = Scene.model_validate_json(json_str)
-        assert restored == scene
-
-    def test_json_roundtrip_with_summary(self):
-        scene = Scene(
-            scene_number=2,
-            title="The Journey",
-            prose="They walked for miles...",
-            summary="The group travels across the plains.",
-        )
-        json_str = scene.model_dump_json()
-        restored = Scene.model_validate_json(json_str)
-        assert restored.summary == "The group travels across the plains."
-
 
 # ---------------------------------------------------------------------------
 # ProjectMetadata tests
@@ -336,13 +327,37 @@ class TestScene:
 class TestProjectMetadata:
     """ProjectMetadata — project-level tracking information."""
 
-    def test_creation_with_required_fields(self):
+    def test_valid_construction_and_roundtrip(self):
+        """Required fields, full creation, and JSON roundtrip."""
         project = ProjectMetadata(
             project_id="lighthouse-2026-02-11-abc123",
             mode=InputMode.ORIGINAL,
         )
         assert project.project_id == "lighthouse-2026-02-11-abc123"
         assert project.mode == InputMode.ORIGINAL
+
+        # Full creation with all fields
+        full = ProjectMetadata(
+            project_id="my-story-2026",
+            mode=InputMode.INSPIRED_BY,
+            current_phase=PipelinePhase.ANALYSIS,
+            status=PhaseStatus.IN_PROGRESS,
+            config=AppConfig(story=StoryConfig(target_duration_minutes=60)),
+            scenes=[
+                Scene(scene_number=1, title="Opening", prose="It began..."),
+            ],
+        )
+        assert full.mode == InputMode.INSPIRED_BY
+        assert full.current_phase == PipelinePhase.ANALYSIS
+        assert full.status == PhaseStatus.IN_PROGRESS
+        assert len(full.scenes) == 1
+        assert full.config.story.target_duration_minutes == 60
+
+        # JSON roundtrip
+        json_str = project.model_dump_json()
+        restored = ProjectMetadata.model_validate_json(json_str)
+        assert restored.project_id == project.project_id
+        assert restored.mode == project.mode
 
     def test_created_at_defaults_to_now(self):
         before = datetime.now(timezone.utc)
@@ -356,33 +371,6 @@ class TestProjectMetadata:
     def test_rejects_empty_project_id(self):
         with pytest.raises(ValidationError):
             ProjectMetadata(project_id="", mode=InputMode.ORIGINAL)
-
-    def test_full_creation(self):
-        project = ProjectMetadata(
-            project_id="my-story-2026",
-            mode=InputMode.INSPIRED_BY,
-            current_phase=PipelinePhase.ANALYSIS,
-            status=PhaseStatus.IN_PROGRESS,
-            config=AppConfig(story=StoryConfig(target_duration_minutes=60)),
-            scenes=[
-                Scene(scene_number=1, title="Opening", prose="It began..."),
-            ],
-        )
-        assert project.mode == InputMode.INSPIRED_BY
-        assert project.current_phase == PipelinePhase.ANALYSIS
-        assert project.status == PhaseStatus.IN_PROGRESS
-        assert len(project.scenes) == 1
-        assert project.config.story.target_duration_minutes == 60
-
-    def test_json_roundtrip(self):
-        project = ProjectMetadata(
-            project_id="json-test",
-            mode=InputMode.ORIGINAL,
-        )
-        json_str = project.model_dump_json()
-        restored = ProjectMetadata.model_validate_json(json_str)
-        assert restored.project_id == project.project_id
-        assert restored.mode == project.mode
 
 
 # ---------------------------------------------------------------------------
@@ -479,16 +467,22 @@ class TestCaptionResultDurationValidation:
 class TestStoryHeader:
     """StoryHeader model for parsed front matter."""
 
-    def test_defaults(self):
+    def test_valid_construction_and_roundtrip(self):
+        """Defaults, custom default_voice, and serialization roundtrip."""
         header = StoryHeader(voices={"narrator": "nova"})
         assert header.default_voice == "narrator"
 
-    def test_custom_default_voice(self):
-        header = StoryHeader(
+        custom = StoryHeader(
             voices={"narrator": "nova", "bob": "echo"},
             default_voice="bob",
         )
-        assert header.default_voice == "bob"
+        assert custom.default_voice == "bob"
+
+        # Serialization roundtrip
+        full = StoryHeader(voices={"jane": "nova", "bob": "alloy"}, default_voice="jane")
+        data = full.model_dump()
+        restored = StoryHeader(**data)
+        assert restored == full
 
     def test_voices_required(self):
         with pytest.raises(ValidationError):
@@ -508,12 +502,6 @@ class TestStoryHeader:
         with pytest.raises(ValidationError, match="default_voice"):
             StoryHeader(voices={"narrator": "nova"}, default_voice="nonexistent")
 
-    def test_serialization_roundtrip(self):
-        header = StoryHeader(voices={"jane": "nova", "bob": "alloy"}, default_voice="jane")
-        data = header.model_dump()
-        restored = StoryHeader(**data)
-        assert restored == header
-
 
 # ---------------------------------------------------------------------------
 # NarrationSegment tests
@@ -523,7 +511,8 @@ class TestStoryHeader:
 class TestNarrationSegment:
     """NarrationSegment model for parsed text chunks."""
 
-    def test_required_fields(self):
+    def test_valid_construction(self):
+        """Valid segment with mood and pause_duration; serialization roundtrip."""
         seg = NarrationSegment(
             text="Hello",
             voice="nova",
@@ -534,8 +523,7 @@ class TestNarrationSegment:
         assert seg.text == "Hello"
         assert seg.mood is None
 
-    def test_with_mood(self):
-        seg = NarrationSegment(
+        seg_mood = NarrationSegment(
             text="Goodbye",
             voice="nova",
             voice_label="narrator",
@@ -543,7 +531,30 @@ class TestNarrationSegment:
             scene_number=1,
             segment_index=0,
         )
-        assert seg.mood == "sad"
+        assert seg_mood.mood == "sad"
+
+        seg_pause = NarrationSegment(
+            text="[pause]",
+            voice="nova",
+            voice_label="narrator",
+            scene_number=1,
+            segment_index=0,
+            pause_duration=0.5,
+        )
+        assert seg_pause.pause_duration == 0.5
+
+        # Serialization roundtrip
+        seg_full = NarrationSegment(
+            text="Hello world",
+            voice="nova",
+            voice_label="narrator",
+            mood="happy",
+            scene_number=2,
+            segment_index=3,
+        )
+        data = seg_full.model_dump()
+        restored = NarrationSegment(**data)
+        assert restored == seg_full
 
     def test_rejects_empty_text(self):
         with pytest.raises(ValidationError):
@@ -606,19 +617,6 @@ class TestNarrationSegment:
                 segment_index=0,
             )
 
-    def test_serialization_roundtrip(self):
-        seg = NarrationSegment(
-            text="Hello world",
-            voice="nova",
-            voice_label="narrator",
-            mood="happy",
-            scene_number=2,
-            segment_index=3,
-        )
-        data = seg.model_dump()
-        restored = NarrationSegment(**data)
-        assert restored == seg
-
     def test_rejects_zero_pause_duration(self):
         """pause_duration=0 is rejected (gt=0 constraint)."""
         with pytest.raises(ValidationError):
@@ -630,18 +628,6 @@ class TestNarrationSegment:
                 segment_index=0,
                 pause_duration=0,
             )
-
-    def test_accepts_positive_pause_duration(self):
-        """Positive pause_duration is accepted."""
-        seg = NarrationSegment(
-            text="[pause]",
-            voice="nova",
-            voice_label="narrator",
-            scene_number=1,
-            segment_index=0,
-            pause_duration=0.5,
-        )
-        assert seg.pause_duration == 0.5
 
 
 # ---------------------------------------------------------------------------
