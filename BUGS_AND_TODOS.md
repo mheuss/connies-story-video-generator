@@ -8,6 +8,17 @@ Items committed to the current sprint/cycle.
 
 Acknowledged items not yet scheduled.
 
+### Sixth-Pass Review (PR6) — 2026-02-21
+
+- [x] [fix] `_run_narration_prep` missing `state.save()` — data loss risk on crash (orchestrator.py) (PR6-M1)
+- [x] [fix] Inconsistent `narration_text` fallback — `or` vs `is not None` (orchestrator.py) (PR6-M2)
+- [x] [fix] `parse_narration_segments` accepts whitespace-only text silently (narration_tags.py) (PR6-M3)
+- [x] [fix] `create_outline` silent fallback for missing `source_stats` (story_writer.py) (PR6-M4)
+- [x] [docs] PR4-8 line reference points to wrong function (BUGS_AND_TODOS.md) (PR6-M5)
+- [x] [test] `test_narration_prep.py` tests private symbols directly — removed TestPromptConstants, documented remaining deviations (PR6-M6)
+- [x] [test] `test_caption_generator.py` tests private helpers directly — documented deviations (PR6-M7)
+- [ ] [low] 38 low-severity findings from PR6 review — documentation improvements, defensive guards, unused exports, minor test gaps. Deferred as non-blocking.
+
 ### Fifth-Pass Review (PR5) — 2026-02-20
 
 - [x] [refactor] `_mood_to_elevenlabs_text` reverse-parses the output of `_mood_to_instructions` — fragile coupling. Added `mood` param to `TTSProvider.synthesize()` Protocol and both providers. ElevenLabs uses `mood` directly; reverse-parsing eliminated. (PR5-1)
