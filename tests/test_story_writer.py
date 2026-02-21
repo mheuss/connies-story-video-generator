@@ -1467,6 +1467,38 @@ class TestCreateOutlineIncludesPremise:
         assert outline_client.generate_structured.call_count == 1
 
 
+class TestCreateOutlineWarnsOnMissingSourceStats:
+    """create_outline() warns when source_stats is absent from analysis.json."""
+
+    def test_create_outline_warns_on_missing_source_stats(self, tmp_path, outline_client, caplog):
+        """Missing source_stats key logs a warning and falls back to defaults."""
+        state = ProjectState.create(
+            project_id="warn-test",
+            mode=InputMode.INSPIRED_BY,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+
+        # Write analysis.json WITHOUT source_stats
+        analysis_no_stats = {
+            "craft_notes": {"tone": "dry"},
+            "thematic_brief": {"themes": ["isolation"]},
+            "characters": [],
+        }
+        (state.project_dir / "analysis.json").write_text(
+            json.dumps(analysis_no_stats), encoding="utf-8"
+        )
+        (state.project_dir / "story_bible.json").write_text(
+            json.dumps({"characters": [], "setting": "a cliff", "premise": "test"}),
+            encoding="utf-8",
+        )
+
+        with caplog.at_level(logging.WARNING, logger="story_video.pipeline.story_writer"):
+            create_outline(state, outline_client)
+
+        assert "source_stats missing from analysis.json" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # Scene prose phase — test data
 # ---------------------------------------------------------------------------

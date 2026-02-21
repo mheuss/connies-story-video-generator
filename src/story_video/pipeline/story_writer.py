@@ -773,6 +773,8 @@ def create_outline(state: ProjectState, client: ClaudeClient) -> None:
     bible = _load_json_artifact(state.project_dir, "story_bible.json")
 
     source_stats = analysis.get("source_stats", {})
+    if not source_stats:
+        logger.warning("source_stats missing from analysis.json — using defaults")
     word_count = source_stats.get("word_count", 6000)
     scene_count = source_stats.get("scene_count_estimate", 10)
 
