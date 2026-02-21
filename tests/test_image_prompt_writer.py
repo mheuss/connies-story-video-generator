@@ -196,38 +196,38 @@ class TestGenerateImagePromptsMissingScene:
 
 
 class TestGenerateImagePromptsSceneMissingFromResponse:
-    """generate_image_prompts() leaves scene.image_prompt as None if not in response."""
+    """generate_image_prompts() raises ValueError when scenes are missing from response."""
 
-    def test_scene_not_in_response_stays_none(self, state_with_scenes, mock_client):
-        """Scene 2 not in response -> image_prompt None, asset PENDING."""
+    def test_missing_scene_raises_value_error(self, state_with_scenes, mock_client):
+        """Scene 2 not in response -> ValueError raised, missing scene marked FAILED."""
         mock_client.generate_structured.return_value = {
             "prompts": [
                 {"scene_number": 1, "image_prompt": "A dark forest"},
             ]
         }
 
-        generate_image_prompts(state_with_scenes, mock_client)
+        with pytest.raises(ValueError, match="Claude did not return prompts for scenes: \\[2\\]"):
+            generate_image_prompts(state_with_scenes, mock_client)
 
         scenes = state_with_scenes.metadata.scenes
+        # Scene 1 was processed before the error
         assert scenes[0].image_prompt == "A dark forest"
         assert scenes[0].asset_status.image_prompt == SceneStatus.COMPLETED
 
-        # Scene 2 not in response — stays None, stays PENDING
+        # Scene 2 missing from response — marked FAILED
         assert scenes[1].image_prompt is None
-        assert scenes[1].asset_status.image_prompt == SceneStatus.PENDING
+        assert scenes[1].asset_status.image_prompt == SceneStatus.FAILED
 
-    def test_missing_scenes_logged_as_warning(self, state_with_scenes, mock_client, caplog):
-        """Scenes omitted from Claude response trigger a warning log."""
+    def test_missing_scene_saves_state_before_raising(self, state_with_scenes, mock_client):
+        """State is saved before raising ValueError so FAILED status persists."""
         mock_client.generate_structured.return_value = {
             "prompts": [
                 {"scene_number": 1, "image_prompt": "A dark forest"},
             ]
         }
 
-        with caplog.at_level("WARNING"):
+        with pytest.raises(ValueError):
             generate_image_prompts(state_with_scenes, mock_client)
-
-        assert "Claude did not return prompts for scenes: [2]" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +313,20 @@ class TestGenerateImagePromptsCharacterReference:
 
         generate_image_prompts(state_with_scenes, mock_client)
 
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+        assert "Character Reference" not in user_msg
+        assert "=== Scene 1:" in user_msg
+
+    def test_malformed_analysis_json_skipped(self, state_with_scenes, mock_client, caplog):
+        """Malformed analysis.json is silently skipped with a warning."""
+        analysis_path = state_with_scenes.project_dir / "analysis.json"
+        analysis_path.write_text("{broken json", encoding="utf-8")
+
+        with caplog.at_level(logging.WARNING):
+            generate_image_prompts(state_with_scenes, mock_client)
+
+        assert any("Malformed" in r.message for r in caplog.records)
         call_kwargs = mock_client.generate_structured.call_args.kwargs
         user_msg = call_kwargs["user_message"]
         assert "Character Reference" not in user_msg

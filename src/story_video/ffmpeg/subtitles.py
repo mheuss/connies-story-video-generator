@@ -8,6 +8,7 @@ Public functions:
     subtitle_filter: Return the FFmpeg filter fragment for ASS subtitle overlay.
 """
 
+import logging
 from pathlib import Path
 
 from story_video.ffmpeg.filters import parse_resolution
@@ -18,6 +19,8 @@ from story_video.models import (
     SubtitleConfig,
     VideoConfig,
 )
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "generate_ass_content",
@@ -59,11 +62,17 @@ def _format_ass_time(seconds: float) -> str:
     to two digits, and ``cc`` is centiseconds (hundredths of a second).
 
     Args:
-        seconds: Time value in seconds.
+        seconds: Time value in seconds (must be >= 0).
 
     Returns:
         Formatted ASS timestamp string.
+
+    Raises:
+        ValueError: If *seconds* is negative.
     """
+    if seconds < 0:
+        msg = f"seconds must be >= 0, got {seconds}"
+        raise ValueError(msg)
     # Round to centisecond precision
     centiseconds_total = round(seconds * 100)
     cs = centiseconds_total % 100
@@ -92,13 +101,21 @@ def _group_words_into_events(
 
     Args:
         words: Ordered list of caption words with timing.
-        max_chars_per_line: Maximum character count per subtitle line.
-        max_lines: Maximum number of lines per subtitle event.
+        max_chars_per_line: Maximum character count per subtitle line (must be > 0).
+        max_lines: Maximum number of lines per subtitle event (must be > 0).
 
     Returns:
         List of events. Each event is a list of lines. Each line is a list
         of CaptionWord objects.
+
+    Raises:
+        ValueError: If max_chars_per_line or max_lines is not positive.
     """
+    if max_chars_per_line <= 0:
+        raise ValueError(f"max_chars_per_line must be positive, got {max_chars_per_line}")
+    if max_lines <= 0:
+        raise ValueError(f"max_lines must be positive, got {max_lines}")
+
     if not words:
         return []
 
@@ -193,6 +210,7 @@ def generate_ass_content(
     # Encoding
     style_line = (
         f"Style: Default,{subtitle_config.font},{subtitle_config.font_size},"
+        # SecondaryColour (karaoke highlight, unused), BackColour (shadow, transparent)
         f"{primary_color},&H000000FF&,{outline_color},&H00000000&,"
         f"0,0,0,0,100,100,0,0,1,{subtitle_config.outline_width},0,2,"
         f"10,10,{margin_v},1"
@@ -223,6 +241,9 @@ def generate_ass_content(
     for event_lines in events:
         # Flatten to get first and last word for timing
         all_words_in_event = [w for line in event_lines for w in line]
+        if not all_words_in_event:
+            logger.warning("Skipping empty subtitle event")
+            continue
         start_time = _format_ass_time(all_words_in_event[0].start)
         end_time = _format_ass_time(all_words_in_event[-1].end)
 
@@ -240,8 +261,8 @@ def generate_ass_content(
 def subtitle_filter(ass_path: Path) -> str:
     """Return the FFmpeg filter fragment for ASS subtitle overlay.
 
-    Escapes backslashes and single quotes in the path to prevent
-    FFmpeg filter graph injection or parse errors.
+    Escapes backslashes and single quotes in the path for safe
+    embedding in an FFmpeg filter graph expression.
 
     Args:
         ass_path: Path to the ASS subtitle file.
@@ -250,5 +271,11 @@ def subtitle_filter(ass_path: Path) -> str:
         Filter string in the form ``ass='/path/to/file.ass'``
         with special characters escaped.
     """
-    escaped = str(ass_path).replace("\\", "\\\\").replace("'", "\\'")
+    escaped = (
+        str(ass_path)
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+    )
     return f"ass='{escaped}'"

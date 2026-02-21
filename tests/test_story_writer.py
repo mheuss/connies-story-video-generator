@@ -1793,6 +1793,18 @@ class TestWriteSceneProseAssetStatus:
             assert scene.asset_status.text == SceneStatus.COMPLETED
 
 
+class TestWriteSceneProseSavesPerScene:
+    """write_scene_prose() persists state after each scene for resume support."""
+
+    def test_state_saved_once_per_scene(self, state_with_outline, prose_client, mocker):
+        """state.save() called once per scene to enable incremental resume."""
+        spy = mocker.patch.object(state_with_outline, "save", wraps=state_with_outline.save)
+
+        write_scene_prose(state_with_outline, prose_client)
+
+        assert spy.call_count == 3
+
+
 class TestWriteSceneProseResume:
     """write_scene_prose() skips already-created scenes on resume."""
 
@@ -1897,6 +1909,18 @@ class TestCritiqueAndReviseCallsPerScene:
         critique_and_revise(state_with_prose, critique_client)
 
         assert critique_client.generate_structured.call_count == 3
+
+
+class TestCritiqueAndReviseSavesPerScene:
+    """critique_and_revise() persists state after each scene for resume support."""
+
+    def test_state_saved_once_per_scene(self, state_with_prose, critique_client, mocker):
+        """state.save() called once per scene to enable incremental resume."""
+        spy = mocker.patch.object(state_with_prose, "save", wraps=state_with_prose.save)
+
+        critique_and_revise(state_with_prose, critique_client)
+
+        assert spy.call_count == 3
 
 
 class TestCritiqueAndReviseWritesChangelog:

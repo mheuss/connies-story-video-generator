@@ -102,13 +102,33 @@ class OpenAIWhisperProvider:
 # ---------------------------------------------------------------------------
 
 
+def _strip_punctuation(word: str) -> tuple[str, str, str]:
+    """Split a word into (leading_punct, bare_word, trailing_punct).
+
+    Walks inward from each end until an alphanumeric character is found.
+    Internal punctuation (e.g. apostrophes in contractions) is preserved
+    in the bare component.
+
+    Args:
+        word: A single whitespace-free token.
+
+    Returns:
+        Tuple of (leading, bare, trailing). If the word is entirely
+        punctuation, bare will be an empty string.
+    """
+    i = 0
+    while i < len(word) and not word[i].isalnum():
+        i += 1
+    j = len(word)
+    while j > i and not word[j - 1].isalnum():
+        j -= 1
+    return word[:i], word[i:j], word[j:]
+
+
 def _tokenize_prose(prose: str) -> list[tuple[str, str, str]]:
     """Split prose into tokens of (leading_punct, bare_word, trailing_punct).
 
-    Each whitespace-delimited word is decomposed into:
-    - leading: non-alphanumeric characters before the word
-    - bare: the alphanumeric core
-    - trailing: non-alphanumeric characters after the word
+    Each whitespace-delimited word is decomposed via ``_strip_punctuation``.
 
     Args:
         prose: The prose text to tokenize.
@@ -119,19 +139,7 @@ def _tokenize_prose(prose: str) -> list[tuple[str, str, str]]:
     """
     tokens: list[tuple[str, str, str]] = []
     for raw_word in prose.split():
-        # Strip leading punctuation
-        i = 0
-        while i < len(raw_word) and not raw_word[i].isalnum():
-            i += 1
-        leading = raw_word[:i]
-
-        # Strip trailing punctuation
-        j = len(raw_word)
-        while j > i and not raw_word[j - 1].isalnum():
-            j -= 1
-        trailing = raw_word[j:]
-
-        bare = raw_word[i:j]
+        leading, bare, trailing = _strip_punctuation(raw_word)
         if bare:
             tokens.append((leading, bare, trailing))
 
@@ -174,17 +182,7 @@ def _reconcile_punctuation(result: CaptionResult, prose: str) -> CaptionResult:
             break
 
         word = new_words[word_idx]
-        # Strip leading/trailing punctuation using same logic as _tokenize_prose
-        # (walk from each end until alphanumeric). This preserves internal
-        # apostrophes in contractions like "don't".
-        raw = word.word
-        ci = 0
-        while ci < len(raw) and not raw[ci].isalnum():
-            ci += 1
-        cj = len(raw)
-        while cj > ci and not raw[cj - 1].isalnum():
-            cj -= 1
-        bare_caption = raw[ci:cj]
+        _, bare_caption, _ = _strip_punctuation(word.word)
         if not bare_caption:
             continue
 
@@ -253,7 +251,12 @@ def generate_captions(scene: Scene, state: ProjectState, provider: CaptionProvid
         raise FileNotFoundError(msg)
 
     result = provider.transcribe(audio_path)
-    result = _reconcile_punctuation(result, scene.prose)
+    # Use narration_text (what TTS actually spoke) for punctuation reconciliation
+    # when available. Falls back to prose for pre-narration-prep projects.
+    reconciliation_source = (
+        scene.narration_text if scene.narration_text is not None else scene.prose
+    )
+    result = _reconcile_punctuation(result, reconciliation_source)
 
     captions_dir = state.project_dir / "captions"
     captions_dir.mkdir(exist_ok=True)

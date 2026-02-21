@@ -79,7 +79,16 @@ def _load_characters(state: ProjectState) -> list[dict]:
 
 
 def _format_character_reference(characters: list[dict]) -> str:
-    """Format character list into a text block for the image prompt context."""
+    """Format character list into a text block for the image prompt context.
+
+    Args:
+        characters: List of character dicts, each with 'name' and
+            'visual_description' keys.
+
+    Returns:
+        Multi-line string with a header and one ``Name: Description`` line
+        per character, ending with a blank line.
+    """
     lines = ["=== Character Reference ==="]
     for char in characters:
         name = char.get("name", "Unknown")
@@ -116,7 +125,10 @@ def generate_image_prompts(state: ProjectState, client: ClaudeClient) -> None:
     # Load character descriptions from analysis (if available)
     characters = _load_characters(state)
 
-    # Build user message with optional character reference and numbered scenes
+    # Build user message with optional character reference and numbered scenes.
+    # NOTE: All scenes are sent in a single Claude call. For very large stories
+    # (25+ scenes), this could approach context limits. Acceptable for typical
+    # use (5-15 scenes). If this becomes an issue, batch scenes into groups.
     parts = []
     if characters:
         parts.append(_format_character_reference(characters))
@@ -146,12 +158,16 @@ def generate_image_prompts(state: ProjectState, client: ClaudeClient) -> None:
         state.update_scene_asset(scene_num, AssetType.IMAGE_PROMPT, SceneStatus.IN_PROGRESS)
         state.update_scene_asset(scene_num, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
 
-    # Warn about scenes that Claude omitted from its response — these will
-    # fail later at IMAGE_GENERATION when generate_image() requires a prompt.
+    # Fail early if Claude omitted any scenes — otherwise these would fail
+    # one phase later in generate_image() after wasting API calls.
     scenes_in_response = {p["scene_number"] for p in result["prompts"]}
     missing = sorted(set(scene_map.keys()) - scenes_in_response)
     if missing:
-        logger.warning("Claude did not return prompts for scenes: %s", missing)
+        for scene_num in missing:
+            state.update_scene_asset(scene_num, AssetType.IMAGE_PROMPT, SceneStatus.FAILED)
+        state.save()
+        msg = f"Claude did not return prompts for scenes: {missing}"
+        raise ValueError(msg)
 
     # Persist state
     state.save()

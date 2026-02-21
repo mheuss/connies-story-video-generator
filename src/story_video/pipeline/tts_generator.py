@@ -45,10 +45,12 @@ _SILENT_FRAME_DURATION = 0.02612  # seconds per frame (1152 samples / 44100 Hz)
 
 
 def generate_mp3_silence(duration: float) -> bytes:
-    """Generate silent MP3 audio of the specified duration.
+    """Generate silent MP3 audio of approximately the specified duration.
 
     Repeats a valid silent MP3 frame enough times to cover the requested
-    duration. The output can be concatenated with other MP3 bytes.
+    duration. The actual duration may exceed the request by up to ~26ms
+    due to MP3 frame granularity. The output can be concatenated with
+    other MP3 bytes.
 
     Args:
         duration: Silence duration in seconds (must be positive).
@@ -226,7 +228,7 @@ def _mood_to_instructions(mood: str | None) -> str | None:
     Used by OpenAI TTS (``instructions`` parameter) and reverse-parsed by
     ``_mood_to_elevenlabs_text`` to extract the mood keyword for audio tags.
     """
-    if mood is None:
+    if not mood:
         return None
     article = "an" if mood[0].lower() in "aeiou" else "a"
     return f"Speak in {article} {mood} tone"
@@ -313,6 +315,10 @@ def generate_audio(
             speed=tts_config.speed,
             output_format=tts_config.output_format,
         )
+
+    if not audio_bytes:
+        msg = f"Scene {scene.scene_number}: TTS provider returned empty audio"
+        raise ValueError(msg)
 
     audio_dir = state.project_dir / "audio"
     audio_dir.mkdir(exist_ok=True)

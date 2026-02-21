@@ -5,7 +5,7 @@ with configurable exponential backoff. On failure, retries with increasing
 delays capped at 60 seconds.
 
 Usage:
-    from story_video.utils.retry import with_retry, RetryError
+    from story_video.utils.retry import with_retry
 
     @with_retry(retry_on=(ConnectionError,), max_retries=3, base_delay=2.0)
     def call_api():
@@ -17,7 +17,6 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from tenacity import (
-    RetryError,
     before_sleep_log,
     retry,
     retry_if_exception_type,
@@ -25,7 +24,7 @@ from tenacity import (
     wait_exponential,
 )
 
-__all__ = ["RetryError", "with_retry"]
+__all__ = ["with_retry"]
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +68,13 @@ def with_retry(
         def call_with_network_retry():
             ...
     """
+
+    if max_retries < 0:
+        msg = f"max_retries must be non-negative, got {max_retries}"
+        raise ValueError(msg)
+    if base_delay <= 0:
+        msg = f"base_delay must be positive, got {base_delay}"
+        raise ValueError(msg)
 
     def decorator(func: F) -> F:
         decorated = retry(

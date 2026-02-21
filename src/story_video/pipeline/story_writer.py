@@ -1,7 +1,7 @@
-"""Story writer pipeline — adapt and inspired_by flows.
+"""Story writer pipeline — adapt, inspired_by, and original flows.
 
-Adapt mode: scene splitting and narration flagging.
-Inspired_by mode: analysis, story bible, outline, scene prose, critique/revision.
+Adapt mode: analysis, scene splitting, and narration flagging.
+Inspired_by / original mode: analysis, story bible, outline, scene prose, critique/revision.
 """
 
 import json
@@ -9,13 +9,12 @@ import logging
 import re
 from pathlib import Path
 
-from story_video.models import SCENE_WORD_TARGET_DEFAULT, AssetType, InputMode, SceneStatus
+from story_video.models import WORDS_PER_SCENE_ESTIMATE, AssetType, InputMode, SceneStatus
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.state import ProjectState
 from story_video.utils.narration_tags import parse_story_header, strip_narration_tags
 
 __all__ = [
-    "BRIEF_ANALYSIS_SYSTEM",
     "analyze_source",
     "create_outline",
     "create_story_bible",
@@ -388,6 +387,7 @@ CRITIQUE_SCHEMA = {
     "required": ["revised_prose", "changes"],
 }
 
+# Matches **scene:Title** markers for local scene splitting (skips Claude call).
 _SCENE_TAG_PATTERN = re.compile(r"\*\*scene:([^*]+)\*\*")
 
 
@@ -395,7 +395,14 @@ def _persist_scenes(state: ProjectState, scenes: list[dict]) -> None:
     """Update state, write .md files, and save for a list of scenes.
 
     Shared by both the marker-based and Claude-based splitting paths.
+
+    Args:
+        state: Project state to update with scenes.
+        scenes: List of scene dicts, each with 'title' and 'text' keys.
     """
+    scenes_dir = state.project_dir / "scenes"
+    scenes_dir.mkdir(exist_ok=True)
+
     for i, scene in enumerate(scenes):
         scene_number = i + 1
         state.add_scene(scene_number=scene_number, title=scene["title"], prose=scene["text"])
@@ -405,11 +412,6 @@ def _persist_scenes(state: ProjectState, scenes: list[dict]) -> None:
         state.update_scene_asset(
             scene_number=scene_number, asset=AssetType.TEXT, status=SceneStatus.COMPLETED
         )
-
-    scenes_dir = state.project_dir / "scenes"
-    scenes_dir.mkdir(exist_ok=True)
-    for i, scene in enumerate(scenes):
-        scene_number = i + 1
         filename = f"scene_{scene_number:03d}.md"
         content = f"# Scene {scene_number}: {scene['title']}\n\n{scene['text']}\n"
         (scenes_dir / filename).write_text(content, encoding="utf-8")
@@ -590,7 +592,6 @@ def flag_narration(state: ProjectState, client: ClaudeClient) -> None:
 
     # 6. Autonomous mode: apply fixes
     if state.metadata.config.pipeline.autonomous:
-        # Build a lookup of scene_number -> scene for fast access
         scene_map = {s.scene_number: s for s in scenes}
 
         for flag in flags:
@@ -695,7 +696,7 @@ def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
         result = dict(result)
         story_config = state.metadata.config.story
         word_count = story_config.target_duration_minutes * story_config.words_per_minute
-        scene_count = max(2, word_count // SCENE_WORD_TARGET_DEFAULT)
+        scene_count = max(2, word_count // WORDS_PER_SCENE_ESTIMATE)
         result["source_stats"] = {
             "word_count": word_count,
             "scene_count_estimate": scene_count,
@@ -826,29 +827,15 @@ def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
     Raises:
         FileNotFoundError: If required artifact files are missing.
     """
-    analysis_path = state.project_dir / "analysis.json"
-    if not analysis_path.exists():
-        msg = f"analysis.json not found in {state.project_dir}"
-        raise FileNotFoundError(msg)
-    analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
-
-    bible_path = state.project_dir / "story_bible.json"
-    if not bible_path.exists():
-        msg = f"story_bible.json not found in {state.project_dir}"
-        raise FileNotFoundError(msg)
-    bible = json.loads(bible_path.read_text(encoding="utf-8"))
-
-    outline_path = state.project_dir / "outline.json"
-    if not outline_path.exists():
-        msg = f"outline.json not found in {state.project_dir}"
-        raise FileNotFoundError(msg)
-    outline = json.loads(outline_path.read_text(encoding="utf-8"))
+    analysis = _load_json_artifact(state.project_dir, "analysis.json")
+    bible = _load_json_artifact(state.project_dir, "story_bible.json")
+    outline = _load_json_artifact(state.project_dir, "outline.json")
 
     # Determine which scenes already exist (for resume)
     existing_scene_numbers = {s.scene_number for s in state.metadata.scenes}
 
     # Shared context
-    craft_notes_text = json.dumps(analysis["craft_notes"], indent=2)
+    craft_notes_text = json.dumps(analysis.get("craft_notes", {}), indent=2)
     bible_text = json.dumps(bible, indent=2)
     outline_text = json.dumps(outline["scenes"], indent=2)
 
@@ -902,12 +889,13 @@ def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
         content = f"# Scene {scene_num}: {beat['title']}\n\n{result['prose']}\n"
         (scenes_dir / filename).write_text(content, encoding="utf-8")
 
+        state.save()
+
         # Add summary for next scene's context
         running_summary.append(f"Scene {scene_num} ({beat['title']}): {result['summary']}")
         logger.info("Wrote scene %d: %s", scene_num, beat["title"])
 
     logger.info("Scene prose complete — %d scenes written", len(outline["scenes"]))
-    state.save()
 
 
 def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
@@ -999,7 +987,7 @@ def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _load_json_artifact(project_dir: "Path", filename: str) -> dict:
+def _load_json_artifact(project_dir: Path, filename: str) -> dict:
     """Load and parse a JSON artifact file from the project directory.
 
     Args:

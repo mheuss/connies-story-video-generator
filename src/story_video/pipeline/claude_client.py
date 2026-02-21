@@ -79,7 +79,7 @@ class ClaudeClient:
         user_message: str,
         tool_name: str,
         tool_schema: dict,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ) -> dict:
         """Tool_use generation. Returns parsed tool input dict.
 

@@ -26,7 +26,7 @@ Significant technical decisions with context and rationale.
 
 **Context:** Users want to generate videos from scratch (original), adapt existing stories (adapt), or create new stories inspired by existing ones (inspired_by). These modes differ in creative phases but share media generation.
 
-**Decision:** Split the pipeline into mode-specific creative flows (Phases 1-5 for original/inspired_by, Phases 1-2 for adapt) that converge at Phase 6 (image prompt generation). Downstream phases (TTS, images, captions, video) are identical across modes.
+**Decision:** Split the pipeline into mode-specific creative flows (Phases 1-5 for original/inspired_by, Phases 1-3 for adapt) that converge at image prompt generation. Downstream phases (TTS, images, captions, video) are identical across modes.
 
 **Consequences:**
 - Code reuse for media generation phases
@@ -45,7 +45,7 @@ Significant technical decisions with context and rationale.
 **Decision:** Use OpenAI gpt-4o-mini-tts as the default provider. ElevenLabs is now available as an alternative via `tts.provider: elevenlabs` in config. Both providers implement the `TTSProvider` Protocol with optional `instructions` for emotion direction.
 
 **Consequences:**
-- Cost-effective for long-form content (~$7.41 for 30-minute video)
+- Cost-effective for long-form content
 - Clean, consistent voice quality with emotion direction via instructions
 - Provider abstraction via Protocol enables both OpenAI and ElevenLabs
 - ElevenLabs available for projects that need more expressive voices
@@ -64,7 +64,7 @@ Significant technical decisions with context and rationale.
 - Prevents voice drift across 25+ separate API calls
 - Adds ~500-1000 tokens to every scene generation context
 - Quality of craft notes directly impacts story consistency
-- Works well for original and inspired_by modes; adapt mode skips this
+- Works for all three modes. Adapt mode uses a lighter analysis prompt focused on visual illustration rather than craft emulation
 
 ---
 
@@ -148,14 +148,14 @@ Significant technical decisions with context and rationale.
 - Image generation models have no cross-image memory — each image prompt must be fully self-contained with character descriptions
 - GPT Image 1.5 uses different API parameters than DALL-E 3 — `output_format` (png/webp/jpeg) instead of `response_format` (b64_json/url), no `style` parameter, different size options (1024x1024, 1024x1536, 1536x1024, auto). The image generator detects model type via `model.startswith("gpt-image")` to branch parameter construction.
 - OpenAI TTS has a character limit per request — long scenes may need chunking
-- Multi-voice TTS concatenates raw MP3 bytes from multiple `synthesize()` calls. This works because MP3 frames are independently decodable. WAV/FLAC would need FFmpeg concat instead. A format guard in `generate_audio` raises `ValueError` if multi-segment mode is used with a format not in `_CONCAT_SAFE_FORMATS` (mp3, opus).
+- Multi-voice TTS concatenates raw MP3 bytes from multiple `synthesize()` calls. This works because MP3 frames are independently decodable. WAV/FLAC would need FFmpeg concat instead. A format guard in `generate_audio` raises `ValueError` if multi-segment mode is used with a format whose prefix is not in `_CONCAT_SAFE_PREFIXES` (mp3, opus).
 - ElevenLabs does not support the `speed` parameter — a warning is logged if speed != 1.0
-- ElevenLabs mood mapping uses audio tags (`[sorrowful]`, `[excited]`) prepended to text. The `MOOD_TO_ELEVENLABS_TAG` dict maps common moods; unknown moods pass through as-is.
+- ElevenLabs mood mapping uses `_mood_to_elevenlabs_text()` which extracts the mood keyword from the instruction string and wraps it as a freeform audio tag (e.g., `[excited]`) prepended to text.
 - FFmpeg filter complexity grows with video effects — blur background + still image overlay + subtitle rendering requires careful filter graph construction
 
 ### External Integrations
 
 - **Anthropic Claude API** — Story generation (all creative phases). Uses anthropic Python SDK.
-- **OpenAI API** — TTS (gpt-4o-mini-tts model with emotion instructions), image generation (GPT Image 1.5, with DALL-E 3 fallback), caption timing (Whisper). Uses openai Python SDK.
+- **OpenAI API** — TTS (gpt-4o-mini-tts model with emotion instructions), image generation (GPT Image 1.5 and DALL-E 3), caption timing (Whisper). Uses openai Python SDK.
 - **ElevenLabs API** — Alternative TTS provider with audio tag emotion control. Uses elevenlabs Python SDK. Selected via `tts.provider: elevenlabs` in config.
 - **FFmpeg** — Video assembly, filters, transitions, subtitle rendering. Called as subprocess.

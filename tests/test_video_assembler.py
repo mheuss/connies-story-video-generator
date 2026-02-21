@@ -332,3 +332,30 @@ class TestAssembleVideoEmptySegments:
 
         with pytest.raises(ValueError, match="[Nn]o completed video segments"):
             assemble_video(project_state)
+
+
+# ---------------------------------------------------------------------------
+# TestAssembleVideoFFmpegError — FFmpegError propagation from concat step
+# ---------------------------------------------------------------------------
+
+
+class TestAssembleVideoFFmpegError:
+    """assemble_video() propagates FFmpegError from the concat step."""
+
+    @patch("story_video.pipeline.video_assembler.probe_duration", return_value=10.0)
+    @patch("story_video.pipeline.video_assembler.run_ffmpeg")
+    def test_ffmpeg_error_propagates(self, mock_run, mock_probe, project_state):
+        """FFmpegError from concat run_ffmpeg is not swallowed."""
+        segments_dir = project_state.project_dir / "segments"
+        segments_dir.mkdir(exist_ok=True)
+        (segments_dir / "scene_001.mp4").write_bytes(b"segment")
+
+        project_state.update_scene_asset(1, AssetType.VIDEO_SEGMENT, SceneStatus.COMPLETED)
+        project_state.save()
+
+        mock_run.side_effect = FFmpegError(
+            cmd=["ffmpeg", "-concat"], returncode=1, stderr="concat failed"
+        )
+
+        with pytest.raises(FFmpegError):
+            assemble_video(project_state)

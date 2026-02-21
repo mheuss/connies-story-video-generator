@@ -91,10 +91,11 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
         output_path=output_path,
         video_config=video_config,
     )
+    state.update_scene_asset(scene.scene_number, AssetType.VIDEO_SEGMENT, SceneStatus.IN_PROGRESS)
+    state.save()
+
     run_ffmpeg(cmd)
 
-    # Update state
-    state.update_scene_asset(scene.scene_number, AssetType.VIDEO_SEGMENT, SceneStatus.IN_PROGRESS)
     state.update_scene_asset(scene.scene_number, AssetType.VIDEO_SEGMENT, SceneStatus.COMPLETED)
     state.save()
 

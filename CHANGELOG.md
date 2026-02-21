@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Inspired_by creative flow — 5-phase pipeline (source analysis, story bible, outline, scene prose with running summaries, critique/revision) that creates original stories inspired by existing source material. Includes `--premise` flag for creative direction and semi-auto checkpoints at each creative phase.
 
 ### Changed
-- CLI flag `--source-material` renamed to `--input` — applies to all three modes (adapt, inspired_by, original). Clean break, no deprecated alias.
+- CLI flag `--source-material` renamed to `--input` — applies to all three modes (adapt, iWenspired_by, original). Clean break, no deprecated alias.
 
 ## [0.4.0] — 2026-02-18
 

@@ -4,8 +4,11 @@ Parses YAML front matter (voice mappings) and inline voice/mood/pause tags
 from story text.
 
 Public items:
-    parse_story_header: Extract YAML front matter from story text.
+    extract_tags: Extract all voice/mood/pause tags from text.
+    has_narration_tags: Check whether text contains inline tags.
     parse_narration_segments: Split tagged text into narration segments.
+    parse_story_header: Extract YAML front matter from story text.
+    strip_narration_tags: Remove inline tags from text.
 """
 
 import logging
@@ -27,7 +30,6 @@ __all__ = [
 ]
 
 _TAG_PATTERN = re.compile(r"\*\*(voice|mood|pause):([^*]+)\*\*")
-_TAG_PATTERN_NON_CAPTURING = re.compile(r"\*\*(?:voice|mood|pause):[^*]+\*\*")
 
 
 def has_narration_tags(text: str) -> bool:
@@ -44,7 +46,7 @@ def extract_tags(text: str) -> list[str]:
     Returns:
         List of tag strings in order of appearance.
     """
-    return _TAG_PATTERN_NON_CAPTURING.findall(text)
+    return [m.group(0) for m in _TAG_PATTERN.finditer(text)]
 
 
 _STRIP_PATTERN = re.compile(r"\*\*(?:voice|mood|pause):[^*]+\*\*\s*")
@@ -126,16 +128,17 @@ def parse_narration_segments(
 ) -> list[NarrationSegment]:
     """Split tagged text into narration segments.
 
+    Args:
+        text: Tagged narration text to parse.
+        voice_map: Mapping of voice labels to provider voice IDs.
+            Must not be empty.
+        default_voice: Voice label to use when no voice tag is active.
+        scene_number: Scene number assigned to each segment (1-based).
+
     Walks the text tracking current voice and mood state. Each
     ``**voice:X**`` or ``**mood:X**`` tag closes the current segment
     and starts a new one. ``**pause:N**`` tags emit a pause segment
     with the specified duration in seconds.
-
-    Args:
-        text: Scene narration text with optional inline tags.
-        voice_map: Mapping from voice labels to provider voice IDs.
-        default_voice: Label to use for text before any voice tag.
-        scene_number: Scene number for all produced segments.
 
     Returns:
         List of NarrationSegment objects in order.
@@ -144,6 +147,10 @@ def parse_narration_segments(
         ValueError: If a voice tag references an undefined label,
             or if a pause tag has a non-numeric duration.
     """
+    if not voice_map:
+        msg = "voice_map must not be empty"
+        raise ValueError(msg)
+
     current_voice_label = default_voice
     current_mood: str | None = None
     segments: list[NarrationSegment] = []
@@ -183,11 +190,11 @@ def parse_narration_segments(
         elif tag_type == "pause":
             try:
                 duration = float(tag_value)
-            except ValueError:
+            except ValueError as exc:
                 msg = (
                     f"Invalid pause duration '{tag_value}' — must be a number (e.g., **pause:0.5**)"
                 )
-                raise ValueError(msg) from None
+                raise ValueError(msg) from exc
             if duration > 30:
                 logger.warning(
                     "Scene %d: pause duration %.1fs is unusually long (>30s)",

@@ -8,6 +8,12 @@ Items committed to the current sprint/cycle.
 
 Acknowledged items not yet scheduled.
 
+### Fifth-Pass Review (PR5) — 2026-02-20
+
+- [ ] [refactor] `_mood_to_elevenlabs_text` reverse-parses the output of `_mood_to_instructions` — fragile coupling. Pass raw mood keyword alongside formatted instructions instead of formatting then un-formatting. (tts_generator.py:144-165)
+- [ ] [limitation] `write_scene_prose` resume: running summary for skipped scenes uses title-only context instead of full prose summary — weaker context for Claude on subsequent scenes after resume. Persist scene summaries to survive resume. (story_writer.py:849-853)
+- [ ] [bug] `OutputConfig.directory` is defined in `AppConfig` but never read — CLI hardcodes `Path("./output")` in every command. Wire config.output.directory into CLI as fallback for `--output-dir`, or remove `OutputConfig`. (models.py:448-457, cli.py)
+
 ### Third-Pass Review (PR4) — 2026-02-18
 
 **Pipeline orchestrator:**
@@ -185,13 +191,11 @@ Acknowledged items not yet scheduled.
 - [x] [feature] LLM-based TTS text prep — replaced regex narration prep with Claude API calls for context-aware pronunciation preparation. Single `generate_structured()` call per scene handles abbreviations, numbers, punctuation, and unusual names. Produces JSON changelog. NARRATION_PREP is now a checkpoint phase. Old regex code deleted. (narration_prep.py, orchestrator.py)
 - [x] [feature] Implement inspired_by mode — analysis, bible, outline, prose, critique/revision (pipeline/story_writer.py, see docs/plans/2026-02-18-inspired-by-design.md)
 - [ ] [limitation] write_scene_prose resume: running summary for skipped scenes uses title-only context instead of full prose summary — weaker context for Claude on subsequent scenes after resume (story_writer.py)
-- [x] [enhancement] Image prompt character consistency — added characters array to analysis schema, added ANALYSIS phase to adapt mode, image prompt writer injects character reference from analysis.json (models.py, story_writer.py, image_prompt_writer.py)
-- [x] [feature] Implement original mode — same creative flow as inspired_by but with brief/prompt input. ANALYSIS phase uses BRIEF_ANALYSIS_SYSTEM prompt, source_stats from config. CLI --source-material renamed to --input. (story_writer.py, cli.py)
-- [x] [feature] Add marker-based scene splitting as early-exit path in split_scenes — `**scene:Title**` tags auto-detected, splits locally without Claude call. Text before first tag → "Opening" scene. 971 tests passing. (story_writer.py)
+
 - [ ] [feature] Inline image tags — define image prompts in YAML header, reference with `**image:tag**` in story text. Decouples image transitions from scene boundaries, gives authors direct control over visuals. Requires video assembler refactor for multiple images per scene.
-- [x] [feature] Pause tags — `**pause:0.5**` inserts silence into narration audio. Variable duration, MP3 silence generation, narration prep preservation. 955 tests passing. (narration_tags.py, models.py, tts_generator.py, narration_prep.py)
+
 - [ ] [feature] Background music / sound effects — overlay audio tracks at specified points in narration with volume and duration control. Music files supplied by user. FFmpeg amix filter for mixing. Most complex of the three inline tag features.
-- [x] [bug] Captions missing quotation marks around spoken dialogue — replaced segment-based `_reconcile_punctuation` with prose-based two-pointer alignment that restores all punctuation including quotation marks from `scene.prose` (pipeline/caption_generator.py)
+
 - [ ] [feature] FFmpeg concat fallback for non-MP3/opus audio formats — when audio_transition_duration uses WAV, FLAC, or other formats that don't support raw byte concatenation, use `ffmpeg -f concat` to join segment audio files. Low priority: MP3 and opus (the only realistic TTS output formats) support byte concatenation natively.
 - [x] [chore] Add ElevenLabs TTS provider option (merged to main)
 - [x] [test] Boundary value tests for `_int_to_words` and `_year_to_words` — no longer applicable, regex code deleted (T8)
@@ -214,13 +218,18 @@ Acknowledged items not yet scheduled.
 - [ ] [chore] Add `exists=True` to `--config` Typer option in create and estimate commands for immediate path validation (CLI-S4)
 - [ ] [test] Add direct unit tests for `_status_icon` covering all 4 statuses and fallback path (CLI-S5)
 - [x] [refactor] Narrow `create` command exception handler from bare `Exception` to `FileExistsError` for `ProjectState.create()` (CLI-S7)
-- [ ] [chore] Verify GPT Image 1.5 pricing — current rates (low: $0.011, medium: $0.050, high: $0.167) are from early documentation and may have changed (CR-8)
+- [ ] [chore] Verify GPT Image 1.5 pricing — current code rates (low: $0.020, medium: $0.050, high: $0.200) may not match latest OpenAI pricing (CR-8)
 - [ ] [refactor] Cost rate table key collision risk — IMAGE_COST_PER_IMAGE dict merges GPT Image tiers (low/medium/high) and DALL-E tiers (standard/hd) in one flat dict; if a future model reuses a tier name, values would collide. Consider nested dict keyed by model family. (CR-9)
 
 ## Resolved
 
 Completed items awaiting migration to VERSION_HISTORY.md at next release.
 
+- [x] [enhancement] Image prompt character consistency — added characters array to analysis schema, added ANALYSIS phase to adapt mode, image prompt writer injects character reference from analysis.json (models.py, story_writer.py, image_prompt_writer.py)
+- [x] [feature] Implement original mode — same creative flow as inspired_by but with brief/prompt input. ANALYSIS phase uses BRIEF_ANALYSIS_SYSTEM prompt, source_stats from config. CLI --source-material renamed to --input. (story_writer.py, cli.py)
+- [x] [feature] Add marker-based scene splitting as early-exit path in split_scenes — `**scene:Title**` tags auto-detected, splits locally without Claude call. Text before first tag → "Opening" scene. (story_writer.py)
+- [x] [feature] Pause tags — `**pause:0.5**` inserts silence into narration audio. Variable duration, MP3 silence generation, narration prep preservation. (narration_tags.py, models.py, tts_generator.py, narration_prep.py)
+- [x] [bug] Captions missing quotation marks around spoken dialogue — replaced segment-based `_reconcile_punctuation` with prose-based two-pointer alignment that restores all punctuation including quotation marks from `scene.prose` (pipeline/caption_generator.py)
 - [x] [bug] Audio overlap at scene transitions — decoupled video xfade (1.5s) from audio acrossfade (0.05s) to prevent narration overlap (ffmpeg/commands.py, models.py)
 - [x] [feature] Implement Pydantic data models (models.py)
 - [x] [feature] Implement configuration loading and merging (config.py)

@@ -1,4 +1,7 @@
-"""CLI entry point for story-video."""
+"""CLI entry point for story-video.
+
+Commands: create, resume, estimate, status, list.
+"""
 
 import json
 import logging
@@ -15,7 +18,7 @@ from rich.table import Table
 
 from story_video.config import load_config
 from story_video.cost import estimate_cost, format_cost_estimate
-from story_video.models import InputMode, PhaseStatus, SceneStatus
+from story_video.models import KNOWN_TTS_PROVIDERS, InputMode, PhaseStatus, SceneStatus
 from story_video.pipeline.caption_generator import OpenAIWhisperProvider
 from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import OpenAIImageProvider
@@ -36,7 +39,7 @@ def main(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
 ) -> None:
     """Generate narrated story videos for YouTube."""
-    level = logging.DEBUG if verbose else logging.WARNING
+    level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
         format="%(name)s %(levelname)s: %(message)s",
@@ -78,6 +81,9 @@ def _generate_project_id(mode: str, output_dir: Path) -> str:
     suffix = 2
     while (output_dir / f"{base}-{suffix}").exists():
         suffix += 1
+        if suffix > 1000:
+            msg = f"Could not generate unique project ID after 1000 attempts for base '{base}'"
+            raise RuntimeError(msg)
     return f"{base}-{suffix}"
 
 
@@ -99,6 +105,9 @@ def _read_text_input(value: str) -> str:
         raise ValueError(msg)
     if path.is_file():
         return path.read_text(encoding="utf-8")
+    # Warn if the value looks like a file path but doesn't exist
+    if ("/" in value or "\\" in value) and value.endswith((".txt", ".md", ".text")):
+        logger.warning("Input looks like a file path but was not found: %s", value)
     return value
 
 
@@ -126,6 +135,10 @@ def _scan_project_dirs(output_dir: Path) -> Iterator[tuple[Path, dict]]:
             data = json.loads(json_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             logger.debug("Skipping %s: invalid or unreadable project.json", child)
+            continue
+
+        if not isinstance(data, dict):
+            logger.debug("Skipping %s: project.json is not a JSON object", child)
             continue
 
         yield child, data
@@ -255,7 +268,8 @@ def _make_tts_provider(provider_name: str) -> OpenAITTSProvider | ElevenLabsTTSP
         return ElevenLabsTTSProvider()
     console.print(
         Panel(
-            f"Unknown TTS provider: '{provider_name}'. Supported providers: openai, elevenlabs",
+            f"Unknown TTS provider: '{provider_name}'."
+            f" Supported providers: {', '.join(sorted(KNOWN_TTS_PROVIDERS))}",
             title="Configuration Error",
             border_style="red",
         )
@@ -386,7 +400,7 @@ def create(
     # --- Instantiate providers and run pipeline ---
     try:
         _run_with_providers(state)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — CLI boundary: display all errors as a panel
         logger.exception("Pipeline failed")
         console.print(Panel(str(exc), title="Pipeline Error", border_style="red"))
         raise typer.Exit(1)
@@ -438,7 +452,7 @@ def resume(
     # --- Instantiate providers and run pipeline ---
     try:
         _run_with_providers(state)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — CLI boundary: display all errors as a panel
         logger.exception("Pipeline failed")
         console.print(Panel(str(exc), title="Pipeline Error", border_style="red"))
         raise typer.Exit(1)
@@ -594,7 +608,3 @@ def list_projects(
         )
 
     console.print(table)
-
-
-if __name__ == "__main__":
-    app()

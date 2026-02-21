@@ -87,6 +87,9 @@ class OpenAIImageProvider:
             kwargs["style"] = style
 
         response = self._client.images.generate(**kwargs)
+        if not response.data or not response.data[0].b64_json:
+            msg = f"Image API returned empty data for prompt: {prompt[:80]}..."
+            raise ValueError(msg)
         return base64.b64decode(response.data[0].b64_json)
 
 
@@ -118,6 +121,10 @@ def generate_image(scene: Scene, state: ProjectState, provider: ImageProvider) -
         quality=img_config.quality,
         style=img_config.style,
     )
+
+    if not image_bytes:
+        msg = f"Scene {scene.scene_number}: image provider returned empty bytes"
+        raise ValueError(msg)
 
     images_dir = state.project_dir / "images"
     images_dir.mkdir(exist_ok=True)

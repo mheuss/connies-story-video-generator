@@ -677,6 +677,35 @@ class TestRunPipelineNarrationPrep:
         assert sorted(done_scenes) == [1, 2]
 
 
+class TestRunPipelineNarrationPrepCorruptDoneFile:
+    """_run_narration_prep recovers from a corrupt done file."""
+
+    @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
+    def test_corrupt_done_file_processes_all_scenes(self, mock_prep, tmp_path, caplog):
+        """Corrupt narration_prep_done.json triggers warning and full reprocessing."""
+        mock_prep.return_value = {
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        }
+
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=2, up_to_asset=AssetType.TEXT)
+
+        for scene in state.metadata.scenes:
+            scene.narration_text = scene.prose
+
+        # Write corrupt done file
+        done_path = state.project_dir / "narration_prep_done.json"
+        done_path.write_text("not valid json{{{", encoding="utf-8")
+
+        with caplog.at_level(logging.WARNING):
+            _run_narration_prep(state, MagicMock())
+
+        assert mock_prep.call_count == 2
+        assert "Corrupt narration_prep_done.json" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # TestRunPipelineDispatch — phase dispatch routing
 # ---------------------------------------------------------------------------

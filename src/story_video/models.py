@@ -17,19 +17,21 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 RESOLUTION_RE = re.compile(r"^\d+x\d+$")
-SCENE_WORD_TARGET_DEFAULT = 600
+# Adapt-mode heuristic for scene splitting — not used for cost/duration estimation
+WORDS_PER_SCENE_ESTIMATE = 600
 
 __all__ = [
     "ADAPT_FLOW_PHASES",
-    "CREATIVE_FLOW_PHASES",
     "AppConfig",
-    "HEX_COLOR_RE",
     "AssetType",
+    "CREATIVE_FLOW_PHASES",
     "CaptionResult",
     "CaptionSegment",
     "CaptionWord",
+    "HEX_COLOR_RE",
     "ImageConfig",
     "InputMode",
+    "KNOWN_TTS_PROVIDERS",
     "NarrationSegment",
     "OutputConfig",
     "PhaseStatus",
@@ -37,7 +39,6 @@ __all__ = [
     "PipelinePhase",
     "ProjectMetadata",
     "RESOLUTION_RE",
-    "SCENE_WORD_TARGET_DEFAULT",
     "Scene",
     "SceneAssetStatus",
     "SceneStatus",
@@ -46,6 +47,7 @@ __all__ = [
     "SubtitleConfig",
     "TTSConfig",
     "VideoConfig",
+    "WORDS_PER_SCENE_ESTIMATE",
 ]
 
 # ---------------------------------------------------------------------------
@@ -197,7 +199,7 @@ class StoryConfig(BaseModel):
         scene_word_max: Maximum acceptable word count per scene.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     target_duration_minutes: int = Field(default=30, gt=0)
     words_per_minute: int = Field(default=150, gt=0)
@@ -228,6 +230,9 @@ class StoryConfig(BaseModel):
         return self
 
 
+KNOWN_TTS_PROVIDERS = {"openai", "elevenlabs"}
+
+
 class TTSConfig(BaseModel):
     """Text-to-speech generation parameters.
 
@@ -241,13 +246,21 @@ class TTSConfig(BaseModel):
         output_format: Audio file format.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     provider: str = Field(default="openai")
     model: str = Field(default="gpt-4o-mini-tts")
     voice: str = Field(default="nova")
     speed: float = Field(default=1.0, gt=0)
     output_format: str = Field(default="mp3")
+
+    @field_validator("provider")
+    @classmethod
+    def _validate_tts_provider(cls, v: str) -> str:
+        if v not in KNOWN_TTS_PROVIDERS:
+            msg = f"Unknown TTS provider: {v!r}. Choose from: {sorted(KNOWN_TTS_PROVIDERS)}"
+            raise ValueError(msg)
+        return v
 
     @property
     def file_extension(self) -> str:
@@ -267,7 +280,7 @@ class StoryHeader(BaseModel):
         default_voice: Label used for text without an explicit voice tag.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     voices: dict[str, str] = Field(min_length=1)
     default_voice: str = Field(default="narrator")
@@ -297,7 +310,7 @@ class NarrationSegment(BaseModel):
         segment_index: Order within the scene.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     text: str = Field(min_length=1)
     voice: str = Field(min_length=1)
@@ -323,7 +336,7 @@ class ImageConfig(BaseModel):
         style_prefix: Text prepended to every image prompt.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     provider: str = Field(default="openai")
     model: str = Field(default="gpt-image-1.5")
@@ -360,7 +373,7 @@ class VideoConfig(BaseModel):
         fade_out_duration: Fade-to-black duration at video end in seconds.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     resolution: str = Field(default="1920x1080")
     fps: int = Field(default=30, gt=0)
@@ -398,7 +411,7 @@ class SubtitleConfig(BaseModel):
         max_lines: Maximum number of subtitle lines.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     font: str = Field(default="Montserrat")
     font_size: int = Field(default=48, gt=0)
@@ -427,7 +440,7 @@ class PipelineConfig(BaseModel):
         autonomous: If True, skip human review checkpoints.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     autonomous: bool = Field(default=False)
 
@@ -439,7 +452,7 @@ class OutputConfig(BaseModel):
         directory: Base directory where project outputs are stored.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     directory: Path = Field(default=Path("./output"))
 
@@ -492,7 +505,7 @@ class SceneAssetStatus(BaseModel):
         video_segment: Status of the rendered video segment.
     """
 
-    model_config = ConfigDict(validate_assignment=True)
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
     text: SceneStatus = Field(default=SceneStatus.PENDING)
     narration_text: SceneStatus = Field(default=SceneStatus.PENDING)
@@ -509,7 +522,15 @@ class SceneAssetStatus(BaseModel):
 
 
 class CaptionWord(BaseModel):
-    """A single transcribed word with timing."""
+    """A single transcribed word with timing.
+
+    Fields:
+        word: The transcribed word text.
+        start: Start time in seconds (non-negative).
+        end: End time in seconds (non-negative, >= start).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     word: str
     start: float = Field(ge=0)
@@ -524,15 +545,39 @@ class CaptionWord(BaseModel):
 
 
 class CaptionSegment(BaseModel):
-    """A transcribed segment (roughly sentence-level) with timing."""
+    """A transcribed segment (roughly sentence-level) with timing.
+
+    Fields:
+        text: The transcribed segment text.
+        start: Start time in seconds (non-negative).
+        end: End time in seconds (non-negative, >= start).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     text: str
     start: float = Field(ge=0)
     end: float = Field(ge=0)
 
+    @model_validator(mode="after")
+    def _validate_start_before_end(self) -> "CaptionSegment":
+        if self.start > self.end:
+            msg = f"start ({self.start}) must not exceed end ({self.end})"
+            raise ValueError(msg)
+        return self
+
 
 class CaptionResult(BaseModel):
-    """Complete transcription result with segments and word timestamps."""
+    """Complete transcription result with segments and word timestamps.
+
+    Fields:
+        segments: Sentence-level transcription segments.
+        words: Word-level timestamps for subtitle generation.
+        language: Detected language code (e.g. "en").
+        duration: Total audio duration in seconds (non-negative).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     segments: list[CaptionSegment]
     words: list[CaptionWord]
@@ -557,7 +602,7 @@ class Scene(BaseModel):
         asset_status: Per-asset production status tracking.
     """
 
-    model_config = ConfigDict(validate_assignment=True)
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
     scene_number: int = Field(gt=0)
     title: str = Field(min_length=1)
@@ -589,7 +634,7 @@ class ProjectMetadata(BaseModel):
         scenes: List of scenes in the project.
     """
 
-    model_config = ConfigDict(validate_assignment=True)
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
     project_id: str = Field(min_length=1)
     mode: InputMode

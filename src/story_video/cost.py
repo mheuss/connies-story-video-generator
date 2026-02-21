@@ -150,11 +150,13 @@ def _calculate_claude_cost(mode: InputMode, scene_count: int) -> ServiceCost:
         low = CLAUDE_ORIGINAL_LOW_PER_REF * scale
         high = CLAUDE_ORIGINAL_HIGH_PER_REF * scale
         description = f"story generation, {mode.value}"
-    else:
-        # InputMode.ADAPT
+    elif mode == InputMode.ADAPT:
         low = CLAUDE_ADAPT_LOW_PER_REF * scale
         high = CLAUDE_ADAPT_HIGH_PER_REF * scale
         description = f"story generation, {mode.value}"
+    else:
+        msg = f"Unknown input mode: {mode!r}"
+        raise ValueError(msg)
 
     return ServiceCost(service="Claude", description=description, low=low, high=high)
 
@@ -305,7 +307,7 @@ def estimate_cost(
 def format_cost_estimate(estimate: CostEstimate) -> str:
     """Format a cost estimate for display.
 
-    Produces the formatted output shown in design.md section 12.
+    Produces the formatted output shown in ``docs/notes/design.md`` section 12.
     Uses box-drawing characters for horizontal rules.
     Output is plain text (no Rich markup) — Rich formatting is added by the CLI layer.
 

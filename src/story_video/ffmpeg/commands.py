@@ -13,6 +13,7 @@ Public items:
 """
 
 import logging
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -45,23 +46,31 @@ class FFmpegError(Exception):
         self.returncode = returncode
         self.stderr = stderr
         super().__init__(
-            f"FFmpeg failed (exit {returncode})\nCommand: {' '.join(cmd)}\nStderr: {stderr}"
+            f"FFmpeg failed (exit {returncode})\nCommand: {shlex.join(cmd)}\nStderr: {stderr}"
         )
 
 
-def run_ffmpeg(cmd: list[str]) -> subprocess.CompletedProcess:
+def run_ffmpeg(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess:
     """Execute an FFmpeg command and return the result.
 
     Args:
         cmd: Full command as a list of strings (e.g. ["ffmpeg", "-i", ...]).
+        timeout: Maximum seconds to wait before killing the process.
 
     Returns:
         The CompletedProcess on success.
 
     Raises:
-        FFmpegError: If the process exits with a non-zero return code.
+        FFmpegError: If the process exits with a non-zero return code or
+            exceeds the timeout.
     """
-    result = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603
+    try:
+        # cmd is built programmatically from validated config; shell=False (default)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)  # noqa: S603
+    except subprocess.TimeoutExpired as exc:
+        raise FFmpegError(
+            cmd=cmd, returncode=-1, stderr=f"Process timed out after {timeout}s"
+        ) from exc
     if result.returncode != 0:
         raise FFmpegError(cmd=cmd, returncode=result.returncode, stderr=result.stderr)
     return result
@@ -101,6 +110,9 @@ def build_segment_command(
     sub_filter = subtitle_filter(ass_path)
     fg_filter = still_image_filter(video_config.resolution)
 
+    # FFmpeg auto-splits [0:v] into two branches: one for the blurred background
+    # (scale-to-cover + crop + blur) and one for the sharp foreground (scale-to-fit).
+    # The two branches are overlaid, then subtitles are burned in.
     filtergraph = (
         f"[0:v]{bg_filter}[bg];"
         f"[0:v]{fg_filter}[fg];"
@@ -161,6 +173,10 @@ def build_concat_command(
     Raises:
         ValueError: If segment_paths is empty or if segment_paths and
             segment_durations have different lengths.
+
+    Note:
+        If a segment duration is shorter than the transition duration,
+        the xfade offset is clamped to 0.0 and a warning is logged.
     """
     if not segment_paths:
         msg = "segment_paths must contain at least one segment"
@@ -187,6 +203,9 @@ def build_concat_command(
     if n == 1:
         # Single segment: fade in/out only
         total_dur = segment_durations[0]
+        # Clamp fades so they don't exceed half the total duration
+        fade_in_dur = min(fade_in_dur, total_dur / 2)
+        fade_out_dur = min(fade_out_dur, total_dur / 2)
         fade_out_start = max(0.0, total_dur - fade_out_dur)
         filtergraph = (
             f"[0:v]fade=t=in:st=0:d={fade_in_dur},"
@@ -203,6 +222,7 @@ def build_concat_command(
         # offset_i = sum(durations[0..i]) - i * transition_dur
         # Each xfade takes two streams and produces one.
         cumulative_dur = 0.0
+        actual_offsets: list[float] = []
         prev_video_label = "[0:v]"
         prev_audio_label = "[0:a]"
 
@@ -219,6 +239,7 @@ def build_concat_command(
                     transition_dur,
                     raw_offset,
                 )
+            actual_offsets.append(offset)
             next_video = f"[{i + 1}:v]"
             next_audio = f"[{i + 1}:a]"
 
@@ -237,12 +258,18 @@ def build_concat_command(
             prev_video_label = out_video
             prev_audio_label = out_audio
 
-        # Add final duration for fade calculation
-        cumulative_dur += segment_durations[-1]
-        total_dur = max(0.0, cumulative_dur - (n - 1) * transition_dur)
+        # Total output duration: last xfade offset + last segment duration.
+        # Using actual (clamped) offsets ensures correct fade timing even when
+        # short segments force offset clamping.
+        last_offset = actual_offsets[-1] if actual_offsets else 0.0
+        total_dur = max(0.0, last_offset + segment_durations[-1])
+        # Clamp fades so they don't exceed half the total duration
+        fade_in_dur = min(fade_in_dur, total_dur / 2)
+        fade_out_dur = min(fade_out_dur, total_dur / 2)
         fade_out_start = max(0.0, total_dur - fade_out_dur)
 
-        # Fade in/out on the final composited stream
+        # Fade in/out on the final composited stream. xfade produces a single
+        # output whose timeline starts at 0, so st=0 correctly targets the video start.
         video_parts.append(
             f"{prev_video_label}"
             f"fade=t=in:st=0:d={fade_in_dur},"
@@ -270,6 +297,8 @@ def build_concat_command(
         video_config.codec,
         "-crf",
         str(video_config.crf),
+        "-r",
+        str(video_config.fps),
         "-pix_fmt",
         "yuv420p",
         str(output_path),
@@ -298,9 +327,7 @@ def probe_duration(path: Path) -> float:
         "default=noprint_wrappers=1:nokey=1",
         str(path),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603
-    if result.returncode != 0:
-        raise FFmpegError(cmd=cmd, returncode=result.returncode, stderr=result.stderr)
+    result = run_ffmpeg(cmd, timeout=30)
     raw = result.stdout.strip()
     try:
         return float(raw)

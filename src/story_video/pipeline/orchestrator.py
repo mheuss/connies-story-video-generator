@@ -1,6 +1,6 @@
 """Pipeline orchestrator.
 
-Drives the adapt flow (8 phases) and inspired_by creative flow (13 phases)
+Drives the adapt flow (9 phases) and creative flow (11 phases)
 sequentially, delegating all work to existing pipeline modules. Supports
 fresh runs and resumes from any state.
 
@@ -301,7 +301,11 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
     done_path = state.project_dir / "narration_prep_done.json"
     done_scenes: set[int] = set()
     if done_path.exists():
-        done_scenes = set(json.loads(done_path.read_text(encoding="utf-8")))
+        try:
+            done_scenes = set(json.loads(done_path.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Corrupt narration_prep_done.json; starting fresh")
+            done_scenes = set()
 
     pronunciation_guide: list[dict[str, str]] = []
     changelog: list[dict] = []

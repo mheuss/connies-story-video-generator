@@ -77,7 +77,7 @@ ASSET_DEPENDENCIES: dict[AssetType, list[AssetType]] = {
 }
 
 # Subdirectories created inside each project directory
-_PROJECT_SUBDIRS = ("scenes", "audio", "images", "captions", "video")
+_PROJECT_SUBDIRS = ("scenes", "audio", "images", "captions", "video", "segments")
 
 
 class ProjectState:
@@ -238,6 +238,10 @@ class ProjectState:
         Validates that the requested phase belongs to the phase sequence for
         this project's input mode.
 
+        If the current status is AWAITING_REVIEW, it is auto-completed before
+        starting the new phase. The caller resuming the pipeline is treated as
+        implicit approval of the reviewed phase.
+
         Note:
             This method validates that the phase belongs to the correct mode
             but does NOT enforce sequential ordering. The caller (orchestrator)
@@ -250,7 +254,7 @@ class ProjectState:
             ValueError: If the phase is not valid for the current input mode,
                 or if another phase is currently in progress.
         """
-        # Guard: cannot start a new phase while one is already in progress
+        # Guard: cannot start a new phase while one is in progress
         if self._metadata.status == PhaseStatus.IN_PROGRESS:
             current = self._metadata.current_phase
             phase_name = current.value if current else "unknown"
@@ -260,8 +264,13 @@ class ProjectState:
             )
             raise ValueError(msg)
 
+        # Auto-complete a phase that was awaiting review — the caller resuming
+        # the pipeline is the implicit approval signal.
+        if self._metadata.status == PhaseStatus.AWAITING_REVIEW:
+            self._metadata.status = PhaseStatus.COMPLETED
+
         # State transition validation: only phases in this mode's sequence are
-        # allowed. This prevents starting a creative-only phase (e.g. ANALYSIS)
+        # allowed. This prevents starting a creative-only phase (e.g. STORY_BIBLE)
         # in adapt mode, or an adapt-only phase (e.g. SCENE_SPLITTING) in
         # original/inspired_by mode.
         valid_phases = self.get_phase_sequence()
