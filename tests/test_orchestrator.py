@@ -1395,8 +1395,8 @@ class TestPipelineIntegration:
         assert "dawn" in scene2.prose.lower()
         assert scene1.narration_text is not None
         assert scene2.narration_text is not None
-        assert "lighthouse" in scene1.image_prompt.lower()
-        assert "dawn" in scene2.image_prompt.lower()
+        assert "lighthouse" in scene1.image_prompts[0].prompt.lower()
+        assert "dawn" in scene2.image_prompts[0].prompt.lower()
 
         # --- Verify all asset statuses are COMPLETED ---
         for scene in state.metadata.scenes:
@@ -1415,8 +1415,8 @@ class TestPipelineIntegration:
         assert (pd / "scenes" / "scene_002.md").exists()
         assert (pd / "audio" / "scene_001.mp3").exists()
         assert (pd / "audio" / "scene_002.mp3").exists()
-        assert (pd / "images" / "scene_001.png").exists()
-        assert (pd / "images" / "scene_002.png").exists()
+        assert (pd / "images" / "scene_001_000.png").exists()
+        assert (pd / "images" / "scene_002_000.png").exists()
         assert (pd / "captions" / "scene_001.json").exists()
         assert (pd / "captions" / "scene_002.json").exists()
         assert (pd / "captions" / "scene_001.ass").exists()
@@ -1619,8 +1619,8 @@ class TestPipelineIntegration:
         assert (pd / "scenes" / "scene_002.md").exists()
         assert (pd / "audio" / "scene_001.mp3").exists()
         assert (pd / "audio" / "scene_002.mp3").exists()
-        assert (pd / "images" / "scene_001.png").exists()
-        assert (pd / "images" / "scene_002.png").exists()
+        assert (pd / "images" / "scene_001_000.png").exists()
+        assert (pd / "images" / "scene_002_000.png").exists()
         assert (pd / "final.mp4").exists()
 
         # --- Verify external APIs were called ---
@@ -1818,8 +1818,8 @@ class TestPipelineIntegration:
         assert (pd / "scenes" / "scene_002.md").exists()
         assert (pd / "audio" / "scene_001.mp3").exists()
         assert (pd / "audio" / "scene_002.mp3").exists()
-        assert (pd / "images" / "scene_001.png").exists()
-        assert (pd / "images" / "scene_002.png").exists()
+        assert (pd / "images" / "scene_001_000.png").exists()
+        assert (pd / "images" / "scene_002_000.png").exists()
         assert (pd / "final.mp4").exists()
 
         # --- Verify external APIs were called ---
@@ -1843,3 +1843,184 @@ class TestPipelineIntegration:
         analysis = json.loads((pd / "analysis.json").read_text(encoding="utf-8"))
         assert analysis["source_stats"]["word_count"] == 4500
         assert analysis["source_stats"]["scene_count_estimate"] == 7
+
+
+# ---------------------------------------------------------------------------
+# TestPopulateImageTags — image tag extraction and prompt population
+# ---------------------------------------------------------------------------
+
+
+class TestPopulateImageTags:
+    """_populate_image_tags extracts image tags and populates scene.image_prompts."""
+
+    def test_scene_with_image_tags_gets_prompts(self, tmp_path):
+        """Scene prose with image tags gets image_prompts populated from YAML."""
+        from story_video.pipeline.orchestrator import _populate_image_tags
+
+        config = AppConfig()
+        state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
+        prose = "The lighthouse stood tall. **image:lighthouse** The harbor below."
+        state.add_scene(1, "Test Scene", prose)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        header = StoryHeader(
+            voices={"narrator": "alloy"},
+            images={"lighthouse": "A tall lighthouse at dawn"},
+        )
+
+        _populate_image_tags(state, header)
+
+        scene = state.metadata.scenes[0]
+        assert len(scene.image_prompts) == 1
+        assert scene.image_prompts[0].key == "lighthouse"
+        assert scene.image_prompts[0].prompt == "A tall lighthouse at dawn"
+
+    def test_scene_without_tags_unchanged(self, tmp_path):
+        """Scene without image tags keeps empty image_prompts."""
+        from story_video.pipeline.orchestrator import _populate_image_tags
+
+        config = AppConfig()
+        state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
+        state.add_scene(1, "Test Scene", "The lighthouse stood tall. The harbor below.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        header = StoryHeader(voices={"narrator": "alloy"}, images={"lighthouse": "A lighthouse"})
+
+        _populate_image_tags(state, header)
+
+        scene = state.metadata.scenes[0]
+        assert scene.image_prompts == []
+
+    def test_undefined_tag_key_raises(self, tmp_path):
+        """Image tag referencing undefined key raises ValueError."""
+        from story_video.pipeline.orchestrator import _populate_image_tags
+
+        config = AppConfig()
+        state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
+        state.add_scene(1, "Test", "Text **image:castle** more text")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        header = StoryHeader(voices={"narrator": "alloy"}, images={"lighthouse": "A lighthouse"})
+
+        with pytest.raises(ValueError, match="castle"):
+            _populate_image_tags(state, header)
+
+    def test_no_header_with_tags_raises(self, tmp_path):
+        """Image tags without a story header raises ValueError."""
+        from story_video.pipeline.orchestrator import _populate_image_tags
+
+        config = AppConfig()
+        state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
+        state.add_scene(1, "Test", "Text **image:lighthouse** more")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        with pytest.raises(ValueError, match="no images defined"):
+            _populate_image_tags(state, None)
+
+    def test_strips_image_tags_from_narration_text(self, tmp_path):
+        """_populate_image_tags strips image tags from scene.narration_text."""
+        from story_video.pipeline.orchestrator import _populate_image_tags
+
+        config = AppConfig()
+        state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
+        prose = "The lighthouse stood tall. **image:lighthouse** The harbor below."
+        state.add_scene(1, "Test Scene", prose)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        # Set narration_text with image tags (as adapt mode would)
+        scene = state.metadata.scenes[0]
+        scene.narration_text = "The lighthouse stood tall. **image:lighthouse** The harbor below."
+
+        header = StoryHeader(
+            voices={"narrator": "alloy"},
+            images={"lighthouse": "A tall lighthouse at dawn"},
+        )
+
+        _populate_image_tags(state, header)
+
+        assert "**image:" not in scene.narration_text
+        assert scene.narration_text == "The lighthouse stood tall. The harbor below."
+
+    def test_sets_narration_text_from_stripped_prose_when_none(self, tmp_path):
+        """When narration_text is None, sets it to prose with image tags stripped."""
+        from story_video.pipeline.orchestrator import _populate_image_tags
+
+        config = AppConfig()
+        state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
+        prose = "The lighthouse stood tall. **image:lighthouse** The harbor below."
+        state.add_scene(1, "Test Scene", prose)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        # narration_text is None (creative flow)
+        assert state.metadata.scenes[0].narration_text is None
+
+        header = StoryHeader(
+            voices={"narrator": "alloy"},
+            images={"lighthouse": "A tall lighthouse at dawn"},
+        )
+
+        _populate_image_tags(state, header)
+
+        scene = state.metadata.scenes[0]
+        assert scene.narration_text == "The lighthouse stood tall. The harbor below."
+        assert "**image:" not in scene.narration_text
+
+    def test_uses_stripped_positions_for_image_prompts(self, tmp_path):
+        """Image prompt positions use the tag-stripped coordinate system."""
+        from story_video.pipeline.orchestrator import _populate_image_tags
+
+        config = AppConfig()
+        state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
+        # Voice tag before image tag — image position must account for stripped voice tag
+        prose = "**voice:narrator** Before **image:lighthouse** after"
+        state.add_scene(1, "Test Scene", prose)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        header = StoryHeader(
+            voices={"narrator": "alloy"},
+            images={"lighthouse": "A tall lighthouse at dawn"},
+        )
+
+        _populate_image_tags(state, header)
+
+        scene = state.metadata.scenes[0]
+        # Stripped text: "Before after" — image tag at position 7 ("Before ")
+        assert scene.image_prompts[0].position == 7
+
+    def test_skips_scenes_with_existing_prompts(self, tmp_path):
+        """Scenes that already have image_prompts are not modified."""
+        from story_video.models import SceneImagePrompt
+        from story_video.pipeline.orchestrator import _populate_image_tags
+
+        config = AppConfig()
+        state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
+        prose = "The lighthouse stood tall. **image:lighthouse** The harbor."
+        state.add_scene(1, "Test Scene", prose)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        # Pre-populate image_prompts
+        existing_prompt = SceneImagePrompt(
+            key="lighthouse",
+            prompt="Existing prompt",
+            position=0,
+        )
+        state.metadata.scenes[0].image_prompts = [existing_prompt]
+
+        header = StoryHeader(
+            voices={"narrator": "alloy"},
+            images={"lighthouse": "New prompt from YAML"},
+        )
+
+        _populate_image_tags(state, header)
+
+        scene = state.metadata.scenes[0]
+        assert len(scene.image_prompts) == 1
+        assert scene.image_prompts[0].prompt == "Existing prompt"

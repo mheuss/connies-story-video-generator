@@ -36,7 +36,8 @@ def video_config():
 def segment_args(tmp_path):
     """Common arguments for build_segment_command."""
     return {
-        "image_path": tmp_path / "scene.png",
+        "image_paths": [tmp_path / "scene.png"],
+        "image_timings": [(0.0, 30.0)],
         "audio_path": tmp_path / "scene.mp3",
         "ass_path": tmp_path / "scene.ass",
         "output_path": tmp_path / "segment_01.mp4",
@@ -230,7 +231,8 @@ class TestBuildSegmentCommandStillImage:
         """Filtergraph uses still image (no zoompan), with scale, pad, ass, blur, overlay."""
         config = VideoConfig()
         cmd = build_segment_command(
-            image_path=Path("/tmp/img.png"),
+            image_paths=[Path("/tmp/img.png")],
+            image_timings=[(0.0, 30.0)],
             audio_path=Path("/tmp/audio.mp3"),
             ass_path=Path("/tmp/sub.ass"),
             output_path=Path("/tmp/out.mp4"),
@@ -447,3 +449,105 @@ class TestBuildConcatCommandStreamLabels:
         assert "[axf0]" in filter_str
         assert "[axf0][2:a]acrossfade=" in filter_str
         assert "[outa]" in filter_str
+
+
+# ---------------------------------------------------------------------------
+# TestBuildMultiImageSegmentCommand — multiple images with crossfade
+# ---------------------------------------------------------------------------
+
+
+class TestBuildMultiImageSegmentCommand:
+    """build_segment_command handles multiple images with crossfade transitions."""
+
+    def test_two_images_produces_xfade(self, video_config):
+        """Two images produce an xfade transition in the filter graph."""
+        cmd = build_segment_command(
+            image_paths=[Path("/img/000.png"), Path("/img/001.png")],
+            image_timings=[(0.0, 15.0), (15.0, 30.0)],
+            audio_path=Path("/audio/scene.mp3"),
+            ass_path=Path("/captions/scene.ass"),
+            output_path=Path("/segments/scene.mp4"),
+            video_config=video_config,
+        )
+        filter_arg = cmd[cmd.index("-filter_complex") + 1]
+        assert "xfade" in filter_arg
+        # Both images should be inputs
+        assert str(Path("/img/000.png")) in " ".join(cmd)
+        assert str(Path("/img/001.png")) in " ".join(cmd)
+
+    def test_three_images_produces_two_xfades(self, video_config):
+        """Three images produce two xfade transitions."""
+        cmd = build_segment_command(
+            image_paths=[Path("/img/0.png"), Path("/img/1.png"), Path("/img/2.png")],
+            image_timings=[(0.0, 10.0), (10.0, 20.0), (20.0, 30.0)],
+            audio_path=Path("/audio/scene.mp3"),
+            ass_path=Path("/captions/scene.ass"),
+            output_path=Path("/segments/scene.mp4"),
+            video_config=video_config,
+        )
+        filter_arg = cmd[cmd.index("-filter_complex") + 1]
+        assert filter_arg.count("xfade") == 2
+
+    def test_multi_image_has_subtitle_filter(self, video_config):
+        """Multi-image filter graph includes subtitle burn-in."""
+        cmd = build_segment_command(
+            image_paths=[Path("/img/0.png"), Path("/img/1.png")],
+            image_timings=[(0.0, 15.0), (15.0, 30.0)],
+            audio_path=Path("/audio/scene.mp3"),
+            ass_path=Path("/captions/scene.ass"),
+            output_path=Path("/segments/scene.mp4"),
+            video_config=video_config,
+        )
+        filter_arg = cmd[cmd.index("-filter_complex") + 1]
+        assert "subtitles" in filter_arg or "ass" in filter_arg.lower()
+
+    def test_multi_image_maps_audio_from_last_input(self, video_config):
+        """Audio input is mapped from the last FFmpeg input index."""
+        cmd = build_segment_command(
+            image_paths=[Path("/img/0.png"), Path("/img/1.png")],
+            image_timings=[(0.0, 15.0), (15.0, 30.0)],
+            audio_path=Path("/audio/scene.mp3"),
+            ass_path=Path("/captions/scene.ass"),
+            output_path=Path("/segments/scene.mp4"),
+            video_config=video_config,
+        )
+        # Audio is the 3rd input (index 2) for 2 images
+        audio_maps = [cmd[i + 1] for i, v in enumerate(cmd) if v == "-map" and i + 1 < len(cmd)]
+        assert "2:a" in audio_maps
+
+    def test_single_image_no_xfade(self, video_config):
+        """Single image in list produces same simple filter graph as before."""
+        cmd = build_segment_command(
+            image_paths=[Path("/img/scene.png")],
+            image_timings=[(0.0, 30.0)],
+            audio_path=Path("/audio/scene.mp3"),
+            ass_path=Path("/captions/scene.ass"),
+            output_path=Path("/segments/scene.mp4"),
+            video_config=video_config,
+        )
+        filter_arg = cmd[cmd.index("-filter_complex") + 1]
+        assert "xfade" not in filter_arg
+
+    def test_empty_image_paths_raises(self, video_config):
+        """Empty image_paths raises ValueError."""
+        with pytest.raises(ValueError, match="at least one"):
+            build_segment_command(
+                image_paths=[],
+                image_timings=[],
+                audio_path=Path("/audio/scene.mp3"),
+                ass_path=Path("/captions/scene.ass"),
+                output_path=Path("/segments/scene.mp4"),
+                video_config=video_config,
+            )
+
+    def test_mismatched_lengths_raises(self, video_config):
+        """Mismatched image_paths and image_timings raises ValueError."""
+        with pytest.raises(ValueError, match="same length"):
+            build_segment_command(
+                image_paths=[Path("/img/0.png"), Path("/img/1.png")],
+                image_timings=[(0.0, 15.0)],
+                audio_path=Path("/audio/scene.mp3"),
+                ass_path=Path("/captions/scene.ass"),
+                output_path=Path("/segments/scene.mp4"),
+                video_config=video_config,
+            )

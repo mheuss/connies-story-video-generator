@@ -2,12 +2,17 @@
 
 import pytest
 
+from story_video.models import ImageTag
 from story_video.utils.narration_tags import (
+    extract_image_tags,
+    extract_image_tags_stripped,
     extract_tags,
     has_narration_tags,
     parse_narration_segments,
     parse_story_header,
+    strip_image_tags,
     strip_narration_tags,
+    validate_image_tags,
 )
 
 
@@ -232,6 +237,10 @@ class TestStripNarrationTags:
     def test_strip_narration_tags(self, text, expected):
         assert strip_narration_tags(text) == expected
 
+    def test_strips_image_tags(self):
+        text = "Before **image:lighthouse** after"
+        assert strip_narration_tags(text) == "Before after"
+
 
 class TestExtractTags:
     """extract_tags returns all voice/mood tags in order."""
@@ -353,3 +362,186 @@ class TestPauseTagParsing:
         with caplog.at_level(logging.WARNING):
             parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
         assert any("unusually long" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Extract image tags
+# ---------------------------------------------------------------------------
+
+
+class TestExtractImageTags:
+    """extract_image_tags() finds image tags with character offsets."""
+
+    def test_single_tag(self):
+        text = "Some text **image:lighthouse** more text"
+        tags = extract_image_tags(text)
+        assert len(tags) == 1
+        assert tags[0].key == "lighthouse"
+        assert tags[0].position == 10
+
+    def test_multiple_tags(self):
+        text = "Start **image:lighthouse** middle **image:harbor** end"
+        tags = extract_image_tags(text)
+        assert len(tags) == 2
+        assert tags[0].key == "lighthouse"
+        assert tags[1].key == "harbor"
+        assert tags[0].position < tags[1].position
+
+    def test_no_tags(self):
+        text = "Plain text with no tags"
+        assert extract_image_tags(text) == []
+
+    def test_mixed_with_other_tags(self):
+        text = "**voice:narrator** text **image:lighthouse** more **mood:sad** end"
+        tags = extract_image_tags(text)
+        assert len(tags) == 1
+        assert tags[0].key == "lighthouse"
+
+
+# ---------------------------------------------------------------------------
+# StoryHeader images map
+# ---------------------------------------------------------------------------
+
+
+class TestStoryHeaderImages:
+    """StoryHeader accepts an optional images map."""
+
+    def test_header_with_images(self):
+        header, body = parse_story_header(
+            "---\nvoices:\n  narrator: alloy\n"
+            'images:\n  lighthouse: "A lighthouse at dawn"\n---\nBody text'
+        )
+        assert header is not None
+        assert header.images == {"lighthouse": "A lighthouse at dawn"}
+
+    def test_header_without_images(self):
+        header, body = parse_story_header("---\nvoices:\n  narrator: alloy\n---\nBody text")
+        assert header is not None
+        assert header.images == {}
+
+    def test_header_images_empty_value_rejected(self):
+        with pytest.raises(ValueError):
+            parse_story_header(
+                '---\nvoices:\n  narrator: alloy\nimages:\n  lighthouse: ""\n---\nBody'
+            )
+
+
+# ---------------------------------------------------------------------------
+# Validate image tags
+# ---------------------------------------------------------------------------
+
+
+class TestValidateImageTags:
+    """validate_image_tags() checks tag keys against YAML images map."""
+
+    def test_valid_tags_pass(self):
+        images = {"lighthouse": "A lighthouse", "harbor": "A harbor"}
+        tags = [ImageTag(key="lighthouse", position=0), ImageTag(key="harbor", position=50)]
+        validate_image_tags(tags, images)  # Should not raise
+
+    def test_unknown_tag_raises(self):
+        images = {"lighthouse": "A lighthouse"}
+        tags = [ImageTag(key="lighthouse", position=0), ImageTag(key="castle", position=50)]
+        with pytest.raises(ValueError, match="castle"):
+            validate_image_tags(tags, images)
+
+    def test_empty_tags_pass(self):
+        validate_image_tags([], {})  # No tags, no images — valid
+
+    def test_unused_images_allowed(self):
+        images = {"lighthouse": "A lighthouse", "harbor": "A harbor"}
+        tags = [ImageTag(key="lighthouse", position=0)]
+        validate_image_tags(tags, images)  # harbor unused but allowed
+
+
+# ---------------------------------------------------------------------------
+# Strip image tags (image-only stripping)
+# ---------------------------------------------------------------------------
+
+
+class TestStripImageTags:
+    """strip_image_tags() removes only image tags, leaving voice/mood intact."""
+
+    def test_removes_image_tags(self):
+        text = "Before **image:lighthouse** after"
+        assert strip_image_tags(text) == "Before after"
+
+    def test_removes_multiple_image_tags(self):
+        text = "A **image:lighthouse** B **image:harbor** C"
+        assert strip_image_tags(text) == "A B C"
+
+    def test_preserves_voice_tags(self):
+        text = "**voice:narrator** Hello **image:lighthouse** world"
+        assert strip_image_tags(text) == "**voice:narrator** Hello world"
+
+    def test_preserves_mood_tags(self):
+        text = "**mood:sad** Goodbye **image:castle** forever"
+        assert strip_image_tags(text) == "**mood:sad** Goodbye forever"
+
+    def test_no_tags_unchanged(self):
+        text = "Plain text with no tags."
+        assert strip_image_tags(text) == text
+
+    def test_only_image_tags(self):
+        text = "**image:a** **image:b**"
+        assert strip_image_tags(text) == ""
+
+
+# ---------------------------------------------------------------------------
+# Extract image tags with stripped positions
+# ---------------------------------------------------------------------------
+
+
+class TestExtractImageTagsStripped:
+    """extract_image_tags_stripped() returns positions in stripped coordinates."""
+
+    def test_single_tag_no_other_tags(self):
+        """Position in text with no other tags to strip."""
+        text = "Before **image:lighthouse** after"
+        tags = extract_image_tags_stripped(text)
+        assert len(tags) == 1
+        assert tags[0].key == "lighthouse"
+        # Stripped text is "Before after" — tag was at position 7 ("Before ")
+        assert tags[0].position == 7
+
+    def test_positions_in_stripped_coordinate_system(self):
+        """Positions map correctly when voice/mood tags precede image tags."""
+        text = "**voice:narrator** Before **image:a** between **image:b** after"
+        tags = extract_image_tags_stripped(text)
+        assert len(tags) == 2
+        assert tags[0].key == "a"
+        assert tags[1].key == "b"
+        # All-tags-stripped text: "Before between after"
+        # "Before " = 7 chars
+        stripped_text = strip_narration_tags(text)
+        assert stripped_text == "Before between after"
+        assert stripped_text[tags[0].position :].startswith("between")
+        assert stripped_text[tags[1].position :].startswith("after")
+
+    def test_no_tags_returns_empty(self):
+        text = "Plain text with no tags."
+        assert extract_image_tags_stripped(text) == []
+
+    def test_image_tag_after_voice_and_mood(self):
+        """Position adjusts for all preceding stripped tags."""
+        text = "**voice:narrator** **mood:dry** Hello **image:lighthouse** world"
+        tags = extract_image_tags_stripped(text)
+        assert len(tags) == 1
+        assert tags[0].key == "lighthouse"
+        # Stripped text: "Hello world"
+        stripped_text = strip_narration_tags(text)
+        assert stripped_text == "Hello world"
+        assert stripped_text[tags[0].position :].startswith("world")
+
+    def test_multiple_image_tags_sequential_positions(self):
+        """Multiple image tags get correct sequential positions."""
+        text = "**image:a** middle **image:b**"
+        tags = extract_image_tags_stripped(text)
+        assert len(tags) == 2
+        # Stripped text: "middle " (trailing space from between tags)
+        stripped_text = strip_narration_tags(text)
+        assert stripped_text == "middle "
+        # First image tag at position 0 (start of stripped text)
+        assert tags[0].position == 0
+        # Second image tag at position 7 ("middle " = 7 chars)
+        assert tags[1].position == 7

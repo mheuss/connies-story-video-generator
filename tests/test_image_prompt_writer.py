@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from story_video.models import AppConfig, AssetType, InputMode, SceneStatus
+from story_video.models import AppConfig, AssetType, InputMode, SceneImagePrompt, SceneStatus
 from story_video.pipeline.image_prompt_writer import (
     IMAGE_PROMPT_SCHEMA,
     IMAGE_PROMPT_SYSTEM,
@@ -70,12 +70,19 @@ class TestGenerateImagePromptsHappyPath:
     """generate_image_prompts() correctly sets image prompts on scenes."""
 
     def test_sets_prompts_and_marks_completed(self, state_with_scenes, mock_client):
-        """Scenes get image_prompt from Claude response and asset marked COMPLETED."""
+        """Scenes get image_prompts from Claude response and asset marked COMPLETED."""
         generate_image_prompts(state_with_scenes, mock_client)
 
         scenes = state_with_scenes.metadata.scenes
-        assert scenes[0].image_prompt == "A dark forest with towering pines under a stormy sky"
-        assert scenes[1].image_prompt == "A castle on a hill bathed in golden sunset light"
+        assert len(scenes[0].image_prompts) == 1
+        assert scenes[0].image_prompts[0].prompt == (
+            "A dark forest with towering pines under a stormy sky"
+        )
+        assert scenes[0].image_prompts[0].key is None
+        assert len(scenes[1].image_prompts) == 1
+        assert scenes[1].image_prompts[0].prompt == (
+            "A castle on a hill bathed in golden sunset light"
+        )
         for scene in scenes:
             assert scene.asset_status.image_prompt == SceneStatus.COMPLETED
 
@@ -94,10 +101,10 @@ class TestGenerateImagePromptsStateSaved:
 
         reloaded = ProjectState.load(state_with_scenes.project_dir)
         assert len(reloaded.metadata.scenes) == 2
-        assert reloaded.metadata.scenes[0].image_prompt == (
+        assert reloaded.metadata.scenes[0].image_prompts[0].prompt == (
             "A dark forest with towering pines under a stormy sky"
         )
-        assert reloaded.metadata.scenes[1].image_prompt == (
+        assert reloaded.metadata.scenes[1].image_prompts[0].prompt == (
             "A castle on a hill bathed in golden sunset light"
         )
 
@@ -175,8 +182,8 @@ class TestGenerateImagePromptsMissingScene:
 
         # Valid scenes still updated
         scenes = state_with_scenes.metadata.scenes
-        assert scenes[0].image_prompt == "A dark forest"
-        assert scenes[1].image_prompt == "A castle on a hill"
+        assert scenes[0].image_prompts[0].prompt == "A dark forest"
+        assert scenes[1].image_prompts[0].prompt == "A castle on a hill"
 
 
 # ---------------------------------------------------------------------------
@@ -200,11 +207,10 @@ class TestGenerateImagePromptsSceneMissingFromResponse:
 
         scenes = state_with_scenes.metadata.scenes
         # Scene 1 was processed before the error
-        assert scenes[0].image_prompt == "A dark forest"
+        assert scenes[0].image_prompts[0].prompt == "A dark forest"
         assert scenes[0].asset_status.image_prompt == SceneStatus.COMPLETED
 
         # Scene 2 missing from response — marked FAILED
-        assert scenes[1].image_prompt is None
         assert scenes[1].asset_status.image_prompt == SceneStatus.FAILED
 
 
@@ -299,3 +305,59 @@ class TestGenerateImagePromptsCharacterReference:
         user_msg = call_kwargs["user_message"]
         assert "Character Reference" not in user_msg
         assert "=== Scene 1:" in user_msg
+
+
+# ---------------------------------------------------------------------------
+# Tagged scenes (image tags from YAML)
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateImagePromptsWithImageTags:
+    """Scenes with image tags use YAML-defined prompts, skip Claude."""
+
+    def test_tagged_scene_uses_yaml_prompts(self, mock_client, state_with_scenes):
+        """Scene with image tags gets prompts preserved, not overwritten by Claude."""
+        state = state_with_scenes
+        scene1 = state.metadata.scenes[0]
+        # Scene 1 already has image tags set
+        scene1.image_prompts = [
+            SceneImagePrompt(key="lighthouse", prompt="A lighthouse at dawn", position=10),
+            SceneImagePrompt(key="harbor", prompt="Dark harbor at night", position=50),
+        ]
+        # Scene 2 has no tags — Claude generates for it
+        mock_client.generate_structured.return_value = {
+            "prompts": [{"scene_number": 2, "image_prompt": "A castle on a hill"}]
+        }
+
+        generate_image_prompts(state, mock_client)
+
+        # Scene 1: YAML prompts preserved
+        assert len(scene1.image_prompts) == 2
+        assert scene1.image_prompts[0].key == "lighthouse"
+        assert scene1.image_prompts[1].key == "harbor"
+        # Scene 2: Claude-generated
+        scene2 = state.metadata.scenes[1]
+        assert len(scene2.image_prompts) == 1
+        assert scene2.image_prompts[0].key is None
+        assert scene2.image_prompts[0].prompt == "A castle on a hill"
+
+    def test_all_tagged_skips_claude_call(self, mock_client, state_with_scenes):
+        """When all scenes have image tags, Claude is not called."""
+        state = state_with_scenes
+        for scene in state.metadata.scenes:
+            scene.image_prompts = [SceneImagePrompt(key="img", prompt="A prompt", position=0)]
+
+        generate_image_prompts(state, mock_client)
+
+        mock_client.generate_structured.assert_not_called()
+
+    def test_tagged_scene_marked_completed(self, mock_client, state_with_scenes):
+        """Tagged scenes have their IMAGE_PROMPT asset marked completed."""
+        state = state_with_scenes
+        for scene in state.metadata.scenes:
+            scene.image_prompts = [SceneImagePrompt(key="img", prompt="A prompt", position=0)]
+
+        generate_image_prompts(state, mock_client)
+
+        for scene in state.metadata.scenes:
+            assert scene.asset_status.image_prompt == SceneStatus.COMPLETED

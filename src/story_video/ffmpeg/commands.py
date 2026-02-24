@@ -77,7 +77,8 @@ def run_ffmpeg(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedPro
 
 
 def build_segment_command(
-    image_path: Path,
+    image_paths: list[Path],
+    image_timings: list[tuple[float, float]],
     audio_path: Path,
     ass_path: Path,
     output_path: Path,
@@ -85,16 +86,23 @@ def build_segment_command(
 ) -> list[str]:
     """Build an FFmpeg command for rendering a single scene segment.
 
-    Produces a single-pass filtergraph that combines:
+    For a single image, produces a single-pass filtergraph that combines:
     - Blurred background layer from the scene image
     - Still image scaled and centered on the background
     - Subtitle burn-in from an ASS file
+    Audio is muxed directly. The ``-shortest`` flag ensures the segment
+    length matches the audio duration.
 
-    Audio is muxed directly from the audio file. The ``-shortest`` flag
-    ensures the segment length matches the audio duration.
+    For multiple images, produces a filtergraph that:
+    - Creates a blur+foreground composite for each image
+    - Chains composites with xfade crossfade transitions
+    - Burns subtitles on the final composited stream
+    Each image input is looped and trimmed to its display duration.
+    No ``-shortest`` flag; durations are pre-calculated.
 
     Args:
-        image_path: Path to the scene image file.
+        image_paths: Ordered list of image file paths (at least one).
+        image_timings: List of ``(start_time, end_time)`` tuples, one per image.
         audio_path: Path to the scene audio file.
         ass_path: Path to the ASS subtitle file.
         output_path: Path for the output segment video.
@@ -102,7 +110,21 @@ def build_segment_command(
 
     Returns:
         FFmpeg command as a list of strings.
+
+    Raises:
+        ValueError: If image_paths is empty or if image_paths and
+            image_timings have different lengths.
     """
+    if not image_paths:
+        msg = "image_paths must contain at least one image"
+        raise ValueError(msg)
+    if len(image_paths) != len(image_timings):
+        msg = (
+            f"image_paths ({len(image_paths)}) and "
+            f"image_timings ({len(image_timings)}) must have the same length"
+        )
+        raise ValueError(msg)
+
     bg_filter = blur_background_filter(
         blur_radius=video_config.background_blur_radius,
         resolution=video_config.resolution,
@@ -110,6 +132,39 @@ def build_segment_command(
     sub_filter = subtitle_filter(ass_path)
     fg_filter = still_image_filter(video_config.resolution)
 
+    if len(image_paths) == 1:
+        return _build_single_image_command(
+            image_path=image_paths[0],
+            audio_path=audio_path,
+            output_path=output_path,
+            video_config=video_config,
+            bg_filter=bg_filter,
+            fg_filter=fg_filter,
+            sub_filter=sub_filter,
+        )
+
+    return _build_multi_image_command(
+        image_paths=image_paths,
+        image_timings=image_timings,
+        audio_path=audio_path,
+        output_path=output_path,
+        video_config=video_config,
+        bg_filter=bg_filter,
+        fg_filter=fg_filter,
+        sub_filter=sub_filter,
+    )
+
+
+def _build_single_image_command(
+    image_path: Path,
+    audio_path: Path,
+    output_path: Path,
+    video_config: VideoConfig,
+    bg_filter: str,
+    fg_filter: str,
+    sub_filter: str,
+) -> list[str]:
+    """Build segment command for a single image (original behavior)."""
     # FFmpeg auto-splits [0:v] into two branches: one for the blurred background
     # (scale-to-cover + crop + blur) and one for the sharp foreground (scale-to-fit).
     # The two branches are overlaid, then subtitles are burned in.
@@ -144,6 +199,89 @@ def build_segment_command(
         "-pix_fmt",
         "yuv420p",
         "-shortest",
+        str(output_path),
+    ]
+
+
+def _build_multi_image_command(
+    image_paths: list[Path],
+    image_timings: list[tuple[float, float]],
+    audio_path: Path,
+    output_path: Path,
+    video_config: VideoConfig,
+    bg_filter: str,
+    fg_filter: str,
+    sub_filter: str,
+) -> list[str]:
+    """Build segment command for multiple images with xfade transitions."""
+    n = len(image_paths)
+    transition_dur = video_config.transition_duration
+
+    # Build input arguments: each image looped and trimmed to its duration
+    inputs: list[str] = []
+    durations: list[float] = []
+    for img_path, (start, end) in zip(image_paths, image_timings):
+        dur = max(0.0, end - start)
+        durations.append(dur)
+        inputs.extend(["-loop", "1", "-t", str(dur), "-i", str(img_path)])
+
+    # Audio is the last input (index N)
+    audio_index = n
+    inputs.extend(["-i", str(audio_path)])
+
+    # Build per-image blur+foreground composites
+    filter_parts: list[str] = []
+    for i in range(n):
+        filter_parts.append(f"[{i}:v]{bg_filter}[bg{i}]")
+        filter_parts.append(f"[{i}:v]{fg_filter}[fg{i}]")
+        filter_parts.append(f"[bg{i}][fg{i}]overlay=(W-w)/2:(H-h)/2[comp{i}]")
+
+    # Chain composites with xfade transitions
+    prev_label = "[comp0]"
+    for i in range(n - 1):
+        offset = max(0.0, durations[i] - transition_dur)
+        if i > 0:
+            # After first xfade, offset is relative to accumulated timeline.
+            # The accumulated output duration after xfade i-1 is:
+            # sum(durations[0..i]) - i * transition_dur
+            # The next xfade offset is that minus transition_dur from the
+            # start of the next image, which is:
+            # sum(durations[0..i]) - i * transition_dur - transition_dur
+            # = sum(durations[0..i]) - (i+1) * transition_dur
+            cumulative = sum(durations[: i + 1])
+            offset = max(0.0, cumulative - (i + 1) * transition_dur)
+
+        out_label = f"[xf{i}]"
+        filter_parts.append(
+            f"{prev_label}[comp{i + 1}]"
+            f"xfade=transition=fade:duration={transition_dur}:offset={offset}"
+            f"{out_label}"
+        )
+        prev_label = out_label
+
+    # Burn subtitles on the final composited stream
+    filter_parts.append(f"{prev_label}{sub_filter}[out]")
+
+    filtergraph = ";".join(filter_parts)
+
+    return [
+        "ffmpeg",
+        "-y",
+        *inputs,
+        "-filter_complex",
+        filtergraph,
+        "-map",
+        "[out]",
+        "-map",
+        f"{audio_index}:a",
+        "-c:v",
+        video_config.codec,
+        "-crf",
+        str(video_config.crf),
+        "-r",
+        str(video_config.fps),
+        "-pix_fmt",
+        "yuv420p",
         str(output_path),
     ]
 

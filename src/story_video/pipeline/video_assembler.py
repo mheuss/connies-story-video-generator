@@ -19,6 +19,7 @@ from story_video.ffmpeg.commands import (
 )
 from story_video.ffmpeg.subtitles import generate_ass_content
 from story_video.models import AssetType, CaptionResult, Scene, SceneStatus
+from story_video.pipeline.image_timing import compute_image_timings, validate_image_timings
 from story_video.state import ProjectState
 
 __all__ = [
@@ -32,11 +33,9 @@ logger = logging.getLogger(__name__)
 def assemble_scene(scene: Scene, state: ProjectState) -> None:
     """Render a single scene into a video segment.
 
-    Validates that all prerequisite files exist (audio, image, caption JSON),
-    generates ASS subtitles, and calls FFmpeg to produce a video segment
-    combining the image, audio, and burned-in subtitles.
-
-    Transitions the video_segment asset through IN_PROGRESS to COMPLETED.
+    For single-image scenes, produces the same output as before.
+    For multi-image scenes (from inline image tags), computes caption-aligned
+    image timings and builds a crossfade filter graph.
 
     Args:
         scene: The scene to render.
@@ -45,6 +44,7 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     Raises:
         FileNotFoundError: If audio, image, or caption JSON file is missing.
         FFmpegError: If FFmpeg exits with a non-zero return code.
+        ValueError: If image timings fail validation (display too short).
     """
     config = state.metadata.config
     tts_config = config.tts
@@ -55,16 +55,22 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     # Resolve prerequisite file paths
     ext = tts_config.file_extension
     audio_path = state.project_dir / "audio" / f"scene_{nn}.{ext}"
-    image_path = state.project_dir / "images" / f"scene_{nn}.png"
     caption_json_path = state.project_dir / "captions" / f"scene_{nn}.json"
+
+    # Resolve image paths — one per image prompt (or one default)
+    num_images = max(1, len(scene.image_prompts))
+    image_paths = [
+        state.project_dir / "images" / f"scene_{nn}_{i:03d}.png" for i in range(num_images)
+    ]
 
     # Validate prerequisites
     if not audio_path.exists():
         msg = f"Audio file not found: {audio_path}"
         raise FileNotFoundError(msg)
-    if not image_path.exists():
-        msg = f"Image file not found: {image_path}"
-        raise FileNotFoundError(msg)
+    for img_path in image_paths:
+        if not img_path.exists():
+            msg = f"Image file not found: {img_path}"
+            raise FileNotFoundError(msg)
     if not caption_json_path.exists():
         msg = f"Caption JSON file not found: {caption_json_path}"
         raise FileNotFoundError(msg)
@@ -72,6 +78,20 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     # Load caption data
     caption_json = caption_json_path.read_text(encoding="utf-8")
     caption_result = CaptionResult.model_validate_json(caption_json)
+
+    # Compute image timings
+    if len(image_paths) > 1:
+        timings = compute_image_timings(scene.image_prompts, caption_result)
+        validate_image_timings(
+            timings,
+            min_display=4.0,
+            crossfade_duration=video_config.transition_duration,
+        )
+        image_timings = [(t.start, t.end) for t in timings]
+    else:
+        # Sentinel value — _build_single_image_command ignores timings entirely
+        # and relies on -shortest to match video length to audio duration.
+        image_timings = [(0.0, 0.0)]
 
     # Generate ASS subtitle content and write to file
     ass_content = generate_ass_content(caption_result, subtitle_config, video_config)
@@ -85,12 +105,14 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     # Build and run FFmpeg segment command
     output_path = segments_dir / f"scene_{nn}.mp4"
     cmd = build_segment_command(
-        image_path=image_path,
+        image_paths=image_paths,
+        image_timings=image_timings,
         audio_path=audio_path,
         ass_path=ass_path,
         output_path=output_path,
         video_config=video_config,
     )
+
     state.update_scene_asset(scene.scene_number, AssetType.VIDEO_SEGMENT, SceneStatus.IN_PROGRESS)
     state.save()
 

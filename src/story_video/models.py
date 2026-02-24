@@ -29,6 +29,7 @@ __all__ = [
     "CaptionWord",
     "HEX_COLOR_RE",
     "ImageConfig",
+    "ImageTag",
     "InputMode",
     "KNOWN_TTS_PROVIDERS",
     "NarrationSegment",
@@ -39,6 +40,7 @@ __all__ = [
     "RESOLUTION_RE",
     "Scene",
     "SceneAssetStatus",
+    "SceneImagePrompt",
     "SceneStatus",
     "StoryConfig",
     "StoryHeader",
@@ -276,12 +278,14 @@ class StoryHeader(BaseModel):
     Fields:
         voices: Mapping from character labels to provider-specific voice IDs.
         default_voice: Label used for text without an explicit voice tag.
+        images: Mapping from image tag keys to image prompt strings.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True)
 
     voices: dict[str, str] = Field(min_length=1)
     default_voice: str = Field(default="narrator")
+    images: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_default_voice_in_voices(self) -> "StoryHeader":
@@ -292,6 +296,15 @@ class StoryHeader(BaseModel):
                 f"Defined voices: {', '.join(sorted(self.voices.keys()))}"
             )
             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_image_prompts_non_empty(self) -> "StoryHeader":
+        """Ensure no image prompt is empty or whitespace-only."""
+        for key, prompt in self.images.items():
+            if not prompt.strip():
+                msg = f"Image prompt for '{key}' is empty or whitespace-only."
+                raise ValueError(msg)
         return self
 
 
@@ -317,6 +330,36 @@ class NarrationSegment(BaseModel):
     pause_duration: float | None = Field(default=None, gt=0)
     scene_number: int = Field(ge=1)
     segment_index: int = Field(ge=0)
+
+
+class ImageTag(BaseModel):
+    """An inline image tag parsed from story text.
+
+    Fields:
+        key: Tag key referencing an entry in the YAML images map.
+        position: Character offset in the original scene text.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    key: str = Field(min_length=1)
+    position: int = Field(ge=0)
+
+
+class SceneImagePrompt(BaseModel):
+    """An image prompt for a scene, either YAML-defined or auto-generated.
+
+    Fields:
+        key: Tag key from YAML header, or None for auto-generated prompts.
+        prompt: The full image prompt text.
+        position: Character offset in the original scene text (for ordering).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    key: str | None
+    prompt: str = Field(min_length=1)
+    position: int = Field(ge=0, default=0)
 
 
 class ImageConfig(BaseModel):
@@ -573,7 +616,7 @@ class Scene(BaseModel):
     """Content and metadata for a single story scene.
 
     Represents one scene in a story, containing the prose text,
-    optional TTS-optimized narration, image prompt, and per-asset
+    optional TTS-optimized narration, image prompts, and per-asset
     production status.
 
     Fields:
@@ -582,8 +625,9 @@ class Scene(BaseModel):
         prose: The actual story text for this scene.
         summary: Brief summary for running context across scenes (set during prose generation).
         narration_text: TTS-optimized version of the prose (set during narration prep).
-        image_prompt: Image generation prompt for scene illustration
-            (set during image prompt generation).
+        image_prompts: Image generation prompts for scene illustrations
+            (set during image prompt generation). Each entry is a
+            SceneImagePrompt with optional tag key and position.
         asset_status: Per-asset production status tracking.
     """
 
@@ -594,7 +638,7 @@ class Scene(BaseModel):
     prose: str = Field(min_length=1)
     summary: str | None = Field(default=None)
     narration_text: str | None = Field(default=None)
-    image_prompt: str | None = Field(default=None)
+    image_prompts: list[SceneImagePrompt] = Field(default_factory=list)
     asset_status: SceneAssetStatus = Field(default_factory=SceneAssetStatus)
 
 

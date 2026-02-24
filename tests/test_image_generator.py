@@ -9,7 +9,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from story_video.models import AppConfig, AssetType, ImageConfig, InputMode, SceneStatus
+from story_video.models import (
+    AppConfig,
+    AssetType,
+    ImageConfig,
+    InputMode,
+    SceneImagePrompt,
+    SceneStatus,
+)
 from story_video.pipeline.image_generator import (
     ImageProvider,
     OpenAIImageProvider,
@@ -63,7 +70,9 @@ def project_state(tmp_path):
     )
     state = ProjectState.create("test-project", InputMode.ADAPT, config, tmp_path)
     state.add_scene(scene_number=1, title="Test Scene", prose="Story text.")
-    state.metadata.scenes[0].image_prompt = "A dark forest at night"
+    state.metadata.scenes[0].image_prompts = [
+        SceneImagePrompt(key=None, prompt="A dark forest at night", position=0)
+    ]
     state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
     state.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
     state.save()
@@ -272,7 +281,7 @@ class TestGenerateImageHappyPath:
         generate_image(scene, project_state, fake_provider)
 
         # File written with correct bytes
-        image_path = project_state.project_dir / "images" / "scene_001.png"
+        image_path = project_state.project_dir / "images" / "scene_001_000.png"
         assert image_path.exists()
         assert image_path.read_bytes() == FAKE_PNG
 
@@ -296,19 +305,70 @@ class TestGenerateImageHappyPath:
 
 
 # ---------------------------------------------------------------------------
-# generate_image — ValueError when no image_prompt
+# generate_image — multi-image scene creates indexed files
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateImageMultiImage:
+    """generate_image() creates indexed files for scenes with multiple prompts."""
+
+    def test_creates_all_indexed_files(self, tmp_path, fake_provider):
+        """Three prompts produce scene_001_000.png, scene_001_001.png, scene_001_002.png."""
+        config = AppConfig(
+            images=ImageConfig(style_prefix="Art:", size="1536x1024", quality="medium")
+        )
+        state = ProjectState.create("multi-img", InputMode.ADAPT, config, tmp_path)
+        state.add_scene(1, "Multi Image Scene", "Story text.")
+        state.metadata.scenes[0].image_prompts = [
+            SceneImagePrompt(key="a", prompt="A lighthouse", position=0),
+            SceneImagePrompt(key="b", prompt="A harbor", position=20),
+            SceneImagePrompt(key="c", prompt="A sunset", position=40),
+        ]
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
+
+        scene = state.metadata.scenes[0]
+        generate_image(scene, state, fake_provider)
+
+        images_dir = state.project_dir / "images"
+        assert (images_dir / "scene_001_000.png").exists()
+        assert (images_dir / "scene_001_001.png").exists()
+        assert (images_dir / "scene_001_002.png").exists()
+
+    def test_calls_provider_once_per_prompt(self, tmp_path, fake_provider):
+        """Provider.generate() is called once for each image prompt."""
+        config = AppConfig(
+            images=ImageConfig(style_prefix="Art:", size="1536x1024", quality="medium")
+        )
+        state = ProjectState.create("multi-img-2", InputMode.ADAPT, config, tmp_path)
+        state.add_scene(1, "Multi Image Scene", "Story text.")
+        state.metadata.scenes[0].image_prompts = [
+            SceneImagePrompt(key="a", prompt="A lighthouse", position=0),
+            SceneImagePrompt(key="b", prompt="A harbor", position=20),
+        ]
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+        state.update_scene_asset(1, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
+
+        scene = state.metadata.scenes[0]
+        generate_image(scene, state, fake_provider)
+
+        assert fake_provider.generate.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# generate_image — ValueError when no image_prompts
 # ---------------------------------------------------------------------------
 
 
 class TestGenerateImageNoImagePromptRaises:
-    """generate_image() raises ValueError when scene has no image prompt."""
+    """generate_image() raises ValueError when scene has no image prompts."""
 
-    def test_generate_image_no_image_prompt_raises(self, project_state, fake_provider):
-        """ValueError raised when image_prompt is None."""
+    def test_generate_image_no_image_prompts_raises(self, project_state, fake_provider):
+        """ValueError raised when image_prompts is empty."""
         scene = project_state.metadata.scenes[0]
-        scene.image_prompt = None
+        scene.image_prompts = []
 
-        with pytest.raises(ValueError, match="Scene 1 has no image prompt"):
+        with pytest.raises(ValueError, match="Scene 1 has no image prompts"):
             generate_image(scene, project_state, fake_provider)
 
 
@@ -321,7 +381,7 @@ class TestGenerateImageMultiDigitSceneNumber:
     """generate_image() zero-pads scene numbers in filenames."""
 
     def test_generate_image_zero_pads_scene_number(self, tmp_path, fake_provider):
-        """Scene 12 produces scene_012.png."""
+        """Scene 12 produces scene_012_000.png."""
         config = AppConfig(
             images=ImageConfig(
                 style_prefix="Art:",
@@ -331,12 +391,14 @@ class TestGenerateImageMultiDigitSceneNumber:
         )
         state = ProjectState.create("multi-digit-test", InputMode.ADAPT, config, tmp_path)
         state.add_scene(12, "Scene Twelve", "The twelfth scene of the story.")
-        state.metadata.scenes[0].image_prompt = "A mountain landscape"
+        state.metadata.scenes[0].image_prompts = [
+            SceneImagePrompt(key=None, prompt="A mountain landscape", position=0)
+        ]
         state.update_scene_asset(12, AssetType.TEXT, SceneStatus.COMPLETED)
         state.update_scene_asset(12, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
 
         scene = state.metadata.scenes[0]
         generate_image(scene, state, fake_provider)
 
-        image_path = state.project_dir / "images" / "scene_012.png"
+        image_path = state.project_dir / "images" / "scene_012_000.png"
         assert image_path.exists()

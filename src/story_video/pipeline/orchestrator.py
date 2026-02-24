@@ -24,6 +24,7 @@ from story_video.models import (
     PhaseStatus,
     PipelinePhase,
     Scene,
+    SceneImagePrompt,
     SceneStatus,
     StoryHeader,
 )
@@ -44,7 +45,12 @@ from story_video.pipeline.story_writer import (
 from story_video.pipeline.tts_generator import TTSProvider, generate_audio
 from story_video.pipeline.video_assembler import assemble_scene, assemble_video
 from story_video.state import ProjectState
-from story_video.utils.narration_tags import parse_story_header
+from story_video.utils.narration_tags import (
+    extract_image_tags_stripped,
+    parse_story_header,
+    strip_image_tags,
+    validate_image_tags,
+)
 
 __all__ = ["run_pipeline"]
 
@@ -238,7 +244,7 @@ def _dispatch_phase(
         PipelinePhase.CRITIQUE_REVISION: critique_and_revise,
         PipelinePhase.SCENE_SPLITTING: split_scenes,
         PipelinePhase.NARRATION_FLAGGING: flag_narration,
-        PipelinePhase.IMAGE_PROMPTS: generate_image_prompts,
+        # IMAGE_PROMPTS handled explicitly below (needs image tag extraction first)
         PipelinePhase.NARRATION_PREP: _run_narration_prep,
     }
 
@@ -247,6 +253,13 @@ def _dispatch_phase(
             msg = f"claude_client is required for {phase.name} phase"
             raise ValueError(msg)
         claude_handlers[phase](state, claude_client)
+
+    elif phase == PipelinePhase.IMAGE_PROMPTS:
+        if claude_client is None:
+            msg = "claude_client is required for IMAGE_PROMPTS phase"
+            raise ValueError(msg)
+        _populate_image_tags(state, story_header)
+        generate_image_prompts(state, claude_client)
 
     elif phase == PipelinePhase.TTS_GENERATION:
         if tts_provider is None:
@@ -277,6 +290,51 @@ def _dispatch_phase(
     else:
         msg = f"Unknown phase: {phase}"
         raise ValueError(msg)
+
+
+def _populate_image_tags(state: ProjectState, story_header: StoryHeader | None) -> None:
+    """Extract image tags from scene prose and populate image_prompts from YAML header.
+
+    For each scene, if the prose contains **image:key** tags:
+    1. Extract tags with character offsets
+    2. Validate all keys exist in the story header's images map
+    3. Set scene.image_prompts from the YAML-defined prompts
+
+    Scenes without image tags are left unchanged (image_prompts stays empty).
+
+    Args:
+        state: Project state with populated scenes.
+        story_header: Parsed story header with images map, or None.
+    """
+    images = story_header.images if story_header else {}
+
+    for scene in state.metadata.scenes:
+        # Skip scenes that already have prompts (e.g., from a previous run)
+        if scene.image_prompts:
+            continue
+
+        tags = extract_image_tags_stripped(scene.prose)
+        if not tags:
+            continue
+
+        if not images:
+            msg = (
+                f"Scene {scene.scene_number} has image tags but no images "
+                "defined in the YAML header."
+            )
+            raise ValueError(msg)
+
+        validate_image_tags(tags, images)
+
+        scene.image_prompts = [
+            SceneImagePrompt(key=tag.key, prompt=images[tag.key], position=tag.position)
+            for tag in tags
+        ]
+
+        # Strip image tags from narration text so TTS doesn't speak them.
+        # Also ensures narration_prep doesn't pass image tags to Claude.
+        text_to_strip = scene.narration_text if scene.narration_text is not None else scene.prose
+        scene.narration_text = strip_image_tags(text_to_strip)
 
 
 def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> None:

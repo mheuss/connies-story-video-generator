@@ -17,6 +17,7 @@ from story_video.models import (
     CaptionSegment,
     CaptionWord,
     InputMode,
+    SceneImagePrompt,
     SceneStatus,
     TTSConfig,
 )
@@ -39,6 +40,26 @@ def _make_caption_json():
     return result.model_dump_json(indent=2)
 
 
+def _make_multi_image_caption_json():
+    """Return caption JSON with enough words and duration for two images.
+
+    Creates 14 seconds of captions with 14 words, each 1 second long.
+    The second image tag at position=42 maps to word6 (char offset 42),
+    giving a 7s/7s split — both above the 5.5s minimum (4.0 + 1.5).
+    """
+    words = []
+    for i in range(14):
+        words.append(CaptionWord(word=f"word{i:02d}", start=float(i), end=float(i + 1)))
+    text = " ".join(w.word for w in words)
+    result = CaptionResult(
+        segments=[CaptionSegment(text=text, start=0.0, end=14.0)],
+        words=words,
+        language="en",
+        duration=14.0,
+    )
+    return result.model_dump_json(indent=2)
+
+
 def _setup_scene_prerequisites(state, scene_number=1):
     """Create all prerequisite files for scene assembly."""
     tts_config = state.metadata.config.tts
@@ -48,7 +69,7 @@ def _setup_scene_prerequisites(state, scene_number=1):
 
     images_dir = state.project_dir / "images"
     images_dir.mkdir(exist_ok=True)
-    (images_dir / f"scene_{scene_number:03d}.png").write_bytes(b"image")
+    (images_dir / f"scene_{scene_number:03d}_000.png").write_bytes(b"image")
 
     captions_dir = state.project_dir / "captions"
     captions_dir.mkdir(exist_ok=True)
@@ -132,7 +153,7 @@ class TestAssembleSceneValidation:
 
     def test_raises_when_image_missing(self, project_state):
         """FileNotFoundError raised when image file does not exist."""
-        image_path = project_state.project_dir / "images" / "scene_001.png"
+        image_path = project_state.project_dir / "images" / "scene_001_000.png"
         image_path.unlink()
 
         scene = project_state.metadata.scenes[0]
@@ -296,7 +317,6 @@ class TestAssembleVideoEmptySegments:
             assemble_video(project_state)
 
 
-# ---------------------------------------------------------------------------
 # TestAssembleVideoFFmpegError — FFmpegError propagation from concat step
 # ---------------------------------------------------------------------------
 
@@ -321,3 +341,67 @@ class TestAssembleVideoFFmpegError:
 
         with pytest.raises(FFmpegError):
             assemble_video(project_state)
+
+
+# ---------------------------------------------------------------------------
+# TestAssembleSceneMultiImage — multi-image scene assembly
+# ---------------------------------------------------------------------------
+
+
+class TestAssembleSceneMultiImage:
+    """assemble_scene handles scenes with multiple images."""
+
+    @patch("story_video.pipeline.video_assembler.run_ffmpeg")
+    def test_multi_image_scene_passes_all_paths(self, mock_run, project_state):
+        """Scene with 2 image prompts passes both image paths to FFmpeg."""
+        state = project_state
+        scene = state.metadata.scenes[0]
+        scene.image_prompts = [
+            SceneImagePrompt(key="lighthouse", prompt="A lighthouse", position=0),
+            SceneImagePrompt(key="harbor", prompt="A harbor", position=42),
+        ]
+        nn = f"{scene.scene_number:03d}"
+
+        # Write multi-image caption JSON (needs enough duration for two images)
+        caption_path = state.project_dir / "captions" / f"scene_{nn}.json"
+        caption_path.write_text(_make_multi_image_caption_json(), encoding="utf-8")
+
+        # Create second image file (first is created by _setup_scene_prerequisites)
+        (state.project_dir / "images" / f"scene_{nn}_001.png").write_bytes(b"fake")
+
+        assemble_scene(scene, state)
+
+        assert scene.asset_status.video_segment == SceneStatus.COMPLETED
+        # Verify FFmpeg was called with multi-image command
+        cmd = mock_run.call_args[0][0]
+        cmd_str = " ".join(str(c) for c in cmd)
+        assert "scene_001_000.png" in cmd_str
+        assert "scene_001_001.png" in cmd_str
+
+    def test_multi_image_missing_second_file_raises(self, project_state):
+        """Missing image file for multi-image scene raises FileNotFoundError."""
+        state = project_state
+        scene = state.metadata.scenes[0]
+        scene.image_prompts = [
+            SceneImagePrompt(key="a", prompt="A", position=0),
+            SceneImagePrompt(key="b", prompt="B", position=50),
+        ]
+        # Only first image exists (_setup_scene_prerequisites creates _000.png)
+        # Second image (_001.png) is missing
+
+        with pytest.raises(FileNotFoundError, match="001.png"):
+            assemble_scene(scene, state)
+
+    @patch("story_video.pipeline.video_assembler.run_ffmpeg")
+    def test_single_image_scene_unchanged(self, mock_run, project_state):
+        """Scene with no image_prompts still works as single-image scene."""
+        state = project_state
+        scene = state.metadata.scenes[0]
+        # image_prompts defaults to empty list
+
+        assemble_scene(scene, state)
+
+        assert scene.asset_status.video_segment == SceneStatus.COMPLETED
+        cmd = mock_run.call_args[0][0]
+        cmd_str = " ".join(str(c) for c in cmd)
+        assert "scene_001_000.png" in cmd_str

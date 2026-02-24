@@ -17,16 +17,20 @@ import re
 import yaml
 from pydantic import ValidationError
 
-from story_video.models import NarrationSegment, StoryHeader
+from story_video.models import ImageTag, NarrationSegment, StoryHeader
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "extract_image_tags",
+    "extract_image_tags_stripped",
     "extract_tags",
     "has_narration_tags",
     "parse_narration_segments",
     "parse_story_header",
+    "strip_image_tags",
     "strip_narration_tags",
+    "validate_image_tags",
 ]
 
 _TAG_PATTERN = re.compile(r"\*\*(voice|mood|pause):([^*]+)\*\*")
@@ -49,14 +53,85 @@ def extract_tags(text: str) -> list[str]:
     return [m.group(0) for m in _TAG_PATTERN.finditer(text)]
 
 
-_STRIP_PATTERN = re.compile(r"\*\*(?:voice|mood|pause):[^*]+\*\*\s*")
+_IMAGE_TAG_PATTERN = re.compile(r"\*\*image:([^*]+)\*\*")
+
+
+def extract_image_tags(text: str) -> list[ImageTag]:
+    """Extract image tags from text with their character offsets.
+
+    Args:
+        text: Story text possibly containing **image:key** tags.
+
+    Returns:
+        List of ImageTag objects ordered by position.
+    """
+    return [
+        ImageTag(key=m.group(1).strip(), position=m.start())
+        for m in _IMAGE_TAG_PATTERN.finditer(text)
+    ]
+
+
+_IMAGE_STRIP_PATTERN = re.compile(r"\*\*image:[^*]+\*\*\s*")
+
+
+def strip_image_tags(text: str) -> str:
+    """Remove inline image tags (and trailing whitespace) from text.
+
+    Strips only ``**image:key**`` tags, leaving ``**voice:X**``,
+    ``**mood:X**``, and ``**pause:N**`` tags intact. Use this to clean
+    narration text before TTS so image tags are not spoken aloud.
+    """
+    return _IMAGE_STRIP_PATTERN.sub("", text)
+
+
+def extract_image_tags_stripped(text: str) -> list[ImageTag]:
+    """Extract image tags with positions relative to the all-tags-stripped text.
+
+    Positions are computed against the text after ALL tags (voice, mood,
+    pause, image) are stripped, matching the coordinate system of the Whisper
+    transcript.
+    """
+    all_stripped = list(_STRIP_PATTERN.finditer(text))
+    image_matches = list(_IMAGE_TAG_PATTERN.finditer(text))
+
+    result = []
+    for img in image_matches:
+        chars_removed = sum(len(m.group(0)) for m in all_stripped if m.start() < img.start())
+        stripped_pos = img.start() - chars_removed
+        result.append(ImageTag(key=img.group(1).strip(), position=stripped_pos))
+
+    return result
+
+
+def validate_image_tags(tags: list[ImageTag], images: dict[str, str]) -> None:
+    """Validate that all image tag keys exist in the images map.
+
+    Args:
+        tags: Image tags extracted from scene text.
+        images: YAML-defined image prompt map from story header.
+
+    Raises:
+        ValueError: If any tag references a key not in the images map.
+    """
+    defined_keys = set(images.keys())
+    for tag in tags:
+        if tag.key not in defined_keys:
+            msg = (
+                f"Image tag '**image:{tag.key}**' references undefined image. "
+                f"Defined images: {', '.join(sorted(defined_keys)) or '(none)'}"
+            )
+            raise ValueError(msg)
+
+
+_STRIP_PATTERN = re.compile(r"\*\*(?:voice|mood|pause|image):[^*]+\*\*\s*")
 
 
 def strip_narration_tags(text: str) -> str:
-    """Remove inline voice/mood/pause tags (and trailing whitespace) from text.
+    """Remove inline voice/mood/pause/image tags (and trailing whitespace) from text.
 
-    Tags like ``**voice:narrator**``, ``**mood:dry**``, and ``**pause:0.5**``
-    are metadata for the TTS pipeline and should be stripped before content analysis.
+    Tags like ``**voice:narrator**``, ``**mood:dry**``, ``**pause:0.5**``,
+    and ``**image:key**`` are metadata for the TTS and video pipelines and
+    should be stripped before content analysis.
     """
     return _STRIP_PATTERN.sub("", text)
 

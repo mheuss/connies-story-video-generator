@@ -18,6 +18,7 @@ from story_video.models import (
     CaptionSegment,
     CaptionWord,
     ImageConfig,
+    ImageTag,
     InputMode,
     NarrationSegment,
     PhaseStatus,
@@ -25,6 +26,7 @@ from story_video.models import (
     ProjectMetadata,
     Scene,
     SceneAssetStatus,
+    SceneImagePrompt,
     SceneStatus,
     StoryConfig,
     StoryHeader,
@@ -272,7 +274,13 @@ class TestScene:
             title="The Confrontation",
             prose="She stood her ground...",
             narration_text="She stood her ground.",
-            image_prompt="A woman standing firm in a dark alley, cinematic lighting",
+            image_prompts=[
+                SceneImagePrompt(
+                    key=None,
+                    prompt="A woman standing firm in a dark alley, cinematic lighting",
+                    position=0,
+                ),
+            ],
             asset_status=SceneAssetStatus(
                 text=SceneStatus.COMPLETED,
                 narration_text=SceneStatus.COMPLETED,
@@ -280,7 +288,7 @@ class TestScene:
         )
         assert scene.scene_number == 3
         assert scene.narration_text == "She stood her ground."
-        assert scene.image_prompt is not None
+        assert len(scene.image_prompts) == 1
         assert scene.asset_status.text == SceneStatus.COMPLETED
 
         # Summary defaults to None
@@ -502,6 +510,14 @@ class TestStoryHeader:
         with pytest.raises(ValidationError, match="default_voice"):
             StoryHeader(voices={"narrator": "nova"}, default_voice="nonexistent")
 
+    def test_allows_extra_fields(self):
+        """Extra YAML fields are silently ignored, not rejected."""
+        header = StoryHeader(
+            voices={"narrator": "nova"},
+            title="My Story",  # extra field not in schema
+        )
+        assert header.voices == {"narrator": "nova"}
+
 
 # ---------------------------------------------------------------------------
 # NarrationSegment tests
@@ -655,6 +671,11 @@ class TestSubtitleConfigColorValidation:
         config = SubtitleConfig(color="#FF0000")
         assert config.color == "#FF0000"
 
+    def test_accepts_valid_lowercase_hex(self):
+        """Lowercase hex passes."""
+        config = SubtitleConfig(color="#ff0000")
+        assert config.color == "#ff0000"
+
 
 # ---------------------------------------------------------------------------
 # Package version
@@ -670,3 +691,47 @@ class TestPackageVersion:
 
         assert isinstance(__version__, str)
         assert len(__version__) > 0
+
+
+# ---------------------------------------------------------------------------
+# ImageTag tests
+# ---------------------------------------------------------------------------
+
+
+class TestImageTag:
+    """ImageTag stores tag key and character offset."""
+
+    def test_construction(self):
+        tag = ImageTag(key="lighthouse", position=42)
+        assert tag.key == "lighthouse"
+        assert tag.position == 42
+
+    def test_position_must_be_non_negative(self):
+        with pytest.raises(ValidationError):
+            ImageTag(key="x", position=-1)
+
+
+# ---------------------------------------------------------------------------
+# SceneImagePrompt tests
+# ---------------------------------------------------------------------------
+
+
+class TestSceneImagePrompt:
+    """SceneImagePrompt stores key, prompt text, and position."""
+
+    def test_construction_with_key(self):
+        sip = SceneImagePrompt(
+            key="lighthouse", prompt="A weathered lighthouse at dawn", position=42
+        )
+        assert sip.key == "lighthouse"
+        assert sip.prompt == "A weathered lighthouse at dawn"
+        assert sip.position == 42
+
+    def test_construction_auto_generated(self):
+        sip = SceneImagePrompt(key=None, prompt="Auto-generated prompt", position=0)
+        assert sip.key is None
+        assert sip.position == 0
+
+    def test_prompt_must_be_non_empty(self):
+        with pytest.raises(ValidationError):
+            SceneImagePrompt(key=None, prompt="", position=0)

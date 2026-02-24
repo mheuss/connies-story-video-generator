@@ -94,44 +94,45 @@ class OpenAIImageProvider:
 
 
 def generate_image(scene: Scene, state: ProjectState, provider: ImageProvider) -> None:
-    """Generate an illustration for a single scene.
+    """Generate illustrations for a single scene.
 
-    Reads the scene's image prompt, prepends the configured style prefix,
-    calls the image provider, writes the PNG file, and updates project state.
+    For scenes with one prompt (auto-generated), produces scene_NNN_000.png.
+    For scenes with multiple prompts (from image tags), produces scene_NNN_000.png,
+    scene_NNN_001.png, etc.
 
     Args:
-        scene: The scene to generate an image for.
+        scene: The scene to generate images for.
         state: Project state for config access and persistence.
         provider: Image provider implementation.
 
     Raises:
-        ValueError: If the scene has no image prompt.
+        ValueError: If the scene has no image prompts.
     """
-    if scene.image_prompt is None:
-        msg = f"Scene {scene.scene_number} has no image prompt"
+    if not scene.image_prompts:
+        msg = f"Scene {scene.scene_number} has no image prompts"
         raise ValueError(msg)
 
     img_config = state.metadata.config.images
-    full_prompt = f"{img_config.style_prefix} {scene.image_prompt}".strip()
-
-    image_bytes = provider.generate(
-        full_prompt,
-        model=img_config.model,
-        size=img_config.size,
-        quality=img_config.quality,
-        style=img_config.style,
-    )
-
-    if not image_bytes:
-        msg = f"Scene {scene.scene_number}: image provider returned empty bytes"
-        raise ValueError(msg)
-
     images_dir = state.project_dir / "images"
     images_dir.mkdir(exist_ok=True)
-    filename = f"scene_{scene.scene_number:03d}.png"
-    image_path = images_dir / filename
-    image_path.write_bytes(image_bytes)
+    nn = f"{scene.scene_number:03d}"
 
     state.update_scene_asset(scene.scene_number, AssetType.IMAGE, SceneStatus.IN_PROGRESS)
+
+    for idx, sip in enumerate(scene.image_prompts):
+        full_prompt = f"{img_config.style_prefix} {sip.prompt}".strip()
+        image_bytes = provider.generate(
+            full_prompt,
+            model=img_config.model,
+            size=img_config.size,
+            quality=img_config.quality,
+            style=img_config.style,
+        )
+        if not image_bytes:
+            msg = f"Scene {scene.scene_number}, image {idx}: provider returned empty bytes"
+            raise ValueError(msg)
+        filename = f"scene_{nn}_{idx:03d}.png"
+        (images_dir / filename).write_bytes(image_bytes)
+
     state.update_scene_asset(scene.scene_number, AssetType.IMAGE, SceneStatus.COMPLETED)
     state.save()

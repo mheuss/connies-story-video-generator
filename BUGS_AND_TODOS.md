@@ -201,8 +201,7 @@ Acknowledged items not yet scheduled.
 
 - [x] [feature] LLM-based TTS text prep — replaced regex narration prep with Claude API calls for context-aware pronunciation preparation. Single `generate_structured()` call per scene handles abbreviations, numbers, punctuation, and unusual names. Produces JSON changelog. NARRATION_PREP is now a checkpoint phase. Old regex code deleted. (narration_prep.py, orchestrator.py)
 - [x] [feature] Implement inspired_by mode — analysis, bible, outline, prose, critique/revision (pipeline/story_writer.py, see docs/plans/2026-02-18-inspired-by-design.md)
-- [ ] [feature] Inline image tags — define image prompts in YAML header, reference with `**image:tag**` in story text. Decouples image transitions from scene boundaries, gives authors direct control over visuals. Requires video assembler refactor for multiple images per scene.
-
+- [x] [feature] Inline image tags — define image prompts in YAML header, reference with `**image:tag**` in story text. Decouples image transitions from scene boundaries, gives authors direct control over visuals. Requires video assembler refactor for multiple images per scene.
 - [ ] [feature] Background music / sound effects — overlay audio tracks at specified points in narration with volume and duration control. Music files supplied by user. FFmpeg amix filter for mixing. Most complex of the three inline tag features.
 
 - [ ] [feature] FFmpeg concat fallback for non-MP3/opus audio formats — when audio_transition_duration uses WAV, FLAC, or other formats that don't support raw byte concatenation, use `ffmpeg -f concat` to join segment audio files. Low priority: MP3 and opus (the only realistic TTS output formats) support byte concatenation natively.
@@ -296,6 +295,7 @@ Completed items awaiting migration to VERSION_HISTORY.md at next release.
 - [x] [chore] Add `--verbose` flag to CLI for logging configuration (PR-23)
 - [x] [test] Fill test gaps — preservation, narration tags, file extension, concat duration (PR-24)
 - [x] [test] Split multi-assertion tests into focused single-assertion tests (PR-25)
+- [x] [feature] Inline image tags — YAML header `images:` map defines image prompts, `**image:key**` tags in story text reference them. Tag parsing with character offsets, caption-aligned image timing, multi-image FFmpeg xfade filter graph, minimum display duration validation. Backward compatible — scenes without tags work identically to before. (models.py, narration_tags.py, image_timing.py, image_prompt_writer.py, image_generator.py, video_assembler.py, commands.py, orchestrator.py)
 
 ## Session Notes
 

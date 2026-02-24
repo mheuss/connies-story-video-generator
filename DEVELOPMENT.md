@@ -135,6 +135,24 @@ Significant technical decisions with context and rationale.
 
 ---
 
+### ADR-009: Inline Image Tags for Multi-Image Scenes
+
+**Status:** Accepted
+
+**Context:** Authors want to control when images change within a scene, independent of scene boundaries. A single image per scene is limiting for longer scenes or scenes that span multiple visual contexts.
+
+**Decision:** Authors define image prompts in a YAML front matter `images:` map and place `**image:tag**` tags inline in scene text. Tag parsing extracts character offsets. During caption generation, Whisper word-level timestamps map character positions to audio time. Each image gets a computed `(start, end)` timing based on where its tag appears in the narration. FFmpeg renders multi-image scenes with per-image blur+foreground composites chained through xfade crossfade transitions. A minimum display duration (4.0s + crossfade duration) is enforced at assembly time as a hard error.
+
+**Consequences:**
+- Authors control image transitions at any point in the narration, not just scene boundaries
+- Scenes without image tags work identically to before (backward compatible)
+- YAML-defined prompts skip Claude during IMAGE_PROMPTS phase (cost savings for tagged scenes)
+- Image timing depends on Whisper caption accuracy — poor transcription could misplace transitions
+- Minimum display duration validation prevents images from flashing too briefly
+- Multi-image filter graph adds FFmpeg complexity (N inputs, N-1 xfade chains)
+
+---
+
 ## Technical Notes
 
 ### Patterns
@@ -152,6 +170,7 @@ Significant technical decisions with context and rationale.
 - ElevenLabs does not support the `speed` parameter — a warning is logged if speed != 1.0
 - ElevenLabs mood mapping uses `_mood_to_elevenlabs_text()` which receives the raw mood keyword directly via the `mood` parameter and wraps it as a freeform audio tag (e.g., `[excited]`) prepended to text.
 - FFmpeg filter complexity grows with video effects — blur background + still image overlay + subtitle rendering requires careful filter graph construction
+- **Tag coordinate systems:** Inline tags (`**image:X**`, `**voice:X**`, `**mood:X**`) exist in raw prose but are stripped before TTS. Any feature that maps tag positions to Whisper timestamps must compute positions in the *stripped-text* coordinate system, not raw prose. The pipeline strips tags at different stages (image tags in `_populate_image_tags`, voice/mood tags in `parse_narration_segments`), so positions must account for all preceding tag characters. See `extract_image_tags_stripped()` in `narration_tags.py`.
 
 ### External Integrations
 
