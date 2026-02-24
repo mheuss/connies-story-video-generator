@@ -17,7 +17,7 @@ Acknowledged items not yet scheduled.
 - [x] [docs] PR4-8 line reference points to wrong function (BUGS_AND_TODOS.md) (PR6-M5)
 - [x] [test] `test_narration_prep.py` tests private symbols directly — removed TestPromptConstants, documented remaining deviations (PR6-M6)
 - [x] [test] `test_caption_generator.py` tests private helpers directly — documented deviations (PR6-M7)
-- [ ] [low] 38 low-severity findings from PR6 review — documentation improvements, defensive guards, unused exports, minor test gaps. Deferred as non-blocking.
+- [x] [low] 38 low-severity findings from PR6 review — documentation improvements, defensive guards, unused exports, minor test gaps. Superseded; will be covered by next whole-codebase review.
 
 ### Fifth-Pass Review (PR5) — 2026-02-20
 
