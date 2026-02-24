@@ -1440,6 +1440,246 @@ class TestPipelineIntegration:
         assert reloaded.metadata.status == PhaseStatus.COMPLETED
         assert len(reloaded.metadata.scenes) == 2
 
+    def test_adapt_pipeline_with_inline_image_tags(self, tmp_path, monkeypatch):
+        """Adapt pipeline with YAML-defined image tags flows through full pipeline.
+
+        Verifies end-to-end: YAML header parsing -> tag extraction ->
+        narration text stripping -> multi-image generation (indexed files) ->
+        caption-aligned timing -> multi-image FFmpeg command -> final assembly.
+        """
+        import subprocess as _subprocess
+
+        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
+
+        # --- Source story with YAML header and image tags ---
+        # Scene 1 has two image tags; scene 2 has one (will get Claude-generated prompt).
+        source_text = (
+            "---\n"
+            "voices:\n"
+            "  narrator: nova\n"
+            "images:\n"
+            "  lighthouse: A weathered stone lighthouse on a rocky cliff\n"
+            "  harbor: A small fishing harbor with colorful boats at dawn\n"
+            "---\n"
+            "**voice:narrator** The lighthouse keeper watched the storm "
+            "approach. **image:lighthouse** Dark clouds gathered on the "
+            "horizon, and the waves grew tall.\n"
+            "\n"
+            "By morning the storm had passed. The keeper climbed the "
+            "tower and lit the lamp. **image:harbor** The harbor below "
+            "came alive with fishing boats."
+        )
+
+        # Expected scene texts after split (Claude returns these)
+        scene1_text = (
+            "**voice:narrator** The lighthouse keeper watched the storm "
+            "approach. **image:lighthouse** Dark clouds gathered on the "
+            "horizon, and the waves grew tall."
+        )
+        scene2_text = (
+            "By morning the storm had passed. The keeper climbed the "
+            "tower and lit the lamp. **image:harbor** The harbor below "
+            "came alive with fishing boats."
+        )
+
+        # --- Mock Claude client ---
+        claude_responses = {
+            "analyze_source": {
+                "craft_notes": {
+                    "sentence_structure": "Simple declarative.",
+                    "vocabulary": "Concrete and nautical.",
+                    "tone": "Quiet, observational.",
+                    "pacing": "Measured.",
+                    "narrative_voice": "Third person limited.",
+                },
+                "thematic_brief": {
+                    "themes": ["isolation", "duty"],
+                    "emotional_arc": "Tension to relief",
+                    "central_tension": "Nature vs. responsibility",
+                    "mood": "Atmospheric",
+                },
+                "source_stats": {
+                    "word_count": 50,
+                    "scene_count_estimate": 2,
+                },
+                "characters": [
+                    {
+                        "name": "The Keeper",
+                        "visual_description": "A weathered man in navy peacoat.",
+                    },
+                ],
+            },
+            "split_into_scenes": {
+                "scenes": [
+                    {"title": "The Storm", "text": scene1_text},
+                    {"title": "The Dawn", "text": scene2_text},
+                ],
+            },
+            "flag_narration_issues": {"flags": []},
+            # Claude only generates prompts for untagged scenes — scene 2 has
+            # one image tag, so it's tagged. Scene 1 also has a tag.
+            # But generate_image_prompts sends untagged scenes to Claude.
+            # Both scenes have tags, so Claude should NOT be called for prompts.
+            "generate_image_prompts": {
+                "prompts": [],
+            },
+        }
+
+        def _claude_dispatch(**kwargs):
+            tool_name = kwargs.get("tool_name", "")
+            if tool_name == "tts_text_prep":
+                user_msg = kwargs.get("user_message", "")
+                lines = user_msg.split("\n")
+                text_start = None
+                for i, line in enumerate(lines):
+                    if line.startswith("Narration text to prepare for TTS:"):
+                        text_start = i + 2
+                        break
+                narration_text = "\n".join(lines[text_start:]) if text_start else ""
+                return {
+                    "modified_text": narration_text,
+                    "changes": [],
+                    "pronunciation_guide_additions": [],
+                }
+            return claude_responses[tool_name]
+
+        mock_claude = MagicMock()
+        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+
+        # --- Mock TTS provider ---
+        mock_tts = MagicMock()
+        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
+
+        # --- Mock image provider ---
+        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+        mock_image = MagicMock()
+        mock_image.generate = MagicMock(return_value=fake_png)
+
+        # --- Mock caption provider ---
+        # Captions need enough words and duration for image timing validation.
+        # min_display=4.0 + crossfade=1.5 = 5.5s per image. Two images need ~11s.
+        def _make_caption_result(path):
+            words = [
+                "The",
+                "lighthouse",
+                "keeper",
+                "watched",
+                "the",
+                "storm",
+                "approach",
+                "dark",
+                "clouds",
+                "gathered",
+                "on",
+                "the",
+                "horizon",
+                "and",
+                "the",
+                "waves",
+                "grew",
+                "tall",
+                "the",
+                "harbor",
+                "below",
+                "came",
+                "alive",
+            ]
+            duration = 15.0
+            per_word = duration / len(words)
+            return CaptionResult(
+                segments=[CaptionSegment(text=" ".join(words), start=0.0, end=duration)],
+                words=[
+                    CaptionWord(word=w, start=i * per_word, end=(i + 1) * per_word)
+                    for i, w in enumerate(words)
+                ],
+                language="en",
+                duration=duration,
+            )
+
+        mock_caption = MagicMock()
+        mock_caption.transcribe = MagicMock(side_effect=_make_caption_result)
+
+        # --- Mock subprocess.run (FFmpeg/ffprobe) ---
+        real_subprocess_run = _subprocess.run
+        ffmpeg_commands: list[list[str]] = []
+
+        def _mock_subprocess_run(cmd, **kwargs):
+            cmd_str = cmd[0] if cmd else ""
+
+            if "ffprobe" in cmd_str:
+                return _subprocess.CompletedProcess(
+                    args=cmd, returncode=0, stdout="15.0\n", stderr=""
+                )
+
+            if "ffmpeg" in cmd_str:
+                from pathlib import Path
+
+                ffmpeg_commands.append(list(cmd))
+                output_path = Path(cmd[-1])
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"\x00" * 50)
+                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+            return real_subprocess_run(cmd, **kwargs)
+
+        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+
+        # --- Create project state and run pipeline ---
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        source_path = state.project_dir / "source_story.txt"
+        source_path.write_text(source_text, encoding="utf-8")
+
+        run_pipeline(
+            state,
+            claude_client=mock_claude,
+            tts_provider=mock_tts,
+            image_provider=mock_image,
+            caption_provider=mock_caption,
+        )
+
+        # --- Verify pipeline completed ---
+        assert state.metadata.status == PhaseStatus.COMPLETED
+        assert len(state.metadata.scenes) == 2
+
+        # --- Verify image tags were extracted and prompts populated ---
+        scene1 = state.metadata.scenes[0]
+        scene2 = state.metadata.scenes[1]
+        assert len(scene1.image_prompts) == 1
+        assert scene1.image_prompts[0].key == "lighthouse"
+        assert "lighthouse" in scene1.image_prompts[0].prompt.lower()
+        assert len(scene2.image_prompts) == 1
+        assert scene2.image_prompts[0].key == "harbor"
+        assert "harbor" in scene2.image_prompts[0].prompt.lower()
+
+        # --- Verify image tags stripped from narration text ---
+        assert "**image:" not in (scene1.narration_text or "")
+        assert "**image:" not in (scene2.narration_text or "")
+        # Voice tags should still be present (stripped by TTS, not here)
+        assert "**voice:narrator**" in (scene1.narration_text or "")
+
+        # --- Verify indexed image files created ---
+        pd = state.project_dir
+        assert (pd / "images" / "scene_001_000.png").exists()
+        assert (pd / "images" / "scene_002_000.png").exists()
+
+        # --- Verify Claude was NOT called for image prompts ---
+        # Both scenes have image tags, so generate_image_prompts should
+        # skip Claude entirely. Calls: analysis + split + flag + 2x narration_prep = 5
+        prompt_calls = [
+            c
+            for c in mock_claude.generate_structured.call_args_list
+            if c.kwargs.get("tool_name") == "generate_image_prompts"
+        ]
+        assert len(prompt_calls) == 0
+
+        # --- Verify image provider was called for each image ---
+        assert mock_image.generate.call_count == 2  # 1 per scene (1 tag each)
+
+        # --- Verify final video assembled ---
+        assert (pd / "final.mp4").exists()
+        assert (pd / "segments" / "scene_001.mp4").exists()
+        assert (pd / "segments" / "scene_002.mp4").exists()
+
     def test_full_creative_flow_data_flow(self, tmp_path, monkeypatch):
         """Full creative flow (inspired_by) creates expected files and state transitions."""
         import subprocess as _subprocess
