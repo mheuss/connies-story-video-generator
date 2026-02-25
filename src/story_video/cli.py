@@ -1,6 +1,6 @@
 """CLI entry point for story-video.
 
-Commands: create, resume, estimate, status, list.
+Commands: create, resume, estimate, status, list, serve.
 """
 
 import json
@@ -608,3 +608,32 @@ def list_projects(
         )
 
     console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# Web server command
+# ---------------------------------------------------------------------------
+
+try:
+    from uvicorn import run as uvicorn_run
+except ImportError:
+    uvicorn_run = None  # type: ignore[assignment]
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8033, "--port", "-p", help="Port to listen on"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to"),
+    output_dir: Path = typer.Option(
+        Path("./output"), "--output-dir", "-o", help="Root directory for projects"
+    ),
+) -> None:
+    """Start the web UI server."""
+    if uvicorn_run is None:
+        typer.echo("Web dependencies not installed. Run: pip install -e '.[web]'", err=True)
+        raise typer.Exit(code=1)
+
+    from story_video.web.app import create_app
+
+    app_instance = create_app(output_dir=output_dir)
+    uvicorn_run(app_instance, host=host, port=port)
