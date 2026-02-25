@@ -75,6 +75,76 @@ class AudioCueSpec:
     scene_duration: float
 
 
+def _build_audio_mix_filters(
+    cues: list[AudioCueSpec],
+    *,
+    narration_label: str,
+    first_cue_index: int,
+) -> tuple[list[str], str]:
+    """Build FFmpeg filter chain for mixing music/SFX tracks with narration.
+
+    Each cue becomes a filter chain: adelay -> volume -> [aloop] -> [afade].
+    All processed tracks are combined with the narration using amix.
+
+    Args:
+        cues: Audio cue specifications.
+        narration_label: FFmpeg stream label for narration audio (e.g. "[1:a]").
+        first_cue_index: FFmpeg input index of the first music file.
+
+    Returns:
+        Tuple of (filter parts list, output stream label).
+        If no cues, returns ([], narration_label).
+    """
+    if not cues:
+        return [], narration_label
+
+    filter_parts: list[str] = []
+    cue_labels: list[str] = []
+
+    for i, cue in enumerate(cues):
+        input_index = first_cue_index + i
+        input_label = f"[{input_index}:a]"
+        output_label = f"[mus{i}]"
+        cue_labels.append(output_label)
+
+        remaining = cue.scene_duration - cue.start_time
+
+        # Build the comma-separated filter chain for this cue
+        chain: list[str] = []
+
+        # adelay: offset start time in milliseconds (both channels)
+        if cue.start_time > 0:
+            delay_ms = int(cue.start_time * 1000)
+            chain.append(f"adelay={delay_ms}|{delay_ms}")
+
+        # volume: scale the track level
+        chain.append(f"volume={cue.volume}")
+
+        # aloop + atrim: loop the audio and trim to remaining scene duration
+        if cue.loop:
+            chain.append("aloop=loop=-1:size=2e+09")
+            chain.append(f"atrim=0:{remaining}")
+
+        # afade: fade in and/or fade out
+        if cue.fade_in > 0:
+            chain.append(f"afade=t=in:st=0:d={cue.fade_in}")
+        if cue.fade_out > 0:
+            fade_out_start = remaining - cue.fade_out
+            chain.append(f"afade=t=out:st={fade_out_start}:d={cue.fade_out}")
+
+        filter_parts.append(f"{input_label}{','.join(chain)}{output_label}")
+
+    # amix: combine narration + all cue tracks
+    num_inputs = 1 + len(cues)  # narration + cues
+    all_labels = narration_label + "".join(cue_labels)
+    amix_label = "[amix]"
+    filter_parts.append(
+        f"{all_labels}amix=inputs={num_inputs}:duration=first:dropout_transition=0{amix_label}"
+    )
+
+    return filter_parts, amix_label
+
+
 def run_ffmpeg(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess:
     """Execute an FFmpeg command and return the result.
 

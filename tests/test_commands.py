@@ -579,3 +579,147 @@ class TestAudioCueSpec:
         assert spec.fade_in == 1.0
         assert spec.fade_out == 1.0
         assert spec.scene_duration == 30.0
+
+
+# ---------------------------------------------------------------------------
+# TestBuildAudioMixFilters — filter chain for music/SFX mixing
+# ---------------------------------------------------------------------------
+
+
+class TestBuildAudioMixFilters:
+    """_build_audio_mix_filters creates filter chains for music mixing."""
+
+    def test_single_cue_no_loop(self):
+        """One-shot sound effect at 2.5s, volume 0.6."""
+        from story_video.ffmpeg.commands import _build_audio_mix_filters
+
+        cues = [
+            AudioCueSpec(
+                file_path=Path("thunder.mp3"),
+                start_time=2.5,
+                volume=0.6,
+                loop=False,
+                fade_in=0.0,
+                fade_out=0.0,
+                scene_duration=30.0,
+            )
+        ]
+        filters, output_label = _build_audio_mix_filters(
+            cues, narration_label="[1:a]", first_cue_index=2
+        )
+        combined = ";".join(filters)
+        assert "adelay=2500|2500" in combined
+        assert "volume=0.6" in combined
+        assert "amix=inputs=2" in combined
+        assert "duration=first" in combined
+        assert "aloop" not in combined
+        assert output_label == "[amix]"
+
+    def test_looping_ambient_track(self):
+        """Ambient track that loops from 0s with fade in/out."""
+        from story_video.ffmpeg.commands import _build_audio_mix_filters
+
+        cues = [
+            AudioCueSpec(
+                file_path=Path("rain.mp3"),
+                start_time=0.0,
+                volume=0.2,
+                loop=True,
+                fade_in=2.0,
+                fade_out=2.0,
+                scene_duration=30.0,
+            )
+        ]
+        filters, _ = _build_audio_mix_filters(cues, narration_label="[1:a]", first_cue_index=2)
+        combined = ";".join(filters)
+        assert "aloop" in combined
+        assert "atrim" in combined
+        assert "afade=t=in" in combined
+        assert "afade=t=out" in combined
+        assert "volume=0.2" in combined
+
+    def test_multiple_cues(self):
+        """Two cues produce amix=inputs=3."""
+        from story_video.ffmpeg.commands import _build_audio_mix_filters
+
+        cues = [
+            AudioCueSpec(
+                file_path=Path("rain.mp3"),
+                start_time=0.0,
+                volume=0.2,
+                loop=False,
+                fade_in=0.0,
+                fade_out=0.0,
+                scene_duration=30.0,
+            ),
+            AudioCueSpec(
+                file_path=Path("thunder.mp3"),
+                start_time=5.0,
+                volume=0.6,
+                loop=False,
+                fade_in=0.0,
+                fade_out=0.0,
+                scene_duration=30.0,
+            ),
+        ]
+        filters, _ = _build_audio_mix_filters(cues, narration_label="[1:a]", first_cue_index=2)
+        combined = ";".join(filters)
+        assert "amix=inputs=3" in combined
+
+    def test_empty_cues_returns_narration_label(self):
+        """No cues: returns narration label unchanged."""
+        from story_video.ffmpeg.commands import _build_audio_mix_filters
+
+        filters, output_label = _build_audio_mix_filters(
+            [], narration_label="[1:a]", first_cue_index=2
+        )
+        assert filters == []
+        assert output_label == "[1:a]"
+
+    def test_no_adelay_when_start_time_zero(self):
+        """Don't add adelay filter when start_time is 0."""
+        from story_video.ffmpeg.commands import _build_audio_mix_filters
+
+        cues = [
+            AudioCueSpec(
+                file_path=Path("rain.mp3"),
+                start_time=0.0,
+                volume=0.3,
+                loop=False,
+                fade_in=0.0,
+                fade_out=0.0,
+                scene_duration=30.0,
+            )
+        ]
+        filters, _ = _build_audio_mix_filters(cues, narration_label="[1:a]", first_cue_index=2)
+        combined = ";".join(filters)
+        assert "adelay" not in combined
+
+    def test_input_indices_correct(self):
+        """Each cue uses the correct FFmpeg input index."""
+        from story_video.ffmpeg.commands import _build_audio_mix_filters
+
+        cues = [
+            AudioCueSpec(
+                file_path=Path("a.mp3"),
+                start_time=0.0,
+                volume=0.3,
+                loop=False,
+                fade_in=0.0,
+                fade_out=0.0,
+                scene_duration=30.0,
+            ),
+            AudioCueSpec(
+                file_path=Path("b.mp3"),
+                start_time=1.0,
+                volume=0.4,
+                loop=False,
+                fade_in=0.0,
+                fade_out=0.0,
+                scene_duration=30.0,
+            ),
+        ]
+        filters, _ = _build_audio_mix_filters(cues, narration_label="[1:a]", first_cue_index=3)
+        combined = ";".join(filters)
+        assert "[3:a]" in combined  # first cue
+        assert "[4:a]" in combined  # second cue
