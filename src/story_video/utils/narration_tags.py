@@ -17,20 +17,24 @@ import re
 import yaml
 from pydantic import ValidationError
 
-from story_video.models import ImageTag, NarrationSegment, StoryHeader
+from story_video.models import ImageTag, MusicTag, NarrationSegment, StoryHeader
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "extract_image_tags",
     "extract_image_tags_stripped",
+    "extract_music_tags",
+    "extract_music_tags_stripped",
     "extract_tags",
     "has_narration_tags",
     "parse_narration_segments",
     "parse_story_header",
     "strip_image_tags",
+    "strip_music_tags",
     "strip_narration_tags",
     "validate_image_tags",
+    "validate_music_tags",
 ]
 
 _TAG_PATTERN = re.compile(r"\*\*(voice|mood|pause):([^*]+)\*\*")
@@ -84,6 +88,75 @@ def strip_image_tags(text: str) -> str:
     return _IMAGE_STRIP_PATTERN.sub("", text)
 
 
+_MUSIC_TAG_PATTERN = re.compile(r"\*\*music:([^*]+)\*\*")
+
+
+def extract_music_tags(text: str) -> list[MusicTag]:
+    """Extract music tags from text with their character offsets.
+
+    Args:
+        text: Story text possibly containing **music:key** tags.
+
+    Returns:
+        List of MusicTag objects ordered by position.
+    """
+    return [
+        MusicTag(key=m.group(1).strip(), position=m.start())
+        for m in _MUSIC_TAG_PATTERN.finditer(text)
+    ]
+
+
+_MUSIC_STRIP_PATTERN = re.compile(r"\*\*music:[^*]+\*\*\s*")
+
+
+def strip_music_tags(text: str) -> str:
+    """Remove inline music tags (and trailing whitespace) from text.
+
+    Strips only ``**music:key**`` tags, leaving voice, mood, pause,
+    and image tags intact.
+    """
+    return _MUSIC_STRIP_PATTERN.sub("", text)
+
+
+def extract_music_tags_stripped(text: str) -> list[MusicTag]:
+    """Extract music tags with positions relative to the all-tags-stripped text.
+
+    Positions are computed against the text after ALL tags (voice, mood,
+    pause, image, music) are stripped, matching the coordinate system
+    of the Whisper transcript.
+    """
+    all_stripped = list(_STRIP_PATTERN.finditer(text))
+    music_matches = list(_MUSIC_TAG_PATTERN.finditer(text))
+
+    result = []
+    for m in music_matches:
+        chars_removed = sum(len(s.group(0)) for s in all_stripped if s.start() < m.start())
+        stripped_pos = m.start() - chars_removed
+        result.append(MusicTag(key=m.group(1).strip(), position=stripped_pos))
+
+    return result
+
+
+def validate_music_tags(tags: list[MusicTag], audio_map: dict[str, object]) -> None:
+    """Validate that all music tag keys exist in the audio map.
+
+    Args:
+        tags: Music tags extracted from scene text.
+        audio_map: YAML-defined audio asset map from story header.
+
+    Raises:
+        ValueError: If any tag references a key not in the audio map.
+    """
+    defined_keys = set(audio_map.keys())
+    for tag in tags:
+        if tag.key not in defined_keys:
+            msg = (
+                f"Music tag '**music:{tag.key}**' references undefined audio. "
+                f"Defined audio: {', '.join(sorted(defined_keys)) or '(none)'}"
+            )
+            raise ValueError(msg)
+
+
 def extract_image_tags_stripped(text: str) -> list[ImageTag]:
     """Extract image tags with positions relative to the all-tags-stripped text.
 
@@ -123,15 +196,15 @@ def validate_image_tags(tags: list[ImageTag], images: dict[str, str]) -> None:
             raise ValueError(msg)
 
 
-_STRIP_PATTERN = re.compile(r"\*\*(?:voice|mood|pause|image):[^*]+\*\*\s*")
+_STRIP_PATTERN = re.compile(r"\*\*(?:voice|mood|pause|image|music):[^*]+\*\*\s*")
 
 
 def strip_narration_tags(text: str) -> str:
-    """Remove inline voice/mood/pause/image tags (and trailing whitespace) from text.
+    """Remove inline voice/mood/pause/image/music tags (and trailing whitespace) from text.
 
     Tags like ``**voice:narrator**``, ``**mood:dry**``, ``**pause:0.5**``,
-    and ``**image:key**`` are metadata for the TTS and video pipelines and
-    should be stripped before content analysis.
+    ``**image:key**``, and ``**music:key**`` are metadata for the TTS and
+    video pipelines and should be stripped before content analysis.
     """
     return _STRIP_PATTERN.sub("", text)
 

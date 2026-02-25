@@ -2,17 +2,21 @@
 
 import pytest
 
-from story_video.models import ImageTag
+from story_video.models import AudioAsset, ImageTag, MusicTag
 from story_video.utils.narration_tags import (
     extract_image_tags,
     extract_image_tags_stripped,
+    extract_music_tags,
+    extract_music_tags_stripped,
     extract_tags,
     has_narration_tags,
     parse_narration_segments,
     parse_story_header,
     strip_image_tags,
+    strip_music_tags,
     strip_narration_tags,
     validate_image_tags,
+    validate_music_tags,
 )
 
 
@@ -545,3 +549,117 @@ class TestExtractImageTagsStripped:
         assert tags[0].position == 0
         # Second image tag at position 7 ("middle " = 7 chars)
         assert tags[1].position == 7
+
+
+# ---------------------------------------------------------------------------
+# Extract music tags
+# ---------------------------------------------------------------------------
+
+
+class TestExtractMusicTags:
+    """extract_music_tags finds **music:key** tags with positions."""
+
+    def test_no_tags(self):
+        assert extract_music_tags("No tags here.") == []
+
+    def test_single_tag(self):
+        text = "The rain fell. **music:rain** Thunder rolled."
+        tags = extract_music_tags(text)
+        assert len(tags) == 1
+        assert tags[0].key == "rain"
+        assert tags[0].position == text.index("**music:rain**")
+
+    def test_multiple_tags(self):
+        text = "**music:rain** Then **music:thunder** boom."
+        tags = extract_music_tags(text)
+        assert len(tags) == 2
+        assert tags[0].key == "rain"
+        assert tags[1].key == "thunder"
+
+    def test_key_whitespace_stripped(self):
+        text = "**music: rain ** hello"
+        tags = extract_music_tags(text)
+        assert tags[0].key == "rain"
+
+    def test_ignores_other_tag_types(self):
+        text = "**voice:jane** **mood:sad** **pause:1.0** **image:pic**"
+        assert extract_music_tags(text) == []
+
+
+# ---------------------------------------------------------------------------
+# Strip music tags
+# ---------------------------------------------------------------------------
+
+
+class TestStripMusicTags:
+    """strip_music_tags removes only **music:key** tags."""
+
+    def test_removes_music_tag(self):
+        assert strip_music_tags("Hello **music:rain** world") == "Hello world"
+
+    def test_preserves_other_tags(self):
+        text = "**voice:jane** hello **music:rain** world"
+        result = strip_music_tags(text)
+        assert "**voice:jane**" in result
+        assert "**music:rain**" not in result
+
+    def test_no_tags_unchanged(self):
+        text = "Plain text."
+        assert strip_music_tags(text) == text
+
+    def test_multiple_tags(self):
+        text = "**music:rain** a **music:thunder** b"
+        result = strip_music_tags(text)
+        assert result == "a b"
+
+
+# ---------------------------------------------------------------------------
+# Extract music tags with stripped positions
+# ---------------------------------------------------------------------------
+
+
+class TestExtractMusicTagsStripped:
+    """extract_music_tags_stripped computes positions in stripped-text coordinates."""
+
+    def test_position_accounts_for_stripped_tags(self):
+        # voice tag (18 chars with trailing space) appears before music tag
+        text = "**voice:narrator** Hello. **music:rain** World."
+        tags = extract_music_tags_stripped(text)
+        assert len(tags) == 1
+        assert tags[0].key == "rain"
+        # Stripped text: "Hello. World."
+        # "Hello. " = 7 chars
+        assert tags[0].position == 7
+
+    def test_multiple_music_tags_with_other_tags(self):
+        text = "**voice:jane** A **music:rain** B **mood:sad** C **music:thunder** D"
+        tags = extract_music_tags_stripped(text)
+        assert len(tags) == 2
+        assert tags[0].key == "rain"
+        assert tags[1].key == "thunder"
+
+    def test_no_tags(self):
+        assert extract_music_tags_stripped("Plain text") == []
+
+
+# ---------------------------------------------------------------------------
+# Validate music tags
+# ---------------------------------------------------------------------------
+
+
+class TestValidateMusicTags:
+    """validate_music_tags ensures all tag keys exist in audio map."""
+
+    def test_valid_keys_pass(self):
+        tags = [MusicTag(key="rain", position=0)]
+        audio_map = {"rain": AudioAsset(file="rain.mp3")}
+        validate_music_tags(tags, audio_map)  # Should not raise
+
+    def test_unknown_key_raises(self):
+        tags = [MusicTag(key="thunder", position=0)]
+        audio_map = {"rain": AudioAsset(file="rain.mp3")}
+        with pytest.raises(ValueError, match="thunder"):
+            validate_music_tags(tags, audio_map)
+
+    def test_empty_tags_pass(self):
+        validate_music_tags([], {})  # Should not raise
