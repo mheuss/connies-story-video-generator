@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 
 from story_video.ffmpeg.commands import (
+    AudioCueSpec,
     FFmpegError,
     build_concat_command,
     build_segment_command,
@@ -551,3 +552,30 @@ class TestBuildMultiImageSegmentCommand:
                 output_path=Path("/segments/scene.mp4"),
                 video_config=video_config,
             )
+
+
+# ---------------------------------------------------------------------------
+# TestAudioCueSpec — frozen dataclass for FFmpeg music mixing parameters
+# ---------------------------------------------------------------------------
+
+
+class TestAudioCueSpec:
+    """AudioCueSpec bundles FFmpeg music mixing parameters."""
+
+    def test_construction(self):
+        spec = AudioCueSpec(
+            file_path=Path("/sounds/rain.mp3"),
+            start_time=2.5,
+            volume=0.3,
+            loop=True,
+            fade_in=1.0,
+            fade_out=1.0,
+            scene_duration=30.0,
+        )
+        assert spec.file_path == Path("/sounds/rain.mp3")
+        assert spec.start_time == 2.5
+        assert spec.volume == 0.3
+        assert spec.loop is True
+        assert spec.fade_in == 1.0
+        assert spec.fade_out == 1.0
+        assert spec.scene_duration == 30.0

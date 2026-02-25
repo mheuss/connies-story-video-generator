@@ -15,6 +15,7 @@ Public items:
 import logging
 import shlex
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 from story_video.ffmpeg.filters import blur_background_filter, still_image_filter
@@ -24,6 +25,7 @@ from story_video.models import VideoConfig
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "AudioCueSpec",
     "FFmpegError",
     "build_concat_command",
     "build_segment_command",
@@ -48,6 +50,29 @@ class FFmpegError(Exception):
         super().__init__(
             f"FFmpeg failed (exit {returncode})\nCommand: {shlex.join(cmd)}\nStderr: {stderr}"
         )
+
+
+@dataclass(frozen=True)
+class AudioCueSpec:
+    """Parameters for mixing a single music/SFX track into a scene.
+
+    Attributes:
+        file_path: Path to the audio file.
+        start_time: When to start playing in seconds.
+        volume: Playback volume (0.0-1.0).
+        loop: Whether to loop the audio.
+        fade_in: Fade-in duration in seconds.
+        fade_out: Fade-out duration in seconds.
+        scene_duration: Total scene duration for looping/trimming.
+    """
+
+    file_path: Path
+    start_time: float
+    volume: float
+    loop: bool
+    fade_in: float
+    fade_out: float
+    scene_duration: float
 
 
 def run_ffmpeg(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess:
