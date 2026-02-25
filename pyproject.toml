@@ -25,6 +25,13 @@ dev = [
     "pytest-mock>=3.0",
     "ruff>=0.5.0",
 ]
+web = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "python-dotenv>=1.0.0",
+    "sse-starlette>=2.0.0",
+    "httpx>=0.28.0",
+]
 
 [project.scripts]
 story-video = "story_video.cli:app"
