@@ -695,6 +695,26 @@ class TestBuildAudioMixFilters:
         combined = ";".join(filters)
         assert "adelay" not in combined
 
+    def test_fade_out_start_time_calculated_correctly(self):
+        """Fade-out start time = (scene_duration - start_time) - fade_out duration."""
+        from story_video.ffmpeg.commands import _build_audio_mix_filters
+
+        cues = [
+            AudioCueSpec(
+                file_path=Path("music.mp3"),
+                start_time=5.0,
+                volume=0.3,
+                loop=False,
+                fade_in=0.0,
+                fade_out=3.0,
+                scene_duration=30.0,
+            )
+        ]
+        filters, _ = _build_audio_mix_filters(cues, narration_label="[1:a]", first_cue_index=2)
+        combined = ";".join(filters)
+        # remaining = 30.0 - 5.0 = 25.0; fade_out_start = 25.0 - 3.0 = 22.0
+        assert "afade=t=out:st=22.0:d=3.0" in combined
+
     def test_input_indices_correct(self):
         """Each cue uses the correct FFmpeg input index."""
         from story_video.ffmpeg.commands import _build_audio_mix_filters

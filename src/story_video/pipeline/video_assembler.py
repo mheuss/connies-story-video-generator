@@ -83,8 +83,12 @@ def _resolve_audio_cues(
             raise KeyError(msg)
         asset = audio_map[cue.key]
 
-        # Resolve and validate audio file path
-        file_path = source_dir / asset.file
+        # Resolve and validate audio file path.
+        # Guard against path traversal — audio files must stay within source_dir.
+        file_path = (source_dir / asset.file).resolve()
+        if not file_path.is_relative_to(source_dir.resolve()):
+            msg = f"Audio file path escapes project directory: {asset.file}"
+            raise ValueError(msg)
         if not file_path.exists():
             msg = f"Audio file not found: {file_path}"
             raise FileNotFoundError(msg)

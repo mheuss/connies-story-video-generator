@@ -228,6 +228,8 @@ Acknowledged items not yet scheduled.
 - [x] [refactor] Narrow `create` command exception handler from bare `Exception` to `FileExistsError` for `ProjectState.create()` (CLI-S7)
 - [x] [chore] Verify GPT Image 1.5 pricing — current code rates (low: $0.020, medium: $0.050, high: $0.200) may not match latest OpenAI pricing (CR-8) — updated low tier from $0.020 to $0.013, added verification date 2026-02-21
 - [ ] [refactor] Cost rate table key collision risk — IMAGE_COST_PER_IMAGE dict merges GPT Image tiers (low/medium/high) and DALL-E tiers (standard/hd) in one flat dict; if a future model reuses a tier name, values would collide. Consider nested dict keyed by model family. (CR-9)
+- [ ] [refactor] `assemble_scene` re-parses story header from `source_story.txt` per scene with audio cues — the orchestrator already parses it once at pipeline start. Could pass the header as an argument to `assemble_scene` to avoid redundant I/O. Low priority: I/O is negligible relative to FFmpeg execution time. (BM-1)
+- [ ] [refactor] Bisect-based timing resolution duplicated between `_resolve_audio_cues` (video_assembler.py) and `compute_image_timings` (image_timing.py) — extract shared `char_offset_to_timestamp()` helper if a third inline tag type with timing needs emerges. Two instances is acceptable per YAGNI. (BM-2)
 
 ## Resolved
 

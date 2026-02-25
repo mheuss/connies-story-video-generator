@@ -484,6 +484,22 @@ class TestAssembleSceneWithAudioCues:
         with pytest.raises(KeyError, match="nonexistent"):
             assemble_scene(scene, project_state)
 
+    def test_path_traversal_raises(self, project_state):
+        """Audio file path that escapes project directory raises ValueError."""
+        scene = project_state.metadata.scenes[0]
+        scene.audio_cues = [SceneAudioCue(key="evil", position=0)]
+
+        # Write source story with path traversal in audio file
+        source_path = project_state.project_dir / "source_story.txt"
+        source_path.write_text(
+            "---\nvoices:\n  narrator: nova\naudio:\n  evil:\n"
+            "    file: ../../../etc/passwd\n---\nTest.",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="escapes project directory"):
+            assemble_scene(scene, project_state)
+
     @patch("story_video.pipeline.video_assembler.run_ffmpeg")
     def test_no_audio_cues_unchanged(self, mock_run, project_state):
         """Scene without audio cues produces same command as before."""
