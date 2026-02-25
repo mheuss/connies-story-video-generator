@@ -169,6 +169,23 @@ Significant technical decisions with context and rationale.
 - The `amix` filter uses `duration=first` so output matches narration length regardless of music track length
 - Looping with `aloop` enables short sound files to fill long scenes
 
+### ADR-011: Web UI via FastAPI + React SPA
+
+**Status:** Accepted
+
+**Context:** The pipeline is powerful but CLI-only. Non-technical users need a browser-based interface to create videos, review artifacts at checkpoints, and monitor progress.
+
+**Decision:** Wrap the existing pipeline in a FastAPI backend (`src/story_video/web/`). No database — all state lives on disk via `ProjectState`. The pipeline runs in a background thread; progress events flow through a `ProgressBridge` (thread-safe queue) to an SSE endpoint. A React SPA frontend (Plan 2) will consume these endpoints. Everything runs in a single process on a configurable port (default 8033).
+
+**Key design choices:**
+- SSE over WebSockets — simpler, one-directional (server to client), auto-reconnects
+- Background thread, not subprocess — the pipeline already runs in-process
+- Artifact serving is static file serving from the project directory
+- `pipeline_runner.run_pipeline_in_thread()` is the only bridge between web and pipeline code
+- The pipeline itself is unaware of the web layer
+
+See `docs/plans/2026-02-25-web-ui-design.md` for the full design.
+
 ---
 
 ## Technical Notes
