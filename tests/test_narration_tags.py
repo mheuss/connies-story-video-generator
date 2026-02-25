@@ -663,3 +663,63 @@ class TestValidateMusicTags:
 
     def test_empty_tags_pass(self):
         validate_music_tags([], {})  # Should not raise
+
+
+# ---------------------------------------------------------------------------
+# StoryHeader audio map parsing
+# ---------------------------------------------------------------------------
+
+
+class TestParseStoryHeaderAudio:
+    """parse_story_header parses the audio: map from YAML front matter."""
+
+    def test_header_with_audio_map(self):
+        text = (
+            "---\n"
+            "voices:\n"
+            "  narrator: nova\n"
+            "audio:\n"
+            "  rain:\n"
+            "    file: sounds/rain.mp3\n"
+            "    volume: 0.2\n"
+            "    loop: true\n"
+            "  thunder:\n"
+            "    file: sounds/thunder.mp3\n"
+            "---\n"
+            "Story body here."
+        )
+        header, body = parse_story_header(text)
+        assert header is not None
+        assert len(header.audio) == 2
+        assert header.audio["rain"].file == "sounds/rain.mp3"
+        assert header.audio["rain"].volume == 0.2
+        assert header.audio["rain"].loop is True
+        assert header.audio["thunder"].file == "sounds/thunder.mp3"
+        assert header.audio["thunder"].volume == 0.3  # default
+        assert body == "Story body here."
+
+    def test_header_without_audio_still_works(self):
+        text = "---\nvoices:\n  narrator: nova\n---\nBody."
+        header, _ = parse_story_header(text)
+        assert header is not None
+        assert header.audio == {}
+
+    def test_audio_with_invalid_volume_raises(self):
+        text = (
+            "---\n"
+            "voices:\n"
+            "  narrator: nova\n"
+            "audio:\n"
+            "  rain:\n"
+            "    file: rain.mp3\n"
+            "    volume: 2.0\n"
+            "---\n"
+            "Body."
+        )
+        with pytest.raises(ValueError, match="Invalid story header"):
+            parse_story_header(text)
+
+    def test_audio_with_empty_file_raises(self):
+        text = "---\nvoices:\n  narrator: nova\naudio:\n  rain:\n    file: ''\n---\nBody."
+        with pytest.raises(ValueError, match="Invalid story header"):
+            parse_story_header(text)
