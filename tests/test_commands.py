@@ -723,3 +723,74 @@ class TestBuildAudioMixFilters:
         combined = ";".join(filters)
         assert "[3:a]" in combined  # first cue
         assert "[4:a]" in combined  # second cue
+
+
+# ---------------------------------------------------------------------------
+# TestBuildSegmentCommandWithAudioCues — audio cues wired into segment command
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSegmentCommandWithAudioCues:
+    """build_segment_command with audio_cues adds music inputs and amix."""
+
+    def test_no_cues_unchanged(self, segment_args, video_config):
+        """Without audio_cues, command is identical to before."""
+        cmd_without = build_segment_command(**segment_args, video_config=video_config)
+        cmd_with = build_segment_command(**segment_args, video_config=video_config, audio_cues=None)
+        assert cmd_without == cmd_with
+
+    def test_single_cue_adds_input_and_amix(self, segment_args, video_config, tmp_path):
+        """One audio cue adds an extra input and amix filter."""
+        cue = AudioCueSpec(
+            file_path=tmp_path / "rain.mp3",
+            start_time=0.0,
+            volume=0.3,
+            loop=False,
+            fade_in=0.0,
+            fade_out=0.0,
+            scene_duration=30.0,
+        )
+        cmd = build_segment_command(**segment_args, video_config=video_config, audio_cues=[cue])
+        cmd_str = " ".join(cmd)
+        assert str(tmp_path / "rain.mp3") in cmd_str
+        assert "amix" in cmd_str
+
+    def test_audio_cue_maps_mixed_audio(self, segment_args, video_config, tmp_path):
+        """With audio cues, -map uses [amix] instead of raw narration input."""
+        cue = AudioCueSpec(
+            file_path=tmp_path / "rain.mp3",
+            start_time=0.0,
+            volume=0.3,
+            loop=False,
+            fade_in=0.0,
+            fade_out=0.0,
+            scene_duration=30.0,
+        )
+        cmd = build_segment_command(**segment_args, video_config=video_config, audio_cues=[cue])
+        # Should map [amix] for audio, not the raw audio input
+        assert "[amix]" in cmd
+
+    def test_multi_image_single_cue_adds_input_and_amix(self, video_config, tmp_path):
+        """Multi-image: one audio cue adds an extra input and amix filter."""
+        cue = AudioCueSpec(
+            file_path=tmp_path / "rain.mp3",
+            start_time=0.0,
+            volume=0.3,
+            loop=False,
+            fade_in=0.0,
+            fade_out=0.0,
+            scene_duration=30.0,
+        )
+        cmd = build_segment_command(
+            image_paths=[tmp_path / "a.png", tmp_path / "b.png"],
+            image_timings=[(0.0, 15.0), (15.0, 30.0)],
+            audio_path=tmp_path / "scene.mp3",
+            ass_path=tmp_path / "scene.ass",
+            output_path=tmp_path / "segment.mp4",
+            video_config=video_config,
+            audio_cues=[cue],
+        )
+        cmd_str = " ".join(cmd)
+        assert str(tmp_path / "rain.mp3") in cmd_str
+        assert "amix" in cmd_str
+        assert "[amix]" in cmd

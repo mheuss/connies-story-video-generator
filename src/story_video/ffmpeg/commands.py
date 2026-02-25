@@ -178,6 +178,7 @@ def build_segment_command(
     ass_path: Path,
     output_path: Path,
     video_config: VideoConfig,
+    audio_cues: list[AudioCueSpec] | None = None,
 ) -> list[str]:
     """Build an FFmpeg command for rendering a single scene segment.
 
@@ -202,6 +203,7 @@ def build_segment_command(
         ass_path: Path to the ASS subtitle file.
         output_path: Path for the output segment video.
         video_config: Video configuration parameters.
+        audio_cues: Optional list of music/SFX tracks to mix with narration.
 
     Returns:
         FFmpeg command as a list of strings.
@@ -236,6 +238,7 @@ def build_segment_command(
             bg_filter=bg_filter,
             fg_filter=fg_filter,
             sub_filter=sub_filter,
+            audio_cues=audio_cues,
         )
 
     return _build_multi_image_command(
@@ -247,6 +250,7 @@ def build_segment_command(
         bg_filter=bg_filter,
         fg_filter=fg_filter,
         sub_filter=sub_filter,
+        audio_cues=audio_cues,
     )
 
 
@@ -258,6 +262,7 @@ def _build_single_image_command(
     bg_filter: str,
     fg_filter: str,
     sub_filter: str,
+    audio_cues: list[AudioCueSpec] | None = None,
 ) -> list[str]:
     """Build segment command for a single image (original behavior)."""
     # FFmpeg auto-splits [0:v] into two branches: one for the blurred background
@@ -270,6 +275,20 @@ def _build_single_image_command(
         f"[comp]{sub_filter}[out]"
     )
 
+    # Narration audio is input 1 (input 0 is the looped image).
+    # Music files start at input index 2.
+    audio_map = "1:a"
+    music_inputs: list[str] = []
+
+    if audio_cues:
+        for cue in audio_cues:
+            music_inputs.extend(["-i", str(cue.file_path)])
+        audio_filter_parts, audio_label = _build_audio_mix_filters(
+            audio_cues, narration_label="[1:a]", first_cue_index=2
+        )
+        filtergraph += ";" + ";".join(audio_filter_parts)
+        audio_map = audio_label
+
     return [
         "ffmpeg",
         "-y",
@@ -279,12 +298,13 @@ def _build_single_image_command(
         str(image_path),
         "-i",
         str(audio_path),
+        *music_inputs,
         "-filter_complex",
         filtergraph,
         "-map",
         "[out]",
         "-map",
-        "1:a",
+        audio_map,
         "-c:v",
         video_config.codec,
         "-crf",
@@ -307,6 +327,7 @@ def _build_multi_image_command(
     bg_filter: str,
     fg_filter: str,
     sub_filter: str,
+    audio_cues: list[AudioCueSpec] | None = None,
 ) -> list[str]:
     """Build segment command for multiple images with xfade transitions."""
     n = len(image_paths)
@@ -323,6 +344,12 @@ def _build_multi_image_command(
     # Audio is the last input (index N)
     audio_index = n
     inputs.extend(["-i", str(audio_path)])
+
+    # Music files start after the audio input
+    music_inputs: list[str] = []
+    if audio_cues:
+        for cue in audio_cues:
+            music_inputs.extend(["-i", str(cue.file_path)])
 
     # Build per-image blur+foreground composites
     filter_parts: list[str] = []
@@ -357,18 +384,30 @@ def _build_multi_image_command(
     # Burn subtitles on the final composited stream
     filter_parts.append(f"{prev_label}{sub_filter}[out]")
 
+    # Mix audio cues with narration if present
+    audio_map = f"{audio_index}:a"
+    if audio_cues:
+        audio_filter_parts, audio_label = _build_audio_mix_filters(
+            audio_cues,
+            narration_label=f"[{audio_index}:a]",
+            first_cue_index=audio_index + 1,
+        )
+        filter_parts.extend(audio_filter_parts)
+        audio_map = audio_label
+
     filtergraph = ";".join(filter_parts)
 
     return [
         "ffmpeg",
         "-y",
         *inputs,
+        *music_inputs,
         "-filter_complex",
         filtergraph,
         "-map",
         "[out]",
         "-map",
-        f"{audio_index}:a",
+        audio_map,
         "-c:v",
         video_config.codec,
         "-crf",
