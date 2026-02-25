@@ -14,18 +14,21 @@ from story_video.models import (
     CREATIVE_FLOW_PHASES,
     AppConfig,
     AssetType,
+    AudioAsset,
     CaptionResult,
     CaptionSegment,
     CaptionWord,
     ImageConfig,
     ImageTag,
     InputMode,
+    MusicTag,
     NarrationSegment,
     PhaseStatus,
     PipelinePhase,
     ProjectMetadata,
     Scene,
     SceneAssetStatus,
+    SceneAudioCue,
     SceneImagePrompt,
     SceneStatus,
     StoryConfig,
@@ -735,3 +738,136 @@ class TestSceneImagePrompt:
     def test_prompt_must_be_non_empty(self):
         with pytest.raises(ValidationError):
             SceneImagePrompt(key=None, prompt="", position=0)
+
+
+# ---------------------------------------------------------------------------
+# AudioAsset tests
+# ---------------------------------------------------------------------------
+
+
+class TestAudioAsset:
+    """AudioAsset stores audio file path and mixing parameters."""
+
+    def test_construction_with_defaults(self):
+        asset = AudioAsset(file="sounds/rain.mp3")
+        assert asset.file == "sounds/rain.mp3"
+        assert asset.volume == 0.3
+        assert asset.loop is False
+        assert asset.fade_in == 0.0
+        assert asset.fade_out == 0.0
+
+    def test_construction_with_all_fields(self):
+        asset = AudioAsset(file="sounds/rain.mp3", volume=0.5, loop=True, fade_in=2.0, fade_out=1.5)
+        assert asset.volume == 0.5
+        assert asset.loop is True
+        assert asset.fade_in == 2.0
+        assert asset.fade_out == 1.5
+
+    def test_empty_file_rejected(self):
+        with pytest.raises(ValidationError):
+            AudioAsset(file="")
+
+    def test_volume_below_zero_rejected(self):
+        with pytest.raises(ValidationError):
+            AudioAsset(file="x.mp3", volume=-0.1)
+
+    def test_volume_above_one_rejected(self):
+        with pytest.raises(ValidationError):
+            AudioAsset(file="x.mp3", volume=1.1)
+
+    def test_volume_boundary_zero_accepted(self):
+        asset = AudioAsset(file="x.mp3", volume=0.0)
+        assert asset.volume == 0.0
+
+    def test_volume_boundary_one_accepted(self):
+        asset = AudioAsset(file="x.mp3", volume=1.0)
+        assert asset.volume == 1.0
+
+    def test_negative_fade_in_rejected(self):
+        with pytest.raises(ValidationError):
+            AudioAsset(file="x.mp3", fade_in=-1.0)
+
+    def test_negative_fade_out_rejected(self):
+        with pytest.raises(ValidationError):
+            AudioAsset(file="x.mp3", fade_out=-0.5)
+
+
+# ---------------------------------------------------------------------------
+# MusicTag tests
+# ---------------------------------------------------------------------------
+
+
+class TestMusicTag:
+    """MusicTag stores tag key and character offset."""
+
+    def test_construction(self):
+        tag = MusicTag(key="rain", position=42)
+        assert tag.key == "rain"
+        assert tag.position == 42
+
+    def test_position_must_be_non_negative(self):
+        with pytest.raises(ValidationError):
+            MusicTag(key="x", position=-1)
+
+    def test_empty_key_rejected(self):
+        with pytest.raises(ValidationError):
+            MusicTag(key="", position=0)
+
+
+# ---------------------------------------------------------------------------
+# SceneAudioCue tests
+# ---------------------------------------------------------------------------
+
+
+class TestSceneAudioCue:
+    """SceneAudioCue stores key, position, and computed start time."""
+
+    def test_construction_with_defaults(self):
+        cue = SceneAudioCue(key="rain", position=100)
+        assert cue.key == "rain"
+        assert cue.position == 100
+        assert cue.start_time == 0.0
+
+    def test_construction_with_start_time(self):
+        cue = SceneAudioCue(key="thunder", position=50, start_time=4.5)
+        assert cue.start_time == 4.5
+
+
+# ---------------------------------------------------------------------------
+# StoryHeader audio map tests
+# ---------------------------------------------------------------------------
+
+
+class TestStoryHeaderAudio:
+    """StoryHeader accepts optional audio map."""
+
+    def test_audio_defaults_to_empty(self):
+        h = StoryHeader(voices={"narrator": "nova"})
+        assert h.audio == {}
+
+    def test_audio_with_entries(self):
+        h = StoryHeader(
+            voices={"narrator": "nova"},
+            audio={"rain": AudioAsset(file="rain.mp3", volume=0.2)},
+        )
+        assert "rain" in h.audio
+        assert h.audio["rain"].file == "rain.mp3"
+
+
+# ---------------------------------------------------------------------------
+# Scene audio_cues tests
+# ---------------------------------------------------------------------------
+
+
+class TestSceneAudioCues:
+    """Scene accepts optional audio_cues list."""
+
+    def test_audio_cues_defaults_to_empty(self):
+        s = Scene(scene_number=1, title="Test", prose="Some text.")
+        assert s.audio_cues == []
+
+    def test_audio_cues_populated(self):
+        cue = SceneAudioCue(key="rain", position=10, start_time=2.0)
+        s = Scene(scene_number=1, title="Test", prose="Some text.", audio_cues=[cue])
+        assert len(s.audio_cues) == 1
+        assert s.audio_cues[0].key == "rain"

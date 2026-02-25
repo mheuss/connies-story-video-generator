@@ -23,6 +23,7 @@ __all__ = [
     "ADAPT_FLOW_PHASES",
     "AppConfig",
     "AssetType",
+    "AudioAsset",
     "CREATIVE_FLOW_PHASES",
     "CaptionResult",
     "CaptionSegment",
@@ -32,6 +33,7 @@ __all__ = [
     "ImageTag",
     "InputMode",
     "KNOWN_TTS_PROVIDERS",
+    "MusicTag",
     "NarrationSegment",
     "PhaseStatus",
     "PipelineConfig",
@@ -40,6 +42,7 @@ __all__ = [
     "RESOLUTION_RE",
     "Scene",
     "SceneAssetStatus",
+    "SceneAudioCue",
     "SceneImagePrompt",
     "SceneStatus",
     "StoryConfig",
@@ -272,6 +275,26 @@ class TTSConfig(BaseModel):
         return self.output_format.split("_")[0]
 
 
+class AudioAsset(BaseModel):
+    """An audio asset defined in the story header for background music/SFX.
+
+    Fields:
+        file: Path to audio file, relative to the source story directory.
+        volume: Playback volume from 0.0 (silent) to 1.0 (full).
+        loop: If True, loop the audio to fill remaining scene duration.
+        fade_in: Fade-in duration in seconds.
+        fade_out: Fade-out duration in seconds.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    file: str = Field(min_length=1)
+    volume: float = Field(default=0.3, ge=0.0, le=1.0)
+    loop: bool = Field(default=False)
+    fade_in: float = Field(default=0.0, ge=0.0)
+    fade_out: float = Field(default=0.0, ge=0.0)
+
+
 class StoryHeader(BaseModel):
     """Parsed front matter from a story file.
 
@@ -279,6 +302,7 @@ class StoryHeader(BaseModel):
         voices: Mapping from character labels to provider-specific voice IDs.
         default_voice: Label used for text without an explicit voice tag.
         images: Mapping from image tag keys to image prompt strings.
+        audio: Mapping from music tag keys to AudioAsset configs.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -286,6 +310,7 @@ class StoryHeader(BaseModel):
     voices: dict[str, str] = Field(min_length=1)
     default_voice: str = Field(default="narrator")
     images: dict[str, str] = Field(default_factory=dict)
+    audio: dict[str, AudioAsset] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_default_voice_in_voices(self) -> "StoryHeader":
@@ -344,6 +369,36 @@ class ImageTag(BaseModel):
 
     key: str = Field(min_length=1)
     position: int = Field(ge=0)
+
+
+class MusicTag(BaseModel):
+    """An inline music tag parsed from story text.
+
+    Fields:
+        key: Tag key referencing an entry in the YAML audio map.
+        position: Character offset in the text.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    key: str = Field(min_length=1)
+    position: int = Field(ge=0)
+
+
+class SceneAudioCue(BaseModel):
+    """A music/SFX cue for a scene, mapped from an inline music tag.
+
+    Fields:
+        key: Tag key referencing an entry in the YAML audio map.
+        position: Character offset in stripped text (for caption alignment).
+        start_time: Computed timestamp in seconds (set during video assembly).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    key: str = Field(min_length=1)
+    position: int = Field(ge=0)
+    start_time: float = Field(default=0.0, ge=0.0)
 
 
 class SceneImagePrompt(BaseModel):
@@ -628,6 +683,7 @@ class Scene(BaseModel):
         image_prompts: Image generation prompts for scene illustrations
             (set during image prompt generation). Each entry is a
             SceneImagePrompt with optional tag key and position.
+        audio_cues: Music/SFX cues for this scene (set during music tag parsing).
         asset_status: Per-asset production status tracking.
     """
 
@@ -639,6 +695,7 @@ class Scene(BaseModel):
     summary: str | None = Field(default=None)
     narration_text: str | None = Field(default=None)
     image_prompts: list[SceneImagePrompt] = Field(default_factory=list)
+    audio_cues: list[SceneAudioCue] = Field(default_factory=list)
     asset_status: SceneAssetStatus = Field(default_factory=SceneAssetStatus)
 
 
