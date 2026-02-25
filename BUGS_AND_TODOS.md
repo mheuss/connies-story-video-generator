@@ -229,7 +229,7 @@ Acknowledged items not yet scheduled.
 - [x] [chore] Verify GPT Image 1.5 pricing — current code rates (low: $0.020, medium: $0.050, high: $0.200) may not match latest OpenAI pricing (CR-8) — updated low tier from $0.020 to $0.013, added verification date 2026-02-21
 - [ ] [refactor] Cost rate table key collision risk — IMAGE_COST_PER_IMAGE dict merges GPT Image tiers (low/medium/high) and DALL-E tiers (standard/hd) in one flat dict; if a future model reuses a tier name, values would collide. Consider nested dict keyed by model family. (CR-9)
 - [x] [refactor] `assemble_scene` re-parses story header from `source_story.txt` per scene with audio cues — added `story_header` keyword argument, orchestrator passes the already-parsed header. Removed file I/O and `parse_story_header` import from video_assembler. (BM-1)
-- [ ] [refactor] Bisect-based timing resolution duplicated between `_resolve_audio_cues` (video_assembler.py) and `compute_image_timings` (image_timing.py) — extract shared `char_offset_to_timestamp()` helper if a third inline tag type with timing needs emerges. Two instances is acceptable per YAGNI. (BM-2)
+- [x] [refactor] Bisect-based timing resolution duplicated between `_resolve_audio_cues` (video_assembler.py) and `compute_image_timings` (image_timing.py) — extracted `build_word_char_offsets()` and `char_position_to_timestamp()` into image_timing.py, both callers now use shared helpers. (BM-2)
 
 ## Resolved
 

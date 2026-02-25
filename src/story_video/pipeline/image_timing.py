@@ -9,7 +9,13 @@ from dataclasses import dataclass
 
 from story_video.models import CaptionResult, SceneImagePrompt
 
-__all__ = ["ImageTiming", "compute_image_timings", "validate_image_timings"]
+__all__ = [
+    "ImageTiming",
+    "build_word_char_offsets",
+    "char_position_to_timestamp",
+    "compute_image_timings",
+    "validate_image_timings",
+]
 
 
 @dataclass(frozen=True)
@@ -25,6 +31,57 @@ class ImageTiming:
     prompt: SceneImagePrompt
     start: float
     end: float
+
+
+def build_word_char_offsets(captions: CaptionResult) -> list[int]:
+    """Build cumulative character offsets for each caption word.
+
+    Reconstructs character positions by joining words with spaces.
+    Used by ``char_position_to_timestamp`` to map inline tag positions
+    to audio timestamps.
+
+    Args:
+        captions: Whisper caption result with word-level data.
+
+    Returns:
+        List of character offsets, one per word.
+    """
+    offsets: list[int] = []
+    char_pos = 0
+    for cw in captions.words:
+        offsets.append(char_pos)
+        char_pos += len(cw.word) + 1  # +1 for space separator
+    return offsets
+
+
+def char_position_to_timestamp(
+    position: int,
+    captions: CaptionResult,
+    word_char_offsets: list[int],
+) -> float:
+    """Map a character position to the nearest caption word's start time.
+
+    Uses bisect to find the closest word boundary. When the position falls
+    between two words, the nearer one wins (left on tie).
+
+    Args:
+        position: Character offset in stripped narration text.
+        captions: Whisper caption result with word-level timestamps.
+        word_char_offsets: Precomputed offsets from ``build_word_char_offsets``.
+
+    Returns:
+        Start time in seconds of the nearest caption word.
+    """
+    idx = bisect_left(word_char_offsets, position)
+    if idx >= len(word_char_offsets):
+        best_idx = len(word_char_offsets) - 1
+    elif idx == 0:
+        best_idx = 0
+    else:
+        left_dist = abs(word_char_offsets[idx - 1] - position)
+        right_dist = abs(word_char_offsets[idx] - position)
+        best_idx = idx - 1 if left_dist <= right_dist else idx
+    return captions.words[best_idx].start
 
 
 def compute_image_timings(
@@ -52,33 +109,13 @@ def compute_image_timings(
     if len(prompts) == 1:
         return [ImageTiming(prompt=prompts[0], start=0.0, end=scene_duration)]
 
-    # Build cumulative character offsets for caption words.
-    # Whisper returns words without position info, so we reconstruct
-    # character positions by joining words with spaces.
-    word_char_offsets: list[int] = []
-    char_pos = 0
-    for cw in captions.words:
-        word_char_offsets.append(char_pos)
-        char_pos += len(cw.word) + 1  # +1 for space separator
+    word_char_offsets = build_word_char_offsets(captions)
 
-    # For each image tag (except the first), find the caption word whose
-    # character offset is closest to the tag's position. Use that word's
-    # start time as the transition point.
     transition_times = [0.0]
     for prompt in prompts[1:]:
-        pos = prompt.position
-        idx = bisect_left(word_char_offsets, pos)
-        # bisect_left gives the insertion point; compare neighbours to
-        # find the closest actual offset.
-        if idx >= len(word_char_offsets):
-            best_idx = len(word_char_offsets) - 1
-        elif idx == 0:
-            best_idx = 0
-        else:
-            left_dist = abs(word_char_offsets[idx - 1] - pos)
-            right_dist = abs(word_char_offsets[idx] - pos)
-            best_idx = idx - 1 if left_dist <= right_dist else idx
-        transition_times.append(captions.words[best_idx].start)
+        transition_times.append(
+            char_position_to_timestamp(prompt.position, captions, word_char_offsets)
+        )
 
     # Build timing windows
     timings = []

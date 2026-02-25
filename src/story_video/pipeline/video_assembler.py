@@ -9,7 +9,6 @@ and ``story_video.ffmpeg.subtitles`` for ASS subtitle generation.
 """
 
 import logging
-from bisect import bisect_left
 from pathlib import Path
 
 from story_video.ffmpeg.commands import (
@@ -29,7 +28,12 @@ from story_video.models import (
     SceneStatus,
     StoryHeader,
 )
-from story_video.pipeline.image_timing import compute_image_timings, validate_image_timings
+from story_video.pipeline.image_timing import (
+    build_word_char_offsets,
+    char_position_to_timestamp,
+    compute_image_timings,
+    validate_image_timings,
+)
 from story_video.state import ProjectState
 
 __all__ = [
@@ -65,13 +69,7 @@ def _resolve_audio_cues(
         FileNotFoundError: If an audio file doesn't exist.
     """
     scene_duration = captions.duration
-
-    # Build cumulative character offsets for caption words
-    word_char_offsets: list[int] = []
-    char_pos = 0
-    for cw in captions.words:
-        word_char_offsets.append(char_pos)
-        char_pos += len(cw.word) + 1  # +1 for space separator
+    word_char_offsets = build_word_char_offsets(captions)
 
     specs: list[AudioCueSpec] = []
     for cue in audio_cues:
@@ -97,16 +95,7 @@ def _resolve_audio_cues(
         # Position 0 means "start of scene" — no word alignment needed.
         start_time = 0.0
         if cue.position > 0 and word_char_offsets:
-            idx = bisect_left(word_char_offsets, cue.position)
-            if idx >= len(word_char_offsets):
-                best_idx = len(word_char_offsets) - 1
-            elif idx == 0:
-                best_idx = 0
-            else:
-                left_dist = abs(word_char_offsets[idx - 1] - cue.position)
-                right_dist = abs(word_char_offsets[idx] - cue.position)
-                best_idx = idx - 1 if left_dist <= right_dist else idx
-            start_time = captions.words[best_idx].start
+            start_time = char_position_to_timestamp(cue.position, captions, word_char_offsets)
 
         specs.append(
             AudioCueSpec(

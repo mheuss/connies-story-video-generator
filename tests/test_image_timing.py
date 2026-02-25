@@ -5,6 +5,8 @@ import pytest
 from story_video.models import CaptionResult, CaptionSegment, CaptionWord, SceneImagePrompt
 from story_video.pipeline.image_timing import (
     ImageTiming,
+    build_word_char_offsets,
+    char_position_to_timestamp,
     compute_image_timings,
     validate_image_timings,
 )
@@ -21,6 +23,57 @@ def _make_captions(words_data):
         language="en",
         duration=duration,
     )
+
+
+class TestBuildWordCharOffsets:
+    """build_word_char_offsets computes cumulative character positions."""
+
+    def test_basic_offsets(self):
+        captions = _make_captions([("The", 0.0, 0.3), ("cat", 0.4, 0.7), ("sat", 0.8, 1.0)])
+        offsets = build_word_char_offsets(captions)
+        # "The" starts at 0, "cat" at 4 (3 chars + space), "sat" at 8
+        assert offsets == [0, 4, 8]
+
+    def test_single_word(self):
+        captions = _make_captions([("hello", 0.0, 0.5)])
+        assert build_word_char_offsets(captions) == [0]
+
+    def test_empty_captions(self):
+        captions = CaptionResult(segments=[], words=[], language="en", duration=0.0)
+        assert build_word_char_offsets(captions) == []
+
+
+class TestCharPositionToTimestamp:
+    """char_position_to_timestamp maps character offset to word start time."""
+
+    def test_exact_match(self):
+        captions = _make_captions([("The", 0.0, 0.3), ("cat", 0.5, 0.8), ("sat", 1.0, 1.3)])
+        offsets = build_word_char_offsets(captions)
+        # Position 4 is exactly "cat" → 0.5s
+        assert char_position_to_timestamp(4, captions, offsets) == 0.5
+
+    def test_nearest_left_neighbor(self):
+        captions = _make_captions([("The", 0.0, 0.3), ("cat", 0.5, 0.8), ("sat", 1.0, 1.3)])
+        offsets = build_word_char_offsets(captions)
+        # Position 5 is closer to "cat" (offset 4) than "sat" (offset 8)
+        assert char_position_to_timestamp(5, captions, offsets) == 0.5
+
+    def test_nearest_right_neighbor(self):
+        captions = _make_captions([("The", 0.0, 0.3), ("cat", 0.5, 0.8), ("sat", 1.0, 1.3)])
+        offsets = build_word_char_offsets(captions)
+        # Position 7 is closer to "sat" (offset 8) than "cat" (offset 4)
+        assert char_position_to_timestamp(7, captions, offsets) == 1.0
+
+    def test_position_past_end(self):
+        captions = _make_captions([("The", 0.0, 0.3), ("end", 0.5, 0.8)])
+        offsets = build_word_char_offsets(captions)
+        # Position 100 is past all words → last word
+        assert char_position_to_timestamp(100, captions, offsets) == 0.5
+
+    def test_position_zero(self):
+        captions = _make_captions([("The", 0.0, 0.3), ("cat", 0.5, 0.8)])
+        offsets = build_word_char_offsets(captions)
+        assert char_position_to_timestamp(0, captions, offsets) == 0.0
 
 
 class TestComputeImageTimings:
