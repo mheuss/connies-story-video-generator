@@ -56,12 +56,12 @@ All three modes work end-to-end. You can give it a story, a creative brief, or s
 - **Resume from failure** -- pipeline saves state per phase and per scene, picks up where it left off
 - **Semi-automated mode** -- pauses at content phases for human review, or runs straight through in autonomous mode
 - **Cost estimation** -- projected costs before starting, actual costs after completion
-- **1031 tests** covering all modules
+- **Inline image tags** -- `**image:key**` tags in your story text reference image prompts defined in the YAML header. Control exactly when images change within a scene, independent of scene boundaries.
+- **Background music** -- `**music:key**` tags trigger audio tracks defined in the YAML header. Supports volume, looping, fade in/out. Audio is mixed with narration using FFmpeg's amix filter, timed to caption word offsets.
+- **862 tests** covering all modules
 
 ### Pie in the Sky
 
-- Inline image tags -- author-controlled image transitions within scenes
-- Background music / sound effects -- audio overlay with volume and duration control
 - Iterative critique/revision -- critic and author personas with multi-pass refinement
 - User-configurable story length -- `--target-words`, `--target-scenes` flags
 - Web UI
@@ -115,6 +115,51 @@ The hero ventured forth bravely into the unknown.
 ```
 
 When the pipeline detects scene tags, it splits on them directly and skips the AI scene-splitting step. Any text before the first tag becomes a scene titled "Opening".
+
+### Inline Image Tags
+
+Define image prompts in the YAML header and place `**image:key**` tags in your story text to control when images change:
+
+```
+---
+voices:
+  narrator: nova
+images:
+  lighthouse:
+    prompt: A weathered stone lighthouse on a rocky cliff at sunset
+  storm:
+    prompt: Dark storm clouds rolling over a turbulent ocean
+---
+**image:lighthouse** The old keeper climbed the spiral stairs as he had every evening
+for thirty years. **image:storm** But tonight the horizon looked different.
+```
+
+Each image displays from its tag position until the next tag (or end of scene). The pipeline maps tag positions to audio timestamps using Whisper captions, so image transitions sync with the narration.
+
+### Background Music
+
+Define audio assets in the YAML header and use `**music:key**` tags to trigger them:
+
+```
+---
+voices:
+  narrator: nova
+audio:
+  rain:
+    file: sounds/rain.mp3
+    volume: 0.2
+    loop: true
+    fade_in: 2.0
+    fade_out: 3.0
+  thunder:
+    file: sounds/thunder.mp3
+    volume: 0.5
+---
+**music:rain** The rain began to fall. **music:thunder** A crack of thunder
+split the sky.
+```
+
+Audio files are paths relative to your project directory. Each track supports `volume` (0-1, default 1.0), `loop` (default false), `fade_in` and `fade_out` (seconds, default 0). Music is scoped per scene and mixed with narration via FFmpeg.
 
 Voice IDs depend on your TTS provider. OpenAI uses names like `nova`, `echo`, `alloy`. ElevenLabs uses voice ID hashes from your account.
 
