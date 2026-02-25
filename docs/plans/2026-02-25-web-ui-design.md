@@ -184,8 +184,9 @@ Everything works the same without container isolation. No Docker Compose for v1.
 - **Integration tests** for the progress bridge — verify pipeline events flow through queue to SSE output. Use FastAPI `TestClient`.
 - **No end-to-end pipeline tests in web layer.** Pipeline is already tested. Web tests verify correct wrapping and delegation.
 
-### Frontend (React, Vitest + React Testing Library)
+### Frontend (React, Vitest + React Testing Library + Storybook)
 
+- **Storybook** for isolated component development. Every screen and state (empty, loading, error, progress at various stages, checkpoint with artifacts) gets a story. Enables fast UI iteration without running the pipeline, and serves as visual documentation.
 - **Component tests** — screens render correctly, buttons trigger API calls, SSE events update UI.
 - **No Cypress/Playwright for v1.** Component tests plus manual testing cover it. Add E2E when UI stabilizes.
 
@@ -204,7 +205,19 @@ tests/
   test_web_artifacts.py    # Artifact serving/editing tests
 web/
   src/__tests__/           # React component tests
+  src/stories/             # Storybook stories per component
+  .storybook/              # Storybook config
 ```
+
+---
+
+## Implementation Approach
+
+Three sequential plans, each producing something independently testable:
+
+1. **Backend API** (Python/FastAPI) — app skeleton, routes, progress bridge, API key setup. Testable via pytest + `TestClient`.
+2. **React Frontend** — Vite + React scaffolding, Storybook, all screens, SSE integration. Develops against the real API from Plan 1.
+3. **Docker & Packaging** — Dockerfile, static file serving, `serve` command, port config.
 
 ---
 
@@ -218,6 +231,7 @@ web/
 - API key setup form.
 - Single Docker container.
 - Configurable port (default 8033).
+- Storybook for component development and visual documentation.
 
 **Deferred:**
 - YAML tag editing UI (inline image tags, background music tags).
