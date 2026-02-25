@@ -9,18 +9,28 @@ and ``story_video.ffmpeg.subtitles`` for ASS subtitle generation.
 """
 
 import logging
+from bisect import bisect_left
 from pathlib import Path
 
 from story_video.ffmpeg.commands import (
+    AudioCueSpec,
     build_concat_command,
     build_segment_command,
     probe_duration,
     run_ffmpeg,
 )
 from story_video.ffmpeg.subtitles import generate_ass_content
-from story_video.models import AssetType, CaptionResult, Scene, SceneStatus
+from story_video.models import (
+    AssetType,
+    AudioAsset,
+    CaptionResult,
+    Scene,
+    SceneAudioCue,
+    SceneStatus,
+)
 from story_video.pipeline.image_timing import compute_image_timings, validate_image_timings
 from story_video.state import ProjectState
+from story_video.utils.narration_tags import parse_story_header
 
 __all__ = [
     "assemble_scene",
@@ -28,6 +38,85 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_audio_cues(
+    audio_cues: list[SceneAudioCue],
+    audio_map: dict[str, AudioAsset],
+    captions: CaptionResult,
+    source_dir: Path,
+) -> list[AudioCueSpec]:
+    """Resolve audio cues into FFmpeg-ready AudioCueSpec objects.
+
+    Maps each cue's character position to a timestamp using caption word
+    offsets (same bisect approach as image timing). Resolves audio file
+    paths relative to source_dir and validates they exist.
+
+    Args:
+        audio_cues: Audio cues from the scene.
+        audio_map: Audio asset definitions from the story header.
+        captions: Whisper caption result with word-level timestamps.
+        source_dir: Directory to resolve audio file paths from.
+
+    Returns:
+        List of AudioCueSpec objects ready for FFmpeg.
+
+    Raises:
+        FileNotFoundError: If an audio file doesn't exist.
+    """
+    scene_duration = captions.duration
+
+    # Build cumulative character offsets for caption words
+    word_char_offsets: list[int] = []
+    char_pos = 0
+    for cw in captions.words:
+        word_char_offsets.append(char_pos)
+        char_pos += len(cw.word) + 1  # +1 for space separator
+
+    specs: list[AudioCueSpec] = []
+    for cue in audio_cues:
+        if cue.key not in audio_map:
+            msg = (
+                f"Audio cue key '{cue.key}' not found in story header audio map. "
+                f"Available keys: {', '.join(sorted(audio_map.keys())) or 'none'}"
+            )
+            raise KeyError(msg)
+        asset = audio_map[cue.key]
+
+        # Resolve and validate audio file path
+        file_path = source_dir / asset.file
+        if not file_path.exists():
+            msg = f"Audio file not found: {file_path}"
+            raise FileNotFoundError(msg)
+
+        # Compute start time from caption word offsets.
+        # Position 0 means "start of scene" — no word alignment needed.
+        start_time = 0.0
+        if cue.position > 0 and word_char_offsets:
+            idx = bisect_left(word_char_offsets, cue.position)
+            if idx >= len(word_char_offsets):
+                best_idx = len(word_char_offsets) - 1
+            elif idx == 0:
+                best_idx = 0
+            else:
+                left_dist = abs(word_char_offsets[idx - 1] - cue.position)
+                right_dist = abs(word_char_offsets[idx] - cue.position)
+                best_idx = idx - 1 if left_dist <= right_dist else idx
+            start_time = captions.words[best_idx].start
+
+        specs.append(
+            AudioCueSpec(
+                file_path=file_path,
+                start_time=start_time,
+                volume=asset.volume,
+                loop=asset.loop,
+                fade_in=asset.fade_in,
+                fade_out=asset.fade_out,
+                scene_duration=scene_duration,
+            )
+        )
+
+    return specs
 
 
 def assemble_scene(scene: Scene, state: ProjectState) -> None:
@@ -79,6 +168,20 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     caption_json = caption_json_path.read_text(encoding="utf-8")
     caption_result = CaptionResult.model_validate_json(caption_json)
 
+    # Resolve audio cues if present
+    audio_cue_specs: list[AudioCueSpec] | None = None
+    if scene.audio_cues:
+        source_path = state.project_dir / "source_story.txt"
+        source_text = source_path.read_text(encoding="utf-8")
+        header, _ = parse_story_header(source_text)
+        audio_map = header.audio if header else {}
+        audio_cue_specs = _resolve_audio_cues(
+            scene.audio_cues,
+            audio_map,
+            caption_result,
+            state.project_dir,
+        )
+
     # Compute image timings
     if len(image_paths) > 1:
         timings = compute_image_timings(scene.image_prompts, caption_result)
@@ -111,6 +214,7 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
         ass_path=ass_path,
         output_path=output_path,
         video_config=video_config,
+        audio_cues=audio_cue_specs,
     )
 
     state.update_scene_asset(scene.scene_number, AssetType.VIDEO_SEGMENT, SceneStatus.IN_PROGRESS)
