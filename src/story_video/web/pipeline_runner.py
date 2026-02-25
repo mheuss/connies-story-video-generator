@@ -102,7 +102,10 @@ def _run_pipeline_safe(state: ProjectState, bridge: ProgressBridge) -> None:
             bridge.push(
                 ProgressEvent(
                     event="checkpoint",
-                    data={"phase": refreshed.metadata.current_phase},
+                    data={
+                        "phase": refreshed.metadata.current_phase,
+                        "project_id": refreshed.metadata.project_id,
+                    },
                 )
             )
         else:

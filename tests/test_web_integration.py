@@ -39,15 +39,14 @@ class TestCreateToProgressFlow:
         assert create_resp.status_code == 201
         project_id = create_resp.json()["project_id"]
 
-        # 2. Prepare a bridge that simulates a checkpoint then completion.
-        #    The SSE endpoint loops until a terminal event ("completed" or "error"),
-        #    so we must push a terminal event to avoid hanging.
+        # 2. Prepare a bridge that simulates progress then a checkpoint.
+        #    The SSE stream closes on any terminal event (checkpoint, completed, error).
+        #    After a checkpoint the client would call /approve and open a new SSE stream.
         bridge = ProgressBridge()
         bridge.push(
             ProgressEvent(event="phase_started", data={"phase": "analysis", "scene_count": 0})
         )
-        bridge.push(ProgressEvent(event="checkpoint", data={"phase": "analysis", "artifacts": []}))
-        bridge.push(ProgressEvent(event="completed", data={}))
+        bridge.push(ProgressEvent(event="checkpoint", data={"phase": "analysis"}))
 
         # 3. Start pipeline (mocked -- the real one spawns threads and calls external APIs)
         with patch(
@@ -57,20 +56,15 @@ class TestCreateToProgressFlow:
             start_resp = client.post(f"/api/v1/projects/{project_id}/start")
             assert start_resp.status_code == 202
 
-        # 4. Stream progress from the bridge
+        # 4. Stream progress -- SSE closes after checkpoint (terminal event)
         with patch("story_video.web.routes_pipeline.get_bridge", return_value=bridge):
             with client.stream("GET", f"/api/v1/projects/{project_id}/progress") as response:
                 assert response.status_code == 200
-                lines = []
-                for line in response.iter_lines():
-                    lines.append(line)
-                    if "completed" in line:
-                        break
+                lines = list(response.iter_lines())
 
         text = "\n".join(lines)
         assert "phase_started" in text
         assert "checkpoint" in text
-        assert "completed" in text
 
     def test_project_status_reflects_pending_state(self, client):
         # Create and verify initial status

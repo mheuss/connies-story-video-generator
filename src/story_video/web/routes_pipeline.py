@@ -33,6 +33,9 @@ def get_bridge() -> ProgressBridge | None:
 @router.post("/{project_id}/start", status_code=202)
 async def start_pipeline(project_id: str) -> dict:
     """Start or resume the pipeline for a project."""
+    if pipeline_runner.is_running():
+        raise HTTPException(status_code=409, detail="Pipeline is already running")
+
     state = _load_project(project_id)
 
     if state.metadata.status == PhaseStatus.IN_PROGRESS:
@@ -64,7 +67,7 @@ async def stream_progress(project_id: str) -> EventSourceResponse:
     return EventSourceResponse(_event_generator())
 
 
-_TERMINAL_EVENTS = frozenset({"completed", "error"})
+_TERMINAL_EVENTS = frozenset({"completed", "error", "checkpoint"})
 
 
 async def _event_generator():

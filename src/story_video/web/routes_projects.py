@@ -51,6 +51,10 @@ class CreateProjectRequest(BaseModel):
         if not v.strip():
             msg = "source_text must not be empty"
             raise ValueError(msg)
+        max_bytes = 10 * 1024 * 1024  # 10 MB
+        if len(v.encode("utf-8")) > max_bytes:
+            msg = "source_text exceeds 10 MB limit"
+            raise ValueError(msg)
         return v
 
 

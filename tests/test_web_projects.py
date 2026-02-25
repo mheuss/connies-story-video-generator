@@ -65,6 +65,14 @@ class TestCreateProject:
         )
         assert response.status_code == 422
 
+    def test_rejects_oversized_source_text(self, client):
+        huge_text = "x" * (10 * 1024 * 1024 + 1)
+        response = client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": huge_text},
+        )
+        assert response.status_code == 422
+
     def test_source_text_written_to_disk(self, client, output_dir):
         source = "The lighthouse keeper climbed the stairs."
         response = client.post(

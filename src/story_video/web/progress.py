@@ -5,13 +5,12 @@ via a thread-safe queue. The pipeline pushes ProgressEvents; the
 SSE endpoint reads and streams them to the client.
 """
 
-import json
 import queue
 from dataclasses import dataclass, field
 
 __all__ = ["ProgressBridge", "ProgressEvent"]
 
-_TERMINAL_EVENTS = frozenset({"completed", "error"})
+_TERMINAL_EVENTS = frozenset({"completed", "error", "checkpoint"})
 
 
 @dataclass
@@ -25,11 +24,6 @@ class ProgressEvent:
 
     event: str
     data: dict = field(default_factory=dict)
-
-    def format_sse(self) -> str:
-        """Format as an SSE message string."""
-        data_str = json.dumps(self.data)
-        return f"event: {self.event}\ndata: {data_str}\n\n"
 
 
 class ProgressBridge:

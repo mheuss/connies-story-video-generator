@@ -57,6 +57,15 @@ class TestStartPipeline:
         assert response.status_code == 409
         mock_run.assert_not_called()
 
+    @patch("story_video.web.pipeline_runner.run_pipeline_in_thread")
+    @patch("story_video.web.pipeline_runner.is_running", return_value=True)
+    def test_start_while_thread_alive_returns_409(
+        self, _mock_is_running, mock_run, client, project_id
+    ):
+        response = client.post(f"/api/v1/projects/{project_id}/start")
+        assert response.status_code == 409
+        mock_run.assert_not_called()
+
 
 class TestApprovePipeline:
     """POST /api/v1/projects/{id}/approve resumes after checkpoint."""

@@ -3,16 +3,6 @@
 from story_video.web.progress import ProgressBridge, ProgressEvent
 
 
-class TestProgressEvent:
-    """ProgressEvent formats as SSE message."""
-
-    def test_format_sse_event(self):
-        event = ProgressEvent(event="phase_started", data={"phase": "analysis"})
-        formatted = event.format_sse()
-        assert "event: phase_started" in formatted
-        assert '"phase": "analysis"' in formatted
-
-
 class TestProgressBridge:
     """ProgressBridge queues events and yields them for SSE."""
 
@@ -51,4 +41,9 @@ class TestProgressBridge:
     def test_push_error_marks_done(self):
         bridge = ProgressBridge()
         bridge.push(ProgressEvent(event="error", data={"message": "fail"}))
+        assert bridge.is_done
+
+    def test_push_checkpoint_marks_done(self):
+        bridge = ProgressBridge()
+        bridge.push(ProgressEvent(event="checkpoint", data={"phase": "analysis"}))
         assert bridge.is_done
