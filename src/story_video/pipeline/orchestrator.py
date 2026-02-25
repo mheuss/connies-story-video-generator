@@ -288,7 +288,10 @@ def _dispatch_phase(
         _run_per_scene(state, lambda scene: generate_captions(scene, state, caption_provider))
 
     elif phase == PipelinePhase.VIDEO_ASSEMBLY:
-        _run_per_scene(state, lambda scene: assemble_scene(scene, state))
+        _run_per_scene(
+            state,
+            lambda scene: assemble_scene(scene, state, story_header=story_header),
+        )
         final_path = assemble_video(state)
         logger.info("Final video: %s", final_path)
 

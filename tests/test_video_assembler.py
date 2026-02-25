@@ -13,6 +13,7 @@ from story_video.ffmpeg.commands import FFmpegError
 from story_video.models import (
     AppConfig,
     AssetType,
+    AudioAsset,
     CaptionResult,
     CaptionSegment,
     CaptionWord,
@@ -20,6 +21,7 @@ from story_video.models import (
     SceneAudioCue,
     SceneImagePrompt,
     SceneStatus,
+    StoryHeader,
     TTSConfig,
 )
 from story_video.pipeline.video_assembler import assemble_scene, assemble_video
@@ -416,27 +418,14 @@ class TestAssembleSceneMultiImage:
 class TestAssembleSceneWithAudioCues:
     """assemble_scene resolves audio cues and passes them to FFmpeg."""
 
-    _STORY_HEADER = (
-        "---\n"
-        "voices:\n"
-        "  narrator: nova\n"
-        "audio:\n"
-        "  rain:\n"
-        "    file: sounds/rain.mp3\n"
-        "---\n"
-        "Test prose."
+    _HEADER = StoryHeader(
+        voices={"narrator": "nova"},
+        audio={"rain": AudioAsset(file="sounds/rain.mp3")},
     )
 
-    _STORY_HEADER_WITH_VOLUME = (
-        "---\n"
-        "voices:\n"
-        "  narrator: nova\n"
-        "audio:\n"
-        "  rain:\n"
-        "    file: sounds/rain.mp3\n"
-        "    volume: 0.2\n"
-        "---\n"
-        "Test prose."
+    _HEADER_WITH_VOLUME = StoryHeader(
+        voices={"narrator": "nova"},
+        audio={"rain": AudioAsset(file="sounds/rain.mp3", volume=0.2)},
     )
 
     def test_missing_audio_file_raises(self, project_state):
@@ -444,12 +433,8 @@ class TestAssembleSceneWithAudioCues:
         scene = project_state.metadata.scenes[0]
         scene.audio_cues = [SceneAudioCue(key="rain", position=0)]
 
-        # Write source story with audio map pointing to nonexistent file
-        source_path = project_state.project_dir / "source_story.txt"
-        source_path.write_text(self._STORY_HEADER, encoding="utf-8")
-
         with pytest.raises(FileNotFoundError, match="rain.mp3"):
-            assemble_scene(scene, project_state)
+            assemble_scene(scene, project_state, story_header=self._HEADER)
 
     @patch("story_video.pipeline.video_assembler.run_ffmpeg")
     def test_audio_cues_produce_amix_in_command(self, mock_run, project_state):
@@ -457,16 +442,12 @@ class TestAssembleSceneWithAudioCues:
         scene = project_state.metadata.scenes[0]
         scene.audio_cues = [SceneAudioCue(key="rain", position=0)]
 
-        # Write source story with audio map
-        source_path = project_state.project_dir / "source_story.txt"
-        source_path.write_text(self._STORY_HEADER_WITH_VOLUME, encoding="utf-8")
-
         # Create the audio file on disk
         sounds_dir = project_state.project_dir / "sounds"
         sounds_dir.mkdir()
         (sounds_dir / "rain.mp3").write_bytes(b"fake audio")
 
-        assemble_scene(scene, project_state)
+        assemble_scene(scene, project_state, story_header=self._HEADER_WITH_VOLUME)
 
         cmd = mock_run.call_args[0][0]
         cmd_str = " ".join(str(c) for c in cmd)
@@ -478,27 +459,20 @@ class TestAssembleSceneWithAudioCues:
         scene = project_state.metadata.scenes[0]
         scene.audio_cues = [SceneAudioCue(key="nonexistent", position=0)]
 
-        source_path = project_state.project_dir / "source_story.txt"
-        source_path.write_text(self._STORY_HEADER, encoding="utf-8")
-
         with pytest.raises(KeyError, match="nonexistent"):
-            assemble_scene(scene, project_state)
+            assemble_scene(scene, project_state, story_header=self._HEADER)
 
     def test_path_traversal_raises(self, project_state):
         """Audio file path that escapes project directory raises ValueError."""
+        header = StoryHeader(
+            voices={"narrator": "nova"},
+            audio={"evil": AudioAsset(file="../../../etc/passwd")},
+        )
         scene = project_state.metadata.scenes[0]
         scene.audio_cues = [SceneAudioCue(key="evil", position=0)]
 
-        # Write source story with path traversal in audio file
-        source_path = project_state.project_dir / "source_story.txt"
-        source_path.write_text(
-            "---\nvoices:\n  narrator: nova\naudio:\n  evil:\n"
-            "    file: ../../../etc/passwd\n---\nTest.",
-            encoding="utf-8",
-        )
-
         with pytest.raises(ValueError, match="escapes project directory"):
-            assemble_scene(scene, project_state)
+            assemble_scene(scene, project_state, story_header=header)
 
     @patch("story_video.pipeline.video_assembler.run_ffmpeg")
     def test_no_audio_cues_unchanged(self, mock_run, project_state):

@@ -27,10 +27,10 @@ from story_video.models import (
     Scene,
     SceneAudioCue,
     SceneStatus,
+    StoryHeader,
 )
 from story_video.pipeline.image_timing import compute_image_timings, validate_image_timings
 from story_video.state import ProjectState
-from story_video.utils.narration_tags import parse_story_header
 
 __all__ = [
     "assemble_scene",
@@ -123,7 +123,9 @@ def _resolve_audio_cues(
     return specs
 
 
-def assemble_scene(scene: Scene, state: ProjectState) -> None:
+def assemble_scene(
+    scene: Scene, state: ProjectState, *, story_header: StoryHeader | None = None
+) -> None:
     """Render a single scene into a video segment.
 
     For single-image scenes, produces the same output as before.
@@ -133,6 +135,7 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     Args:
         scene: The scene to render.
         state: Project state for config access and persistence.
+        story_header: Parsed story header for audio asset resolution, or None.
 
     Raises:
         FileNotFoundError: If audio, image, or caption JSON file is missing.
@@ -175,10 +178,7 @@ def assemble_scene(scene: Scene, state: ProjectState) -> None:
     # Resolve audio cues if present
     audio_cue_specs: list[AudioCueSpec] | None = None
     if scene.audio_cues:
-        source_path = state.project_dir / "source_story.txt"
-        source_text = source_path.read_text(encoding="utf-8")
-        header, _ = parse_story_header(source_text)
-        audio_map = header.audio if header else {}
+        audio_map = story_header.audio if story_header else {}
         audio_cue_specs = _resolve_audio_cues(
             scene.audio_cues,
             audio_map,
