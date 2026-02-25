@@ -153,6 +153,24 @@ Significant technical decisions with context and rationale.
 
 ---
 
+### ADR-010: Background Music via Inline Tags and FFmpeg amix
+
+**Status:** Accepted
+
+**Context:** Authors want to layer background music and sound effects onto narration at specific points in the story. Music files are supplied by the user, not generated. The system already has inline tag infrastructure from image tags (ADR-009) and voice/mood tags (ADR-007).
+
+**Decision:** Reuse the inline tag pattern: authors define audio assets in a YAML front matter `audio:` map (with `file`, `volume`, `loop`, `fade_in`, `fade_out` properties) and place `**music:key**` tags in scene text. Tag parsing computes character offsets in stripped-text coordinates. During video assembly, character positions are mapped to Whisper timestamps via `bisect_left` on cumulative word offsets (same approach as image timing). FFmpeg mixes narration with music tracks using per-track filter chains (`adelay` for start offset, `volume` for level, `aloop`+`atrim` for looping, `afade` for fades) fed into `amix`. Music scope is per-scene only — tracks do not carry across scene boundaries.
+
+**Consequences:**
+- Consistent authoring model — same YAML + inline tag pattern as images and voice/mood
+- Per-scene scope simplifies implementation (no cross-segment state) at the cost of continuous background music
+- Audio file paths resolved relative to project directory (where `source_story.txt` lives)
+- `assemble_scene` re-parses the story header when audio cues are present (simple, avoids new artifact files)
+- The `amix` filter uses `duration=first` so output matches narration length regardless of music track length
+- Looping with `aloop` enables short sound files to fill long scenes
+
+---
+
 ## Technical Notes
 
 ### Patterns
@@ -170,7 +188,7 @@ Significant technical decisions with context and rationale.
 - ElevenLabs does not support the `speed` parameter — a warning is logged if speed != 1.0
 - ElevenLabs mood mapping uses `_mood_to_elevenlabs_text()` which receives the raw mood keyword directly via the `mood` parameter and wraps it as a freeform audio tag (e.g., `[excited]`) prepended to text.
 - FFmpeg filter complexity grows with video effects — blur background + still image overlay + subtitle rendering requires careful filter graph construction
-- **Tag coordinate systems:** Inline tags (`**image:X**`, `**voice:X**`, `**mood:X**`) exist in raw prose but are stripped before TTS. Any feature that maps tag positions to Whisper timestamps must compute positions in the *stripped-text* coordinate system, not raw prose. The pipeline strips tags at different stages (image tags in `_populate_image_tags`, voice/mood tags in `parse_narration_segments`), so positions must account for all preceding tag characters. See `extract_image_tags_stripped()` in `narration_tags.py`.
+- **Tag coordinate systems:** Inline tags (`**image:X**`, `**music:X**`, `**voice:X**`, `**mood:X**`) exist in raw prose but are stripped before TTS. Any feature that maps tag positions to Whisper timestamps must compute positions in the *stripped-text* coordinate system, not raw prose. The pipeline strips tags at different stages (image tags in `_populate_image_tags`, music tags in `_populate_music_tags`, voice/mood tags in `parse_narration_segments`), so positions must account for all preceding tag characters. See `extract_image_tags_stripped()` and `extract_music_tags_stripped()` in `narration_tags.py`.
 
 ### External Integrations
 
