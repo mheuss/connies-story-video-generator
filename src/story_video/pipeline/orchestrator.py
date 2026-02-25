@@ -24,6 +24,7 @@ from story_video.models import (
     PhaseStatus,
     PipelinePhase,
     Scene,
+    SceneAudioCue,
     SceneImagePrompt,
     SceneStatus,
     StoryHeader,
@@ -47,9 +48,12 @@ from story_video.pipeline.video_assembler import assemble_scene, assemble_video
 from story_video.state import ProjectState
 from story_video.utils.narration_tags import (
     extract_image_tags_stripped,
+    extract_music_tags_stripped,
     parse_story_header,
     strip_image_tags,
+    strip_music_tags,
     validate_image_tags,
+    validate_music_tags,
 )
 
 __all__ = ["run_pipeline"]
@@ -259,6 +263,7 @@ def _dispatch_phase(
             msg = "claude_client is required for IMAGE_PROMPTS phase"
             raise ValueError(msg)
         _populate_image_tags(state, story_header)
+        _populate_music_tags(state, story_header)
         generate_image_prompts(state, claude_client)
 
     elif phase == PipelinePhase.TTS_GENERATION:
@@ -335,6 +340,48 @@ def _populate_image_tags(state: ProjectState, story_header: StoryHeader | None) 
         # Also ensures narration_prep doesn't pass image tags to Claude.
         text_to_strip = scene.narration_text if scene.narration_text is not None else scene.prose
         scene.narration_text = strip_image_tags(text_to_strip)
+
+
+def _populate_music_tags(state: ProjectState, story_header: StoryHeader | None) -> None:
+    """Extract music tags from scene prose and populate audio_cues from YAML header.
+
+    For each scene, if the prose contains **music:key** tags:
+    1. Extract tags with character offsets (stripped-text coordinates)
+    2. Validate all keys exist in the story header's audio map
+    3. Set scene.audio_cues from the YAML-defined audio assets
+
+    Scenes without music tags are left unchanged (audio_cues stays empty).
+
+    Args:
+        state: Project state with populated scenes.
+        story_header: Parsed story header with audio map, or None.
+    """
+    audio = story_header.audio if story_header else {}
+
+    for scene in state.metadata.scenes:
+        # Skip scenes that already have cues (e.g., from a previous run)
+        if scene.audio_cues:
+            continue
+
+        tags = extract_music_tags_stripped(scene.prose)
+        if not tags:
+            continue
+
+        if not audio:
+            msg = (
+                f"Scene {scene.scene_number} has music tags but no audio "
+                "defined in the YAML header."
+            )
+            raise ValueError(msg)
+
+        validate_music_tags(tags, audio)
+
+        scene.audio_cues = [SceneAudioCue(key=tag.key, position=tag.position) for tag in tags]
+
+        # Strip music tags from narration text so TTS doesn't speak them.
+        # Also ensures narration_prep doesn't pass music tags to Claude.
+        text_to_strip = scene.narration_text if scene.narration_text is not None else scene.prose
+        scene.narration_text = strip_music_tags(text_to_strip)
 
 
 def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> None:

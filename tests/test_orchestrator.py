@@ -13,10 +13,13 @@ import pytest
 from story_video.models import (
     AppConfig,
     AssetType,
+    AudioAsset,
     InputMode,
     PhaseStatus,
     PipelineConfig,
     PipelinePhase,
+    Scene,
+    SceneAudioCue,
     SceneStatus,
     StoryHeader,
 )
@@ -25,6 +28,7 @@ from story_video.pipeline.orchestrator import (
     _determine_start_phase,
     _dispatch_phase,
     _parse_source_header,
+    _populate_music_tags,
     _run_narration_prep,
     run_pipeline,
 )
@@ -2264,3 +2268,107 @@ class TestPopulateImageTags:
         scene = state.metadata.scenes[0]
         assert len(scene.image_prompts) == 1
         assert scene.image_prompts[0].prompt == "Existing prompt"
+
+
+# ---------------------------------------------------------------------------
+# TestPopulateMusicTags — music tag extraction and audio_cues population
+# ---------------------------------------------------------------------------
+
+
+class TestPopulateMusicTags:
+    """_populate_music_tags extracts music tags and populates audio_cues."""
+
+    def test_extracts_music_tags(self, tmp_path):
+        """Scenes with music tags get audio_cues populated."""
+        state = _make_adapt_state(tmp_path)
+        state.metadata.scenes = [
+            Scene(
+                scene_number=1,
+                title="Test",
+                prose="Rain fell. **music:rain** Thunder. **music:thunder** End.",
+            )
+        ]
+        header = StoryHeader(
+            voices={"narrator": "nova"},
+            audio={
+                "rain": AudioAsset(file="rain.mp3"),
+                "thunder": AudioAsset(file="thunder.mp3"),
+            },
+        )
+        _populate_music_tags(state, header)
+        assert len(state.metadata.scenes[0].audio_cues) == 2
+        assert state.metadata.scenes[0].audio_cues[0].key == "rain"
+        assert state.metadata.scenes[0].audio_cues[1].key == "thunder"
+
+    def test_strips_music_tags_from_narration_text(self, tmp_path):
+        """Music tags are stripped from narration_text."""
+        state = _make_adapt_state(tmp_path)
+        state.metadata.scenes = [
+            Scene(
+                scene_number=1,
+                title="Test",
+                prose="Hello **music:rain** world.",
+            )
+        ]
+        header = StoryHeader(
+            voices={"narrator": "nova"},
+            audio={"rain": AudioAsset(file="rain.mp3")},
+        )
+        _populate_music_tags(state, header)
+        assert "**music:" not in (state.metadata.scenes[0].narration_text or "")
+
+    def test_no_tags_leaves_scene_unchanged(self, tmp_path):
+        state = _make_adapt_state(tmp_path)
+        state.metadata.scenes = [Scene(scene_number=1, title="Test", prose="No tags here.")]
+        header = StoryHeader(voices={"narrator": "nova"})
+        _populate_music_tags(state, header)
+        assert state.metadata.scenes[0].audio_cues == []
+
+    def test_unknown_key_raises(self, tmp_path):
+        state = _make_adapt_state(tmp_path)
+        state.metadata.scenes = [
+            Scene(
+                scene_number=1,
+                title="Test",
+                prose="Hello **music:unknown** world.",
+            )
+        ]
+        header = StoryHeader(
+            voices={"narrator": "nova"},
+            audio={"rain": AudioAsset(file="rain.mp3")},
+        )
+        with pytest.raises(ValueError, match="unknown"):
+            _populate_music_tags(state, header)
+
+    def test_tags_but_no_audio_map_raises(self, tmp_path):
+        state = _make_adapt_state(tmp_path)
+        state.metadata.scenes = [
+            Scene(
+                scene_number=1,
+                title="Test",
+                prose="Hello **music:rain** world.",
+            )
+        ]
+        header = StoryHeader(voices={"narrator": "nova"})
+        with pytest.raises(ValueError, match="no audio"):
+            _populate_music_tags(state, header)
+
+    def test_skips_scenes_with_existing_cues(self, tmp_path):
+        """Scenes that already have audio_cues are skipped (resume support)."""
+        cue = SceneAudioCue(key="rain", position=0, start_time=1.0)
+        state = _make_adapt_state(tmp_path)
+        state.metadata.scenes = [
+            Scene(
+                scene_number=1,
+                title="Test",
+                prose="Hello **music:rain** world.",
+                audio_cues=[cue],
+            )
+        ]
+        header = StoryHeader(
+            voices={"narrator": "nova"},
+            audio={"rain": AudioAsset(file="rain.mp3")},
+        )
+        _populate_music_tags(state, header)
+        # Should not have re-processed — still has the original cue
+        assert state.metadata.scenes[0].audio_cues[0].start_time == 1.0
