@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { useProgressStream } from "../hooks/useProgressStream";
 import ReviewScreen from "../components/ReviewScreen";
 import ProgressBar from "../components/ProgressBar";
+import { api } from "../api/client";
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -13,6 +14,16 @@ export default function ProjectPage() {
         <h2>Error</h2>
         <p style={{ color: "red" }}>{progress.error}</p>
         <p>Check the server logs for details.</p>
+        {projectId && (
+          <button
+            onClick={() => {
+              api.startPipeline(projectId);
+              window.location.reload();
+            }}
+          >
+            Retry
+          </button>
+        )}
       </div>
     );
   }
@@ -23,11 +34,19 @@ export default function ProjectPage() {
         <h2>Video Complete</h2>
         <p>Your story video is ready.</p>
         {projectId && (
-          <video
-            controls
-            style={{ maxWidth: "100%" }}
-            src={`/api/v1/projects/${projectId}/artifacts/video_assembly/final.mp4`}
-          />
+          <>
+            <video
+              controls
+              style={{ maxWidth: "100%" }}
+              src={`/api/v1/projects/${projectId}/artifacts/video_assembly/final.mp4`}
+            />
+            <a
+              href={`/api/v1/projects/${projectId}/artifacts/video_assembly/final.mp4`}
+              download
+            >
+              Download Video
+            </a>
+          </>
         )}
       </div>
     );

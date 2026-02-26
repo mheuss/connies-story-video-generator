@@ -29,50 +29,66 @@ export function useProgressStream(projectId: string | null): ProgressState {
   useEffect(() => {
     if (!projectId) return;
 
-    const es = new EventSource(`/api/v1/projects/${projectId}/progress`);
-    esRef.current = es;
+    let retryCount = 0;
 
-    const handleEvent = (type: string) => (event: MessageEvent) => {
-      const data = JSON.parse(event.data) as Record<string, unknown>;
-      const progressEvent: ProgressEvent = { event: type as ProgressEvent["event"], data };
+    const connect = () => {
+      const es = new EventSource(`/api/v1/projects/${projectId}/progress`);
+      esRef.current = es;
 
-      setState((prev) => {
-        const next = { ...prev, events: [...prev.events, progressEvent] };
+      const handleEvent = (type: string) => (event: MessageEvent) => {
+        const data = JSON.parse(event.data) as Record<string, unknown>;
+        const progressEvent: ProgressEvent = { event: type as ProgressEvent["event"], data };
 
-        if (type === "phase_started") {
-          next.currentPhase = (data.phase as string) || null;
-          next.scenesDone = 0;
-          next.scenesTotal = (data.scene_count as number) || 0;
-        } else if (type === "scene_progress") {
-          next.scenesDone = (data.scene_number as number) || 0;
-          next.scenesTotal = (data.total as number) || prev.scenesTotal;
-        } else if (type === "checkpoint") {
-          next.checkpoint = { phase: data.phase as string, project_id: data.project_id as string };
-        } else if (type === "completed") {
-          next.isComplete = true;
-        } else if (type === "error") {
-          next.error = (data.message as string) || "Pipeline failed";
+        // Successful message resets retry count
+        retryCount = 0;
+
+        setState((prev) => {
+          const next = { ...prev, events: [...prev.events, progressEvent] };
+
+          if (type === "phase_started") {
+            next.currentPhase = (data.phase as string) || null;
+            next.scenesDone = 0;
+            next.scenesTotal = (data.scene_count as number) || 0;
+          } else if (type === "scene_progress") {
+            next.scenesDone = (data.scene_number as number) || 0;
+            next.scenesTotal = (data.total as number) || prev.scenesTotal;
+          } else if (type === "checkpoint") {
+            next.checkpoint = { phase: data.phase as string, project_id: data.project_id as string };
+          } else if (type === "completed") {
+            next.isComplete = true;
+          } else if (type === "error") {
+            next.error = (data.message as string) || "Pipeline failed";
+          }
+
+          return next;
+        });
+
+        if (TERMINAL_EVENTS.has(type)) {
+          es.close();
         }
+      };
 
-        return next;
-      });
-
-      if (TERMINAL_EVENTS.has(type)) {
-        es.close();
+      for (const type of SSE_EVENT_TYPES) {
+        es.addEventListener(type, handleEvent(type));
       }
+
+      es.onerror = () => {
+        es.close();
+        if (retryCount < 5) {
+          retryCount++;
+          setTimeout(() => {
+            connect();
+          }, 1000 * retryCount);
+        } else {
+          setState((prev) => ({ ...prev, error: "Connection lost after multiple retries" }));
+        }
+      };
     };
 
-    for (const type of SSE_EVENT_TYPES) {
-      es.addEventListener(type, handleEvent(type));
-    }
-
-    es.onerror = () => {
-      setState((prev) => ({ ...prev, error: "Connection lost" }));
-      es.close();
-    };
+    connect();
 
     return () => {
-      es.close();
+      esRef.current?.close();
     };
   }, [projectId]);
 

@@ -101,4 +101,26 @@ describe("ProjectPage", () => {
 
     expect(screen.getByText("TTS failed")).toBeInTheDocument();
   });
+
+  it("shows retry button on error", () => {
+    renderProjectPage("test-project");
+    const es = MockEventSource.instances[0];
+
+    act(() => {
+      es.emit("error", JSON.stringify({ message: "TTS failed" }));
+    });
+
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("shows download link when video is complete", () => {
+    renderProjectPage("test-project");
+    const es = MockEventSource.instances[0];
+
+    act(() => {
+      es.emit("completed", JSON.stringify({}));
+    });
+
+    expect(screen.getByRole("link", { name: /download/i })).toBeInTheDocument();
+  });
 });
