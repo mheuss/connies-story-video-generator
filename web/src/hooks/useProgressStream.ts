@@ -7,6 +7,8 @@ interface ProgressState {
   checkpoint: { phase: string; project_id: string } | null;
   isComplete: boolean;
   error: string | null;
+  scenesDone: number;
+  scenesTotal: number;
 }
 
 const TERMINAL_EVENTS = new Set(["checkpoint", "completed", "error"]);
@@ -19,6 +21,8 @@ export function useProgressStream(projectId: string | null): ProgressState {
     checkpoint: null,
     isComplete: false,
     error: null,
+    scenesDone: 0,
+    scenesTotal: 0,
   });
   const esRef = useRef<EventSource | null>(null);
 
@@ -37,6 +41,11 @@ export function useProgressStream(projectId: string | null): ProgressState {
 
         if (type === "phase_started") {
           next.currentPhase = (data.phase as string) || null;
+          next.scenesDone = 0;
+          next.scenesTotal = (data.scene_count as number) || 0;
+        } else if (type === "scene_progress") {
+          next.scenesDone = (data.scene_number as number) || 0;
+          next.scenesTotal = (data.total as number) || prev.scenesTotal;
         } else if (type === "checkpoint") {
           next.checkpoint = { phase: data.phase as string, project_id: data.project_id as string };
         } else if (type === "completed") {

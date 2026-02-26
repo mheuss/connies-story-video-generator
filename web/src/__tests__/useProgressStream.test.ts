@@ -89,6 +89,44 @@ describe("useProgressStream", () => {
     expect(result.current.checkpoint).toEqual({ phase: "analysis", project_id: "test-project" });
   });
 
+  it("tracks scene progress from scene_progress events", () => {
+    const { result } = renderHook(() => useProgressStream("test-project"));
+    const es = MockEventSource.instances[0];
+
+    act(() => {
+      es.emit("phase_started", JSON.stringify({ phase: "image_generation", scene_count: 10 }));
+    });
+
+    expect(result.current.scenesDone).toBe(0);
+    expect(result.current.scenesTotal).toBe(10);
+
+    act(() => {
+      es.emit("scene_progress", JSON.stringify({ phase: "image_generation", scene_number: 3, total: 10 }));
+    });
+
+    expect(result.current.scenesDone).toBe(3);
+    expect(result.current.scenesTotal).toBe(10);
+  });
+
+  it("resets scenesDone when a new phase starts", () => {
+    const { result } = renderHook(() => useProgressStream("test-project"));
+    const es = MockEventSource.instances[0];
+
+    act(() => {
+      es.emit("phase_started", JSON.stringify({ phase: "tts_generation", scene_count: 8 }));
+      es.emit("scene_progress", JSON.stringify({ phase: "tts_generation", scene_number: 5, total: 8 }));
+    });
+
+    expect(result.current.scenesDone).toBe(5);
+
+    act(() => {
+      es.emit("phase_started", JSON.stringify({ phase: "image_generation", scene_count: 8 }));
+    });
+
+    expect(result.current.scenesDone).toBe(0);
+    expect(result.current.scenesTotal).toBe(8);
+  });
+
   it("closes connection on unmount", () => {
     const { unmount } = renderHook(() => useProgressStream("test-project"));
     const es = MockEventSource.instances[0];

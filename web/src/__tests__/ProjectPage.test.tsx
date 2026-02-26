@@ -64,7 +64,20 @@ describe("ProjectPage", () => {
     });
 
     expect(screen.getByText("Current phase:")).toBeInTheDocument();
-    expect(screen.getByText("analysis")).toBeInTheDocument();
+    // Phase name appears in both the status line and the progress bar
+    expect(screen.getAllByText("analysis").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows progress bar when phase has scene count", () => {
+    renderProjectPage("test-project");
+    const es = MockEventSource.instances[0];
+
+    act(() => {
+      es.emit("phase_started", JSON.stringify({ phase: "image_generation", scene_count: 10 }));
+    });
+
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    expect(screen.getByText("0 / 10")).toBeInTheDocument();
   });
 
   it("shows video when completed", () => {

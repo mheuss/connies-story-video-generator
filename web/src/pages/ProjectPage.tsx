@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useProgressStream } from "../hooks/useProgressStream";
 import ReviewScreen from "../components/ReviewScreen";
+import ProgressBar from "../components/ProgressBar";
 
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -45,6 +46,13 @@ export default function ProjectPage() {
         </p>
       ) : (
         <p>Starting pipeline...</p>
+      )}
+      {progress.currentPhase && progress.scenesTotal > 0 && (
+        <ProgressBar
+          phase={progress.currentPhase}
+          scenesDone={progress.scenesDone}
+          scenesTotal={progress.scenesTotal}
+        />
       )}
       <div style={{ background: "#f0f0f0", borderRadius: 4, padding: "0.5rem", marginTop: "1rem" }}>
         {progress.events.map((evt, i) => (
