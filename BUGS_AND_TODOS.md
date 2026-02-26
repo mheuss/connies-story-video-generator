@@ -7,7 +7,7 @@ Items committed to the current sprint/cycle.
 ### Web UI — 2026-02-25
 
 - [x] **Web UI backend API (Plan 1/3)** — FastAPI backend with project CRUD, pipeline start/approve, SSE progress streaming, artifact serving, API key setup, and `serve` CLI command. (`docs/plans/2026-02-25-web-ui-backend-implementation.md`)
-- [ ] **Web UI React frontend (Plan 2/3)** — Vite + React SPA with Storybook, create/progress/review screens, SSE integration.
+- [x] **Web UI React frontend (Plan 2/3)** — Vite + React SPA with Storybook, create/progress/review screens, SSE integration, settings page, progress bars, retry/download, artifact edit validation.
 - [ ] **Web UI Docker & packaging (Plan 3/3)** — Dockerfile, static file serving, port config.
 - [ ] **Web UI file upload** — Design doc mentions `source_file?` for file uploads, but v1 API only accepts `source_text` as a string. Add multipart file upload support when frontend needs it.
 
