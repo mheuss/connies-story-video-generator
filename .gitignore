@@ -49,6 +49,10 @@ coverage.xml
 # Git worktrees
 .worktrees/
 
+# Frontend
+web/node_modules/
+web/dist/
+
 # Local workflow and tracking files (agent-specific)
 BUGS_AND_TODOS.md
 CHANGELOG.md
