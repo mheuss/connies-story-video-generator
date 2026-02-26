@@ -52,6 +52,7 @@ coverage.xml
 # Frontend
 web/node_modules/
 web/dist/
+web/storybook-static/
 
 # Local workflow and tracking files (agent-specific)
 BUGS_AND_TODOS.md
