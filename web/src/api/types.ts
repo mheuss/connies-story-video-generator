@@ -52,6 +52,6 @@ export interface ArtifactList {
 
 /** SSE event from the progress endpoint. */
 export interface ProgressEvent {
-  event: "phase_started" | "checkpoint" | "completed" | "error";
+  event: "phase_started" | "scene_progress" | "checkpoint" | "completed" | "error";
   data: Record<string, unknown>;
 }
