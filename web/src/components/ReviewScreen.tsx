@@ -35,11 +35,15 @@ export default function ReviewScreen({ projectId, checkpoint }: Props) {
   };
 
   const handleEdit = async (filename: string) => {
-    const url = api.getArtifactUrl(projectId, checkpoint.phase, filename);
-    const response = await fetch(url);
-    const text = await response.text();
-    setEditContent(text);
-    setEditingFile(filename);
+    try {
+      const url = api.getArtifactUrl(projectId, checkpoint.phase, filename);
+      const response = await fetch(url);
+      const text = await response.text();
+      setEditContent(text);
+      setEditingFile(filename);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load artifact");
+    }
   };
 
   const handleSave = async () => {

@@ -16,15 +16,21 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
   const [openaiConfigured, setOpenaiConfigured] = useState(false);
 
   useEffect(() => {
-    api.getApiKeyStatus().then((status) => {
-      setAnthropicConfigured(status.anthropic_configured);
-      setOpenaiConfigured(status.openai_configured);
-      if (status.anthropic_configured && status.openai_configured && !forceShow) {
-        onComplete();
-      } else {
+    api
+      .getApiKeyStatus()
+      .then((status) => {
+        setAnthropicConfigured(status.anthropic_configured);
+        setOpenaiConfigured(status.openai_configured);
+        if (status.anthropic_configured && status.openai_configured && !forceShow) {
+          onComplete();
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        setError("Failed to check API key status. Is the backend running?");
         setLoading(false);
-      }
-    });
+      });
   }, [onComplete, forceShow]);
 
   if (loading) return <p>Checking API keys...</p>;

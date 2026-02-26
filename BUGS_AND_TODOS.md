@@ -10,6 +10,11 @@ Items committed to the current sprint/cycle.
 - [x] **Web UI React frontend (Plan 2/3)** — Vite + React SPA with Storybook, create/progress/review screens, SSE integration, settings page, progress bars, retry/download, artifact edit validation.
 - [ ] **Web UI Docker & packaging (Plan 3/3)** — Dockerfile, static file serving, port config.
 - [ ] **Web UI file upload** — Design doc mentions `source_file?` for file uploads, but v1 API only accepts `source_text` as a string. Add multipart file upload support when frontend needs it.
+- [ ] **Web UI: Replace window.location.reload() with React state transitions** — ReviewScreen approve and ProjectPage retry use full page reload. Should use a `reset()` function on `useProgressStream` instead. (I-1 from PR review)
+- [ ] **Web UI: SSE reconnection should sync state via REST** — On reconnect, `useProgressStream` should call `api.getProject()` to detect if pipeline completed/failed during disconnect. (I-2 from PR review)
+- [ ] **Web UI: Add SSE reconnection tests** — `useProgressStream` onerror/reconnection logic is untested. (I-6 from PR review)
+- [ ] **Web UI: Verify `scene_progress` SSE event emitted by backend** — Frontend listens for it but backend may not emit it yet. Progress bar won't advance without it. (S-1 from PR review)
+- [ ] **Web UI: Expand Storybook stories** — Add error, loading, completed state variants per Task 16 intent. (S-4 from PR review)
 
 ## Backlog
 

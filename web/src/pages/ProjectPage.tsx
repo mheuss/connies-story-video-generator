@@ -16,9 +16,14 @@ export default function ProjectPage() {
         <p>Check the server logs for details.</p>
         {projectId && (
           <button
-            onClick={() => {
-              api.startPipeline(projectId);
-              window.location.reload();
+            onClick={async () => {
+              try {
+                await api.startPipeline(projectId);
+                window.location.reload();
+              } catch {
+                // startPipeline error will show on the reloaded page
+                window.location.reload();
+              }
             }}
           >
             Retry
