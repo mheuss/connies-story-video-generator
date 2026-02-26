@@ -8,11 +8,19 @@ export default function Layout() {
           borderBottom: "1px solid #eee",
           marginBottom: "1rem",
           paddingBottom: "0.5rem",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
         }}
       >
         <Link to="/" style={{ textDecoration: "none", color: "inherit" }}>
           <h1 style={{ margin: 0 }}>Story Video</h1>
         </Link>
+        <nav>
+          <Link to="/settings" style={{ fontSize: "0.9rem" }}>
+            Settings
+          </Link>
+        </nav>
       </header>
       <main>
         <Outlet />

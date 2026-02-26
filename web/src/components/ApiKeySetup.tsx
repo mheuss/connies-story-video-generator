@@ -3,24 +3,29 @@ import { api } from "../api/client";
 
 interface Props {
   onComplete: () => void;
+  forceShow?: boolean;
 }
 
-export default function ApiKeySetup({ onComplete }: Props) {
+export default function ApiKeySetup({ onComplete, forceShow }: Props) {
   const [loading, setLoading] = useState(true);
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [anthropicConfigured, setAnthropicConfigured] = useState(false);
+  const [openaiConfigured, setOpenaiConfigured] = useState(false);
 
   useEffect(() => {
     api.getApiKeyStatus().then((status) => {
-      if (status.anthropic_configured && status.openai_configured) {
+      setAnthropicConfigured(status.anthropic_configured);
+      setOpenaiConfigured(status.openai_configured);
+      if (status.anthropic_configured && status.openai_configured && !forceShow) {
         onComplete();
       } else {
         setLoading(false);
       }
     });
-  }, [onComplete]);
+  }, [onComplete, forceShow]);
 
   if (loading) return <p>Checking API keys...</p>;
 
@@ -51,7 +56,9 @@ export default function ApiKeySetup({ onComplete }: Props) {
       </p>
 
       <div style={{ marginBottom: "1rem" }}>
-        <label htmlFor="anthropic-key">Anthropic API Key</label>
+        <label htmlFor="anthropic-key">
+          Anthropic API Key{anthropicConfigured && " (configured)"}
+        </label>
         <br />
         <input
           id="anthropic-key"
@@ -64,7 +71,9 @@ export default function ApiKeySetup({ onComplete }: Props) {
       </div>
 
       <div style={{ marginBottom: "1rem" }}>
-        <label htmlFor="openai-key">OpenAI API Key</label>
+        <label htmlFor="openai-key">
+          OpenAI API Key{openaiConfigured && " (configured)"}
+        </label>
         <br />
         <input
           id="openai-key"
