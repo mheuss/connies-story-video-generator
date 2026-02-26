@@ -43,7 +43,7 @@ export default function ReviewScreen({ projectId, checkpoint }: Props) {
   };
 
   const handleSave = async () => {
-    if (!editingFile) return;
+    if (!editingFile || !editContent.trim()) return;
     try {
       await api.updateArtifact(projectId, checkpoint.phase, editingFile, editContent);
       setEditingFile(null);
@@ -73,7 +73,7 @@ export default function ReviewScreen({ projectId, checkpoint }: Props) {
             style={{ width: "100%", fontFamily: "monospace", padding: "0.5rem" }}
           />
           <div style={{ marginTop: "0.5rem" }}>
-            <button onClick={handleSave} style={{ marginRight: "0.5rem" }}>Save</button>
+            <button onClick={handleSave} disabled={!editContent.trim()} style={{ marginRight: "0.5rem" }}>Save</button>
             <button onClick={() => setEditingFile(null)}>Cancel</button>
           </div>
         </div>

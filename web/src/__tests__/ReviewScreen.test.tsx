@@ -74,4 +74,44 @@ describe("ReviewScreen", () => {
       expect(mockApprovePipeline).toHaveBeenCalledWith("test-project");
     });
   });
+
+  it("disables save button when edit content is empty", async () => {
+    mockListArtifacts.mockResolvedValueOnce({
+      files: [{ name: "outline.json", size: 100, content_type: "application/json" }],
+    });
+    mockGetArtifactUrl.mockReturnValue("/fake-url");
+
+    // Mock fetch for the edit flow (loading artifact content)
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      text: () => Promise.resolve(""),
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <ReviewScreen projectId="test-project" checkpoint={{ phase: "analysis", project_id: "test-project" }} />
+      </MemoryRouter>,
+    );
+
+    // Wait for artifacts to load
+    await waitFor(() => {
+      expect(screen.getByText("outline.json")).toBeInTheDocument();
+    });
+
+    // Click Edit button to enter edit mode
+    await user.click(screen.getByRole("button", { name: /edit/i }));
+
+    // Wait for edit mode (textarea should appear)
+    await waitFor(() => {
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
+    });
+
+    // Save button should be disabled because content is empty
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+
+    // Restore fetch
+    globalThis.fetch = originalFetch;
+  });
 });
