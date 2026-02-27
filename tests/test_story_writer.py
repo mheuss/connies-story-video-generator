@@ -1012,6 +1012,47 @@ class TestCheckPreservationEdgeCases:
         _check_preservation("   \n\t  ", [])
 
 
+class TestCheckPreservationUnicodeLookalikes:
+    """_check_preservation tolerates Claude swapping visually-identical Unicode chars."""
+
+    def test_curly_apostrophe_replaced_with_straight(self):
+        """Claude replacing \u2019 (right single quote) with ASCII ' should pass."""
+        original = "the world\u2019s rush"
+        scenes = [{"title": "A", "text": "the world's rush"}]
+        _check_preservation(original, scenes)
+
+    def test_straight_apostrophe_replaced_with_curly(self):
+        """Claude replacing ASCII ' with \u2019 should pass."""
+        original = "the world's rush"
+        scenes = [{"title": "A", "text": "the world\u2019s rush"}]
+        _check_preservation(original, scenes)
+
+    def test_em_dash_variants(self):
+        """Claude swapping em dash \u2014 for en dash \u2013 should pass."""
+        original = "someone \u2014 tired"
+        scenes = [{"title": "A", "text": "someone \u2013 tired"}]
+        _check_preservation(original, scenes)
+
+    def test_curly_double_quotes_replaced_with_straight(self):
+        """Claude replacing \u201c/\u201d with ASCII \" should pass."""
+        original = "\u201cHello,\u201d she said."
+        scenes = [{"title": "A", "text": '"Hello," she said.'}]
+        _check_preservation(original, scenes)
+
+    def test_ellipsis_replaced_with_dots(self):
+        """Claude replacing \u2026 with three dots should pass."""
+        original = "He paused\u2026 then spoke."
+        scenes = [{"title": "A", "text": "He paused... then spoke."}]
+        _check_preservation(original, scenes)
+
+    def test_real_word_change_still_caught(self):
+        """Actual content changes are still detected despite normalization."""
+        original = "the world\u2019s rush"
+        scenes = [{"title": "A", "text": "the world's calm"}]
+        with pytest.raises(ValueError, match="mismatch"):
+            _check_preservation(original, scenes)
+
+
 # ---------------------------------------------------------------------------
 # Analysis phase — test data
 # ---------------------------------------------------------------------------

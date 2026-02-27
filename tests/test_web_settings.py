@@ -10,9 +10,10 @@ from story_video.web.app import create_app
 class TestGetApiKeyStatus:
     """GET /api/v1/settings/api-keys returns which keys are configured."""
 
-    def test_returns_key_status_when_both_set(self, monkeypatch):
+    def test_returns_key_status_when_all_set(self, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test")
         app = create_app()
         client = TestClient(app)
         response = client.get("/api/v1/settings/api-keys")
@@ -20,17 +21,20 @@ class TestGetApiKeyStatus:
         data = response.json()
         assert data["anthropic_configured"] is True
         assert data["openai_configured"] is True
+        assert data["elevenlabs_configured"] is True
 
-    def test_returns_false_when_keys_missing(self, monkeypatch):
+    def test_returns_false_when_keys_missing(self, monkeypatch, tmp_path):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        app = create_app()
+        monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+        app = create_app(env_path=tmp_path / ".env")
         client = TestClient(app)
         response = client.get("/api/v1/settings/api-keys")
         assert response.status_code == 200
         data = response.json()
         assert data["anthropic_configured"] is False
         assert data["openai_configured"] is False
+        assert data["elevenlabs_configured"] is False
 
 
 class TestSetApiKeys:

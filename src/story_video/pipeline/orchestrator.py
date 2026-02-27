@@ -85,6 +85,7 @@ def run_pipeline(
     tts_provider: TTSProvider | None = None,
     image_provider: ImageProvider | None = None,
     caption_provider: CaptionProvider | None = None,
+    on_progress: Callable[[str, dict], None] | None = None,
 ) -> None:
     """Run the pipeline from current state to completion or checkpoint.
 
@@ -101,6 +102,7 @@ def run_pipeline(
         tts_provider: TTS provider (required for audio generation).
         image_provider: Image provider (required for image generation).
         caption_provider: Caption provider (required for caption generation).
+        on_progress: Optional callback(event_type, data) for progress reporting.
     """
     phases = state.get_phase_sequence()
     start = _determine_start_phase(state, phases)
@@ -123,6 +125,9 @@ def run_pipeline(
     # phases are not lost.
     for phase in phases[start_idx:]:
         state.start_phase(phase)
+        scene_count = len(state.metadata.scenes)
+        if on_progress:
+            on_progress("phase_started", {"phase": phase.value, "scene_count": scene_count})
         try:
             _dispatch_phase(
                 phase,
@@ -132,6 +137,7 @@ def run_pipeline(
                 image_provider=image_provider,
                 caption_provider=caption_provider,
                 story_header=story_header,
+                on_progress=on_progress,
             )
         except Exception:
             state.fail_phase()
@@ -220,6 +226,7 @@ def _dispatch_phase(
     image_provider: ImageProvider | None,
     caption_provider: CaptionProvider | None,
     story_header: StoryHeader | None = None,
+    on_progress: Callable[[str, dict], None] | None = None,
 ) -> None:
     """Route a phase to the appropriate pipeline module.
 
@@ -252,6 +259,10 @@ def _dispatch_phase(
         PipelinePhase.NARRATION_PREP: _run_narration_prep,
     }
 
+    def _scene_cb(scene_number: int, total: int) -> None:
+        if on_progress:
+            on_progress("scene_progress", {"scene_number": scene_number, "total": total})
+
     if phase in claude_handlers:
         if claude_client is None:
             msg = f"claude_client is required for {phase.name} phase"
@@ -273,24 +284,34 @@ def _dispatch_phase(
         _run_per_scene(
             state,
             lambda scene: generate_audio(scene, state, tts_provider, story_header=story_header),
+            on_scene_done=_scene_cb,
         )
 
     elif phase == PipelinePhase.IMAGE_GENERATION:
         if image_provider is None:
             msg = "image_provider is required for IMAGE_GENERATION phase"
             raise ValueError(msg)
-        _run_per_scene(state, lambda scene: generate_image(scene, state, image_provider))
+        _run_per_scene(
+            state,
+            lambda scene: generate_image(scene, state, image_provider),
+            on_scene_done=_scene_cb,
+        )
 
     elif phase == PipelinePhase.CAPTION_GENERATION:
         if caption_provider is None:
             msg = "caption_provider is required for CAPTION_GENERATION phase"
             raise ValueError(msg)
-        _run_per_scene(state, lambda scene: generate_captions(scene, state, caption_provider))
+        _run_per_scene(
+            state,
+            lambda scene: generate_captions(scene, state, caption_provider),
+            on_scene_done=_scene_cb,
+        )
 
     elif phase == PipelinePhase.VIDEO_ASSEMBLY:
         _run_per_scene(
             state,
             lambda scene: assemble_scene(scene, state, story_header=story_header),
+            on_scene_done=_scene_cb,
         )
         final_path = assemble_video(state)
         logger.info("Final video: %s", final_path)
@@ -470,7 +491,11 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
     state.save()
 
 
-def _run_per_scene(state: ProjectState, process_fn: Callable[[Scene], None]) -> None:
+def _run_per_scene(
+    state: ProjectState,
+    process_fn: Callable[[Scene], None],
+    on_scene_done: Callable[[int, int], None] | None = None,
+) -> None:
     """Run a processing function on each scene that needs work.
 
     Uses ``state.get_scenes_for_processing()`` to find scenes whose
@@ -480,7 +505,12 @@ def _run_per_scene(state: ProjectState, process_fn: Callable[[Scene], None]) -> 
     Args:
         state: Project state (must have a phase in progress).
         process_fn: Callable taking a single Scene argument.
+        on_scene_done: Optional callback(scene_number, total) after each scene.
     """
     scenes = state.get_scenes_for_processing()
-    for scene in scenes:
+    total = len(state.metadata.scenes)
+    already_done = total - len(scenes)
+    for i, scene in enumerate(scenes, already_done + 1):
         process_fn(scene)
+        if on_scene_done:
+            on_scene_done(i, total)

@@ -466,6 +466,8 @@ def build_concat_command(
     audio_transition_dur = video_config.audio_transition_duration
     fade_in_dur = video_config.fade_in_duration
     fade_out_dur = video_config.fade_out_duration
+    end_hold = video_config.end_hold_duration
+    lead_in = video_config.lead_in_duration
 
     # Build input arguments
     inputs: list[str] = []
@@ -473,16 +475,28 @@ def build_concat_command(
         inputs.extend(["-i", str(path)])
 
     if n == 1:
-        # Single segment: fade in/out only
-        total_dur = segment_durations[0]
+        # Single segment: fade in/out only.
+        # Add lead_in so the image can fade in before narration starts,
+        # and end_hold so the last frame lingers before the fade-out.
+        total_dur = lead_in + segment_durations[0] + end_hold
         # Clamp fades so they don't exceed half the total duration
         fade_in_dur = min(fade_in_dur, total_dur / 2)
         fade_out_dur = min(fade_out_dur, total_dur / 2)
         fade_out_start = max(0.0, total_dur - fade_out_dur)
+
+        lead_in_video = f"tpad=start_mode=clone:start_duration={lead_in}," if lead_in > 0 else ""
+        lead_in_ms = int(lead_in * 1000)
+        lead_in_audio = f"adelay={lead_in_ms}|{lead_in_ms}," if lead_in > 0 else ""
+
+        end_hold_video = f"tpad=stop_mode=clone:stop_duration={end_hold}," if end_hold > 0 else ""
+        end_hold_audio = f"apad=pad_dur={end_hold}," if end_hold > 0 else ""
+
         filtergraph = (
-            f"[0:v]fade=t=in:st=0:d={fade_in_dur},"
+            f"[0:v]{lead_in_video}{end_hold_video}"
+            f"fade=t=in:st=0:d={fade_in_dur},"
             f"fade=t=out:st={fade_out_start}:d={fade_out_dur}[outv];"
-            f"[0:a]afade=t=in:st=0:d={fade_in_dur},"
+            f"[0:a]{lead_in_audio}{end_hold_audio}"
+            f"afade=t=in:st=0:d={fade_in_dur},"
             f"afade=t=out:st={fade_out_start}:d={fade_out_dur}[outa]"
         )
     else:
@@ -530,12 +544,43 @@ def build_concat_command(
             prev_video_label = out_video
             prev_audio_label = out_audio
 
-        # Total output duration: last xfade offset + last segment duration.
-        # Using actual (clamped) offsets ensures correct fade timing even when
-        # short segments force offset clamping.
+        # Video xfade compresses by (n-1)*transition_dur, but audio acrossfade
+        # only compresses by (n-1)*audio_transition_dur. When transition_dur >>
+        # audio_transition_dur the video stream ends before the narrator finishes.
+        # Pad the video with repeated last frame so both streams have equal length,
+        # plus end_hold so the last frame lingers before the fade-out.
         last_offset = actual_offsets[-1] if actual_offsets else 0.0
-        total_dur = max(0.0, last_offset + segment_durations[-1])
-        # Clamp fades so they don't exceed half the total duration
+        video_total = max(0.0, last_offset + segment_durations[-1])
+        audio_total = max(0.0, sum(segment_durations) - (n - 1) * audio_transition_dur)
+
+        # Pad video to match audio + end_hold; pad audio with silence for end_hold.
+        video_pad = audio_total - video_total + end_hold
+        if video_pad > 0:
+            pad_label = "[vpad]"
+            video_parts.append(
+                f"{prev_video_label}tpad=stop_mode=clone:stop_duration={video_pad}{pad_label}"
+            )
+            prev_video_label = pad_label
+        if end_hold > 0:
+            hold_label = "[ahold]"
+            audio_parts.append(f"{prev_audio_label}apad=pad_dur={end_hold}{hold_label}")
+            prev_audio_label = hold_label
+
+        # Lead-in: pad video at start (clone first frame) and delay audio.
+        if lead_in > 0:
+            lead_label_v = "[vlead]"
+            video_parts.append(
+                f"{prev_video_label}tpad=start_mode=clone:start_duration={lead_in}{lead_label_v}"
+            )
+            prev_video_label = lead_label_v
+
+            lead_label_a = "[alead]"
+            lead_in_ms = int(lead_in * 1000)
+            audio_parts.append(f"{prev_audio_label}adelay={lead_in_ms}|{lead_in_ms}{lead_label_a}")
+            prev_audio_label = lead_label_a
+
+        # Use lead_in + audio_total + end_hold for both fades.
+        total_dur = lead_in + audio_total + end_hold
         fade_in_dur = min(fade_in_dur, total_dur / 2)
         fade_out_dur = min(fade_out_dur, total_dur / 2)
         fade_out_start = max(0.0, total_dur - fade_out_dur)

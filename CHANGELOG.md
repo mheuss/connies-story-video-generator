@@ -8,18 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Web UI — browser-based interface for creating projects, monitoring progress with SSE live updates, reviewing/editing artifacts at checkpoints, auto-approve mode, and video playback/download. Start with `story-video serve`.
+- Lead-in silence — 2-second delay before narration starts, giving the opening image time to fade in from black. Configurable via `lead_in_duration` in `VideoConfig`.
+- Indeterminate progress bar in web UI — phases without per-scene progress (analysis, image_prompts, narration_prep) show an animated "Working..." bar instead of appearing stuck.
+- Background music and sound effects — `**music:key**` tags trigger audio tracks defined in YAML header. Supports volume, looping, fade in/out. Mixed with narration via FFmpeg amix filter.
+- Pause tags — `**pause:N**` inserts silence into narration for pacing and dramatic beats.
+- Scene markers — `**scene:Title**` tags for manual scene splitting, skipping the AI splitting step.
 - Original creative flow — generates stories from a creative brief or prompt using the same 5-phase pipeline as inspired_by mode. ANALYSIS phase uses a dedicated brief interpretation prompt; story length derived from config defaults.
 - Inspired_by creative flow — 5-phase pipeline (source analysis, story bible, outline, scene prose with running summaries, critique/revision) that creates original stories inspired by existing source material. Includes `--premise` flag for creative direction and semi-auto checkpoints at each creative phase.
 - Inline image tags — define image prompts in YAML header `images:` map and place `**image:key**` tags in story text to control image transitions within scenes. Caption-aligned timing, crossfade transitions between images, and minimum display duration validation. Backward compatible with existing stories.
 
 ### Changed
-- CLI flag `--source-material` renamed to `--input` — applies to all three modes (adapt, iWenspired_by, original). Clean break, no deprecated alias.
+- CLI flag `--source-material` renamed to `--input` — applies to all three modes (adapt, inspired_by, original). Clean break, no deprecated alias.
 - `TTSProvider.synthesize()` accepts optional `mood` parameter — BREAKING for custom provider implementations
 
 ### Removed
 - `OutputConfig` and `output:` config section — BREAKING: users with custom config.yaml files containing `output:` must remove that section
 
 ### Fixed
+- Scene splitting no longer fails on Unicode look-alike characters (curly quotes, em dashes, ellipsis) swapped by Claude during processing.
+- Resume progress counter now starts from the correct scene number instead of always starting at 1.
+- Artifact export narrows exception handling to avoid silently hiding corrupt project state.
+- Single-segment concat no longer emits unnecessary zero-duration `tpad`/`apad` filters when `end_hold_duration` is 0.
 - Scene summaries now persist across resume — subsequent scenes get full prose summary context instead of title-only
 
 ## [0.4.0] — 2026-02-18

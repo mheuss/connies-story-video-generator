@@ -33,6 +33,7 @@ class CreateProjectRequest(BaseModel):
 
     mode: str
     source_text: str
+    autonomous: bool = False
 
     @field_validator("mode")
     @classmethod
@@ -78,7 +79,7 @@ async def create_project(body: CreateProjectRequest) -> dict:
     mode = InputMode(body.mode)
     config = load_config(None)
     config = config.model_copy(
-        update={"pipeline": config.pipeline.model_copy(update={"autonomous": False})}
+        update={"pipeline": config.pipeline.model_copy(update={"autonomous": body.autonomous})}
     )
 
     project_id = _generate_project_id(body.mode)

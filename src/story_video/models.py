@@ -467,6 +467,10 @@ class VideoConfig(BaseModel):
         audio_transition_duration: Audio crossfade duration between scenes in seconds.
         fade_in_duration: Fade-from-black duration at video start in seconds.
         fade_out_duration: Fade-to-black duration at video end in seconds.
+        end_hold_duration: Seconds to hold the last frame after narration ends,
+            before the fade-out begins.
+        lead_in_duration: Seconds of silence before narration starts, giving the
+            opening image time to fade in from black.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -480,6 +484,8 @@ class VideoConfig(BaseModel):
     audio_transition_duration: float = Field(default=0.05, ge=0)
     fade_in_duration: float = Field(default=2.0, ge=0)
     fade_out_duration: float = Field(default=3.0, ge=0)
+    end_hold_duration: float = Field(default=2.0, ge=0)
+    lead_in_duration: float = Field(default=2.0, ge=0)
 
     @field_validator("resolution")
     @classmethod

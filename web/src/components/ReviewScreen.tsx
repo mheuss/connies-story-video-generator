@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { ArtifactFile } from "../api/types";
+import { getPhaseGuidance } from "../data/phaseGuidance";
 
 interface Props {
   projectId: string;
   checkpoint: { phase: string; project_id: string };
+  onApproved: () => void;
 }
 
-export default function ReviewScreen({ projectId, checkpoint }: Props) {
+export default function ReviewScreen({ projectId, checkpoint, onApproved }: Props) {
   const [files, setFiles] = useState<ArtifactFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +30,7 @@ export default function ReviewScreen({ projectId, checkpoint }: Props) {
     setApproving(true);
     try {
       await api.approvePipeline(projectId);
-      window.location.reload();
+      onApproved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to approve");
       setApproving(false);
@@ -59,11 +62,17 @@ export default function ReviewScreen({ projectId, checkpoint }: Props) {
   if (loading) return <p>Loading artifacts...</p>;
 
   const phaseName = checkpoint.phase.replace(/_/g, " ");
+  const guidance = getPhaseGuidance(checkpoint.phase);
 
   return (
     <div>
       <h2>Review: {phaseName}</h2>
       <p>The pipeline is waiting for your review. Check the artifacts below, make edits if needed, then approve to continue.</p>
+      {guidance && (
+        <div style={{ background: "#f8f9fa", padding: "0.75rem 1rem", borderRadius: 4, marginBottom: "1rem", fontSize: "0.95rem", color: "#444" }}>
+          <strong>{guidance.title}:</strong> {guidance.description}
+        </div>
+      )}
 
       {error && <p style={{ color: "red" }}>{error}</p>}
 
@@ -129,6 +138,23 @@ export default function ReviewScreen({ projectId, checkpoint }: Props) {
       <button onClick={handleApprove} disabled={approving} style={{ fontSize: "1.1rem", padding: "0.5rem 1.5rem" }}>
         {approving ? "Approving..." : "Approve & Continue"}
       </button>
+      <button
+        onClick={async () => {
+          setApproving(true);
+          try {
+            await api.approvePipeline(projectId, true);
+            onApproved();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to auto-approve");
+            setApproving(false);
+          }
+        }}
+        disabled={approving}
+        style={{ fontSize: "1.1rem", padding: "0.5rem 1.5rem", marginLeft: "0.5rem" }}
+      >
+        {approving ? "Approving..." : "Auto-approve remaining"}
+      </button>
+      <p><Link to="/">Back to home</Link></p>
     </div>
   );
 }

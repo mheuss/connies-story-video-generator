@@ -15,6 +15,7 @@ export const WithArtifacts: Story = {
   args: {
     projectId: "adapt-2026-02-25",
     checkpoint: { phase: "analysis", project_id: "adapt-2026-02-25" },
+    onApproved: () => console.log("Approved"),
   },
 };
 
@@ -22,5 +23,6 @@ export const EmptyArtifacts: Story = {
   args: {
     projectId: "adapt-2026-02-25",
     checkpoint: { phase: "outline", project_id: "adapt-2026-02-25" },
+    onApproved: () => console.log("Approved"),
   },
 };

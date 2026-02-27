@@ -1017,12 +1017,43 @@ def _load_json_artifact(project_dir: Path, filename: str) -> dict:
         raise ValueError(msg) from exc
 
 
+# Unicode look-alikes that Claude commonly swaps.  Maps fancy → ASCII so both
+# sides of the preservation comparison end up with the same characters.
+_UNICODE_NORMALIZE_MAP: dict[str, str] = {
+    "\u2018": "'",  # left single quote → ASCII apostrophe
+    "\u2019": "'",  # right single quote → ASCII apostrophe
+    "\u201c": '"',  # left double quote → ASCII double quote
+    "\u201d": '"',  # right double quote → ASCII double quote
+    "\u2013": "-",  # en dash → hyphen
+    "\u2014": "-",  # em dash → hyphen
+    "\u2026": "...",  # ellipsis → three dots
+}
+_UNICODE_NORMALIZE_TABLE = str.maketrans(
+    {k: v for k, v in _UNICODE_NORMALIZE_MAP.items() if len(v) == 1}
+)
+# Multi-char replacements (ellipsis) need str.replace, handled separately.
+_UNICODE_MULTI_CHAR = {k: v for k, v in _UNICODE_NORMALIZE_MAP.items() if len(v) > 1}
+
+
+def _normalize_for_comparison(text: str) -> str:
+    """Normalize text for preservation comparison.
+
+    Collapses whitespace to single spaces and maps common Unicode look-alikes
+    (curly quotes, em/en dashes, ellipsis) to their ASCII equivalents so that
+    Claude's character substitutions don't cause false mismatches.
+    """
+    text = text.translate(_UNICODE_NORMALIZE_TABLE)
+    for fancy, plain in _UNICODE_MULTI_CHAR.items():
+        text = text.replace(fancy, plain)
+    return " ".join(text.split())
+
+
 def _check_preservation(original: str, scenes: list[dict]) -> None:
     """Verify concatenated scene texts match the original source.
 
-    Normalizes whitespace before comparison: collapses all whitespace to single
-    spaces. This allows Claude to adjust paragraph breaks between scenes without
-    failing.
+    Normalizes whitespace and common Unicode look-alikes before comparison.
+    This allows Claude to adjust paragraph breaks and swap visually-identical
+    characters (curly quotes, em dashes, etc.) without failing.
 
     Args:
         original: The original source story text.
@@ -1032,9 +1063,9 @@ def _check_preservation(original: str, scenes: list[dict]) -> None:
         ValueError: If the texts don't match, with context showing where
             the mismatch occurs.
     """
-    normalized_original = " ".join(original.split())
+    normalized_original = _normalize_for_comparison(original)
     concatenated = " ".join(scene["text"] for scene in scenes)
-    normalized_concatenated = " ".join(concatenated.split())
+    normalized_concatenated = _normalize_for_comparison(concatenated)
 
     if normalized_original != normalized_concatenated:
         # Find position of first difference for debugging
@@ -1045,10 +1076,18 @@ def _check_preservation(original: str, scenes: list[dict]) -> None:
         original_snippet = normalized_original[context_start:context_end]
         concatenated_snippet = normalized_concatenated[context_start:context_end]
 
+        # Include code points so invisible differences are visible in logs
+        orig_chars = " ".join(
+            f"U+{ord(c):04X}" for c in normalized_original[max(0, pos - 2) : pos + 3]
+        )
+        concat_chars = " ".join(
+            f"U+{ord(c):04X}" for c in normalized_concatenated[max(0, pos - 2) : pos + 3]
+        )
+
         msg = (
             f"Text preservation mismatch at position {pos}. "
-            f"Original: '...{original_snippet}...' "
-            f"Concatenated: '...{concatenated_snippet}...'"
+            f"Original: '...{original_snippet}...' [{orig_chars}] "
+            f"Concatenated: '...{concatenated_snippet}...' [{concat_chars}]"
         )
         raise ValueError(msg)
 

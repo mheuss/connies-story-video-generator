@@ -18,4 +18,12 @@ describe("ProgressBar", () => {
     expect(bar).toHaveAttribute("aria-valuenow", "2");
     expect(bar).toHaveAttribute("aria-valuemax", "8");
   });
+
+  it("shows indeterminate mode when scenesTotal is 0", () => {
+    render(<ProgressBar phase="analysis" scenesDone={0} scenesTotal={0} />);
+    expect(screen.getByText("Working...")).toBeInTheDocument();
+    const bar = screen.getByRole("progressbar");
+    expect(bar).not.toHaveAttribute("aria-valuenow");
+    expect(bar).not.toHaveAttribute("aria-valuemax");
+  });
 });

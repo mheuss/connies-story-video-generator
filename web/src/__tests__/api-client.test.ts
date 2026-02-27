@@ -79,6 +79,28 @@ describe("api.createProject", () => {
   });
 });
 
+describe("api.createProject autonomous", () => {
+  it("sends autonomous flag in create request", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          project_id: "test",
+          mode: "adapt",
+          project_dir: "/tmp",
+        }),
+    });
+
+    await api.createProject({
+      mode: "adapt",
+      source_text: "Test.",
+      autonomous: true,
+    });
+    const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
+    expect(body.autonomous).toBe(true);
+  });
+});
+
 describe("api.getProject", () => {
   it("calls GET /api/v1/projects/{id}", async () => {
     mockFetch.mockResolvedValueOnce({
@@ -142,6 +164,28 @@ describe("api.approvePipeline", () => {
       "/api/v1/projects/adapt-2026-02-25/approve",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("sends auto flag when auto=true", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: "approved" }),
+    });
+
+    await api.approvePipeline("test-project", true);
+    const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
+    expect(body.auto).toBe(true);
+  });
+
+  it("sends empty body when auto is not specified", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: "approved" }),
+    });
+
+    await api.approvePipeline("test-project");
+    const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
+    expect(body.auto).toBeUndefined();
   });
 });
 

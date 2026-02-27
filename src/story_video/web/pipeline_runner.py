@@ -87,6 +87,10 @@ def _run_pipeline_safe(state: ProjectState, bridge: ProgressBridge) -> None:
     After the pipeline returns (or raises), reloads state from disk
     to determine the terminal event: checkpoint, completed, or error.
     """
+
+    def _emit(event_type: str, data: dict) -> None:
+        bridge.push(ProgressEvent(event=event_type, data=data))
+
     try:
         tts_provider = _make_tts_provider(state.metadata.config.tts.provider)
         run_pipeline(
@@ -95,6 +99,7 @@ def _run_pipeline_safe(state: ProjectState, bridge: ProgressBridge) -> None:
             tts_provider=tts_provider,
             image_provider=OpenAIImageProvider(),
             caption_provider=OpenAIWhisperProvider(),
+            on_progress=_emit,
         )
         # Reload state from disk to detect checkpoint vs completion.
         refreshed = ProjectState.load(state.project_dir)

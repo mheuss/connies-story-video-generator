@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "../api/client";
 import type { ProgressEvent } from "../api/types";
 
 interface ProgressState {
@@ -11,20 +12,27 @@ interface ProgressState {
   scenesTotal: number;
 }
 
+interface UseProgressStreamResult extends ProgressState {
+  reset: () => void;
+}
+
 const TERMINAL_EVENTS = new Set(["checkpoint", "completed", "error"]);
 const SSE_EVENT_TYPES = ["phase_started", "scene_progress", "checkpoint", "completed", "error"];
 
-export function useProgressStream(projectId: string | null): ProgressState {
-  const [state, setState] = useState<ProgressState>({
-    events: [],
-    currentPhase: null,
-    checkpoint: null,
-    isComplete: false,
-    error: null,
-    scenesDone: 0,
-    scenesTotal: 0,
-  });
+const INITIAL_STATE: ProgressState = {
+  events: [],
+  currentPhase: null,
+  checkpoint: null,
+  isComplete: false,
+  error: null,
+  scenesDone: 0,
+  scenesTotal: 0,
+};
+
+export function useProgressStream(projectId: string | null): UseProgressStreamResult {
+  const [state, setState] = useState<ProgressState>(INITIAL_STATE);
   const esRef = useRef<EventSource | null>(null);
+  const [resetCount, setResetCount] = useState(0);
 
   useEffect(() => {
     if (!projectId) return;
@@ -48,7 +56,7 @@ export function useProgressStream(projectId: string | null): ProgressState {
           if (type === "phase_started") {
             next.currentPhase = (data.phase as string) || null;
             next.scenesDone = 0;
-            next.scenesTotal = (data.scene_count as number) || 0;
+            next.scenesTotal = 0;
           } else if (type === "scene_progress") {
             next.scenesDone = (data.scene_number as number) || 0;
             next.scenesTotal = (data.total as number) || prev.scenesTotal;
@@ -76,7 +84,29 @@ export function useProgressStream(projectId: string | null): ProgressState {
         es.close();
         if (retryCount < 5) {
           retryCount++;
-          setTimeout(() => {
+          setTimeout(async () => {
+            // Check project status before reconnecting — the pipeline may
+            // have reached a terminal state while we were disconnected.
+            try {
+              const status = await api.getProject(projectId);
+              if (status.status === "completed") {
+                setState((prev) => ({ ...prev, isComplete: true }));
+                return;
+              }
+              if (status.status === "failed") {
+                setState((prev) => ({ ...prev, error: "Pipeline failed" }));
+                return;
+              }
+              if (status.status === "awaiting_review" && status.current_phase) {
+                setState((prev) => ({
+                  ...prev,
+                  checkpoint: { phase: status.current_phase!, project_id: status.project_id },
+                }));
+                return;
+              }
+            } catch {
+              // REST check failed too — fall through to SSE reconnect
+            }
             connect();
           }, 1000 * retryCount);
         } else {
@@ -90,7 +120,13 @@ export function useProgressStream(projectId: string | null): ProgressState {
     return () => {
       esRef.current?.close();
     };
-  }, [projectId]);
+  }, [projectId, resetCount]);
 
-  return state;
+  const reset = useCallback(() => {
+    esRef.current?.close();
+    setState(INITIAL_STATE);
+    setResetCount((c) => c + 1);
+  }, []);
+
+  return { ...state, reset };
 }

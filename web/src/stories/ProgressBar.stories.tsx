@@ -9,6 +9,8 @@ export default meta;
 
 type Story = StoryObj<typeof ProgressBar>;
 
+export const Indeterminate: Story = { args: { phase: "analysis", scenesDone: 0, scenesTotal: 0 } };
+export const ZeroProgress: Story = { args: { phase: "tts_generation", scenesDone: 0, scenesTotal: 12 } };
 export const EarlyProgress: Story = { args: { phase: "tts_generation", scenesDone: 2, scenesTotal: 12 } };
 export const HalfDone: Story = { args: { phase: "image_generation", scenesDone: 6, scenesTotal: 12 } };
 export const NearComplete: Story = { args: { phase: "caption_generation", scenesDone: 11, scenesTotal: 12 } };

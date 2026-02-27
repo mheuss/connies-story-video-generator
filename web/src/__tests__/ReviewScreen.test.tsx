@@ -36,7 +36,7 @@ describe("ReviewScreen", () => {
 
     render(
       <MemoryRouter>
-        <ReviewScreen projectId="test-project" checkpoint={{ phase: "analysis", project_id: "test-project" }} />
+        <ReviewScreen projectId="test-project" checkpoint={{ phase: "analysis", project_id: "test-project" }} onApproved={vi.fn()} />
       </MemoryRouter>,
     );
 
@@ -60,18 +60,32 @@ describe("ReviewScreen", () => {
 
     render(
       <MemoryRouter>
-        <ReviewScreen projectId="test-project" checkpoint={{ phase: "analysis", project_id: "test-project" }} />
+        <ReviewScreen projectId="test-project" checkpoint={{ phase: "analysis", project_id: "test-project" }} onApproved={vi.fn()} />
       </MemoryRouter>,
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /approve/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /approve & continue/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: /approve/i }));
+    await user.click(screen.getByRole("button", { name: /approve & continue/i }));
 
     await waitFor(() => {
       expect(mockApprovePipeline).toHaveBeenCalledWith("test-project");
+    });
+  });
+
+  it("shows phase guidance when available", async () => {
+    mockListArtifacts.mockResolvedValueOnce({ files: [] });
+
+    render(
+      <MemoryRouter>
+        <ReviewScreen projectId="test-project" checkpoint={{ phase: "analysis", project_id: "test-project" }} onApproved={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/analyzed your source text/i)).toBeInTheDocument();
     });
   });
 
@@ -91,7 +105,7 @@ describe("ReviewScreen", () => {
 
     render(
       <MemoryRouter>
-        <ReviewScreen projectId="test-project" checkpoint={{ phase: "analysis", project_id: "test-project" }} />
+        <ReviewScreen projectId="test-project" checkpoint={{ phase: "analysis", project_id: "test-project" }} onApproved={vi.fn()} />
       </MemoryRouter>,
     );
 
@@ -113,5 +127,29 @@ describe("ReviewScreen", () => {
 
     // Restore fetch
     globalThis.fetch = originalFetch;
+  });
+
+  it("calls approvePipeline with auto=true when auto-approve clicked", async () => {
+    mockListArtifacts.mockResolvedValueOnce({ files: [] });
+    mockApprovePipeline.mockResolvedValueOnce({ status: "approved" });
+    const onApproved = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <ReviewScreen projectId="test-project" checkpoint={{ phase: "analysis", project_id: "test-project" }} onApproved={onApproved} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /auto-approve remaining/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /auto-approve remaining/i }));
+
+    await waitFor(() => {
+      expect(mockApprovePipeline).toHaveBeenCalledWith("test-project", true);
+      expect(onApproved).toHaveBeenCalled();
+    });
   });
 });

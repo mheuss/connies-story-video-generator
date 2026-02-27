@@ -10,10 +10,12 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
   const [loading, setLoading] = useState(true);
   const [anthropicKey, setAnthropicKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
+  const [elevenlabsKey, setElevenlabsKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [anthropicConfigured, setAnthropicConfigured] = useState(false);
   const [openaiConfigured, setOpenaiConfigured] = useState(false);
+  const [elevenlabsConfigured, setElevenlabsConfigured] = useState(false);
 
   useEffect(() => {
     api
@@ -21,6 +23,7 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
       .then((status) => {
         setAnthropicConfigured(status.anthropic_configured);
         setOpenaiConfigured(status.openai_configured);
+        setElevenlabsConfigured(status.elevenlabs_configured);
         if (status.anthropic_configured && status.openai_configured && !forceShow) {
           onComplete();
         } else {
@@ -44,6 +47,7 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
       await api.setApiKeys({
         anthropic_api_key: anthropicKey || undefined,
         openai_api_key: openaiKey || undefined,
+        elevenlabs_api_key: elevenlabsKey || undefined,
       });
       onComplete();
     } catch (err) {
@@ -91,9 +95,24 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
         />
       </div>
 
+      <div style={{ marginBottom: "1rem" }}>
+        <label htmlFor="elevenlabs-key">
+          ElevenLabs API Key (optional){elevenlabsConfigured && " (configured)"}
+        </label>
+        <br />
+        <input
+          id="elevenlabs-key"
+          type="password"
+          value={elevenlabsKey}
+          onChange={(e) => setElevenlabsKey(e.target.value)}
+          placeholder="sk_..."
+          style={{ width: "100%", padding: "0.5rem" }}
+        />
+      </div>
+
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      <button type="submit" disabled={saving || (!anthropicKey && !openaiKey)}>
+      <button type="submit" disabled={saving || (!anthropicKey && !openaiKey && !elevenlabsKey)}>
         {saving ? "Saving..." : "Save Keys"}
       </button>
     </form>

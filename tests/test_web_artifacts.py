@@ -30,12 +30,11 @@ def project_with_artifacts(output_dir):
     config = load_config(None)
     state = ProjectState.create("test-project", InputMode.ADAPT, config, output_dir)
 
-    scenes_dir = state.project_dir / "scenes"
-    scenes_dir.mkdir(exist_ok=True)
-    (scenes_dir / "analysis.json").write_text(
+    # Analysis/outline produce project-level JSON in the project root
+    (state.project_dir / "analysis.json").write_text(
         json.dumps({"craft_notes": "dramatic tone"}), encoding="utf-8"
     )
-    (scenes_dir / "outline.json").write_text(
+    (state.project_dir / "outline.json").write_text(
         json.dumps({"scenes": [{"title": "Opening"}]}), encoding="utf-8"
     )
 

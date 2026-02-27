@@ -3,6 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from story_video.state import ProjectState
 from story_video.web.app import create_app
 
 
@@ -83,6 +84,30 @@ class TestCreateProject:
         source_path = output_dir / project_id / "source_story.txt"
         assert source_path.exists()
         assert source_path.read_text(encoding="utf-8") == source
+
+
+class TestCreateProjectAutonomous:
+    """POST /api/v1/projects respects the autonomous flag."""
+
+    def test_create_project_with_autonomous_true(self, client, output_dir):
+        response = client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": "Test story.", "autonomous": True},
+        )
+        assert response.status_code == 201
+        project_id = response.json()["project_id"]
+        state = ProjectState.load(output_dir / project_id)
+        assert state.metadata.config.pipeline.autonomous is True
+
+    def test_create_project_defaults_autonomous_false(self, client, output_dir):
+        response = client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": "Test story."},
+        )
+        assert response.status_code == 201
+        project_id = response.json()["project_id"]
+        state = ProjectState.load(output_dir / project_id)
+        assert state.metadata.config.pipeline.autonomous is False
 
 
 class TestGetProject:

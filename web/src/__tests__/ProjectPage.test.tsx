@@ -68,7 +68,7 @@ describe("ProjectPage", () => {
     expect(screen.getAllByText("analysis").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("shows progress bar when phase has scene count", () => {
+  it("shows indeterminate progress bar on phase start, then determinate after scene_progress", () => {
     renderProjectPage("test-project");
     const es = MockEventSource.instances[0];
 
@@ -77,7 +77,13 @@ describe("ProjectPage", () => {
     });
 
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
-    expect(screen.getByText("0 / 10")).toBeInTheDocument();
+    expect(screen.getByText("Working...")).toBeInTheDocument();
+
+    act(() => {
+      es.emit("scene_progress", JSON.stringify({ phase: "image_generation", scene_number: 3, total: 10 }));
+    });
+
+    expect(screen.getByText("3 / 10")).toBeInTheDocument();
   });
 
   it("shows video when completed", () => {

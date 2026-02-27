@@ -73,9 +73,10 @@ export const api = {
       method: "POST",
     }),
 
-  approvePipeline: (projectId: string) =>
+  approvePipeline: (projectId: string, auto?: boolean) =>
     request<{ status: string }>(`/projects/${projectId}/approve`, {
       method: "POST",
+      body: JSON.stringify(auto ? { auto: true } : {}),
     }),
 
   // Artifacts

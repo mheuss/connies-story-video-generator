@@ -50,13 +50,18 @@ coverage.xml
 .worktrees/
 
 # Frontend
-web/node_modules/
+node_modules/
 web/dist/
 web/storybook-static/
 
 # Local workflow and tracking files (agent-specific)
+docs/notes/
+docs/plans/
+docs/qa/
+docs/test/
+docs/trouble-shooting/
+docs/use-cases/
 BUGS_AND_TODOS.md
-CHANGELOG.md
 CLAUDE.md
 DEVELOPMENT.md
 VERSION_HISTORY.md

@@ -2,18 +2,21 @@
 export interface ApiKeyStatus {
   anthropic_configured: boolean;
   openai_configured: boolean;
+  elevenlabs_configured: boolean;
 }
 
 /** Request body for setting API keys. */
 export interface SetApiKeysRequest {
   anthropic_api_key?: string;
   openai_api_key?: string;
+  elevenlabs_api_key?: string;
 }
 
 /** Request body for creating a project. */
 export interface CreateProjectRequest {
   mode: "original" | "inspired_by" | "adapt";
   source_text: string;
+  autonomous?: boolean;
 }
 
 /** Response from creating a project. */

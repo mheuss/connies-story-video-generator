@@ -39,6 +39,8 @@ def create_app(
     """
     if env_path is not None:
         routes_settings.configure(env_path)
+    routes_settings.load_env()
+
     if output_dir is not None:
         routes_projects.configure(output_dir)
         routes_pipeline.configure(output_dir)

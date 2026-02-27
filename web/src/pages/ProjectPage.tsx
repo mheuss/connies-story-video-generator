@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useProgressStream } from "../hooks/useProgressStream";
 import ReviewScreen from "../components/ReviewScreen";
 import ProgressBar from "../components/ProgressBar";
@@ -13,22 +13,22 @@ export default function ProjectPage() {
       <div>
         <h2>Error</h2>
         <p style={{ color: "red" }}>{progress.error}</p>
-        <p>Check the server logs for details.</p>
+        <p>Check the terminal where <code>story-video serve</code> is running for the full error traceback.</p>
         {projectId && (
           <button
             onClick={async () => {
               try {
                 await api.startPipeline(projectId);
-                window.location.reload();
+                progress.reset();
               } catch {
-                // startPipeline error will show on the reloaded page
-                window.location.reload();
+                progress.reset();
               }
             }}
           >
             Retry
           </button>
         )}
+        <p><Link to="/">Back to home</Link></p>
       </div>
     );
   }
@@ -53,12 +53,13 @@ export default function ProjectPage() {
             </a>
           </>
         )}
+        <p><Link to="/">Back to home</Link></p>
       </div>
     );
   }
 
   if (progress.checkpoint && projectId) {
-    return <ReviewScreen projectId={projectId} checkpoint={progress.checkpoint} />;
+    return <ReviewScreen projectId={projectId} checkpoint={progress.checkpoint} onApproved={progress.reset} />;
   }
 
   return (
@@ -71,7 +72,7 @@ export default function ProjectPage() {
       ) : (
         <p>Starting pipeline...</p>
       )}
-      {progress.currentPhase && progress.scenesTotal > 0 && (
+      {progress.currentPhase && (
         <ProgressBar
           phase={progress.currentPhase}
           scenesDone={progress.scenesDone}
@@ -85,6 +86,7 @@ export default function ProjectPage() {
           </div>
         ))}
       </div>
+      <p><Link to="/">Back to home</Link></p>
     </div>
   );
 }

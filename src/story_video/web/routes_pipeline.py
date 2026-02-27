@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from story_video.models import PhaseStatus
@@ -45,8 +46,14 @@ async def start_pipeline(project_id: str) -> dict:
     return {"status": "started", "project_id": project_id}
 
 
+class ApproveRequest(BaseModel):
+    """Optional request body for the approve endpoint."""
+
+    auto: bool = False
+
+
 @router.post("/{project_id}/approve", status_code=202)
-async def approve_checkpoint(project_id: str) -> dict:
+async def approve_checkpoint(project_id: str, body: ApproveRequest | None = None) -> dict:
     """Approve the current checkpoint and resume the pipeline."""
     state = _load_project(project_id)
 
@@ -55,6 +62,12 @@ async def approve_checkpoint(project_id: str) -> dict:
             status_code=409,
             detail=f"Project is not awaiting review (status: {state.metadata.status.value})",
         )
+
+    if body and body.auto:
+        new_pipeline = state.metadata.config.pipeline.model_copy(update={"autonomous": True})
+        new_config = state.metadata.config.model_copy(update={"pipeline": new_pipeline})
+        state.metadata.config = new_config
+        state.save()
 
     pipeline_runner.run_pipeline_in_thread(state)
     return {"status": "approved", "project_id": project_id}

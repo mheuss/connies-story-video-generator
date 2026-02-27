@@ -10,6 +10,7 @@ export default function CreatePage() {
   const [keysReady, setKeysReady] = useState(false);
   const [mode, setMode] = useState<Mode>("adapt");
   const [sourceText, setSourceText] = useState("");
+  const [autonomous, setAutonomous] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -27,7 +28,7 @@ export default function CreatePage() {
     setCreating(true);
 
     try {
-      const project = await api.createProject({ mode, source_text: sourceText });
+      const project = await api.createProject({ mode, source_text: sourceText, autonomous });
       await api.startPipeline(project.project_id);
       navigate(`/project/${project.project_id}`);
     } catch (err) {
@@ -68,6 +69,17 @@ export default function CreatePage() {
           style={{ width: "100%", padding: "0.5rem" }}
           placeholder={mode === "adapt" ? "Paste the full text of your story here..." : "Describe your story idea..."}
         />
+      </div>
+
+      <div style={{ marginBottom: "1rem" }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={autonomous}
+            onChange={(e) => setAutonomous(e.target.checked)}
+          />{" "}
+          Run to completion (skip review checkpoints)
+        </label>
       </div>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
