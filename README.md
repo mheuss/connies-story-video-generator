@@ -64,7 +64,6 @@ Python 3.11+, Claude API (writing), OpenAI TTS or ElevenLabs v3 (narration), GPT
 - TTS audio preview -- listen to narration per scene at checkpoints before committing to video assembly
 - Project browser -- list existing projects on the home screen, select one, and resume from any completed phase
 - Phase navigation -- go back to an earlier pipeline phase and re-run from there, enabling iterative refinement
-- Docker packaging -- Dockerfile, static file serving, port config
 - File upload -- upload a story file instead of pasting text
 
 ## Usage
@@ -89,7 +88,7 @@ Start the web server:
 story-video serve
 ```
 
-Open `http://localhost:8000` in your browser. The web UI lets you:
+Open `http://localhost:8033` in your browser. The web UI lets you:
 
 - Enter API keys on first run (saved to `.env`)
 - Create a new project by choosing a mode and pasting your story text
@@ -211,6 +210,40 @@ Then pass it with `--config`:
 
 ```
 story-video create --mode adapt --input story.txt --config config_elevenlabs.yaml
+```
+
+### Docker
+
+Build the image:
+
+```
+docker build -t story-video .
+```
+
+Run it with your API keys and a volume for project output:
+
+```
+docker run -p 8033:8033 \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e OPENAI_API_KEY=sk-... \
+  -v ./projects:/data \
+  story-video
+```
+
+Open `http://localhost:8033` in your browser. Project files land in `./projects/` on your host.
+
+Override the port with the `PORT` env var:
+
+```
+docker run -p 9000:9000 -e PORT=9000 \
+  -e ANTHROPIC_API_KEY=... -e OPENAI_API_KEY=... \
+  -v ./projects:/data story-video
+```
+
+Multi-arch build (amd64 + arm64 for Apple Silicon):
+
+```
+docker buildx build --platform linux/amd64,linux/arm64 -t story-video .
 ```
 
 ## Development

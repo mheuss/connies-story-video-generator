@@ -5,6 +5,7 @@ Commands: create, resume, estimate, status, list, serve.
 
 import json
 import logging
+import os
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
@@ -622,7 +623,9 @@ except ImportError:
 
 @app.command()
 def serve(
-    port: int = typer.Option(8033, "--port", "-p", help="Port to listen on"),
+    port: int | None = typer.Option(
+        None, "--port", "-p", help="Port to listen on (default: $PORT or 8033)"
+    ),
     host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to"),
     output_dir: Path = typer.Option(
         Path("./output"), "--output-dir", "-o", help="Root directory for projects"
@@ -633,7 +636,15 @@ def serve(
         typer.echo("Web dependencies not installed. Run: pip install -e '.[web]'", err=True)
         raise typer.Exit(code=1)
 
+    resolved_port = port if port is not None else int(os.environ.get("PORT", "8033"))
+
+    # Auto-detect built frontend (web/dist/index.html relative to cwd).
+    # In Docker, CMD sets cwd to /app so web/dist resolves to /app/web/dist/.
+    static_dir = Path("web/dist")
+    if not (static_dir / "index.html").is_file():
+        static_dir = None
+
     from story_video.web.app import create_app
 
-    app_instance = create_app(output_dir=output_dir)
-    uvicorn_run(app_instance, host=host, port=port)
+    app_instance = create_app(output_dir=output_dir, static_dir=static_dir)
+    uvicorn_run(app_instance, host=host, port=resolved_port)
