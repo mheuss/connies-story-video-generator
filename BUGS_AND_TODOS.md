@@ -83,51 +83,51 @@ Acknowledged items not yet scheduled.
 #### Group G: Low-Severity Cleanup (36 items)
 
 **Inline imports in tests (7):**
-- [ ] [test] `_build_audio_mix_filters` imported inline 7 times in `test_commands.py` — move to module level
-- [ ] [test] `import logging` inline in `test_tts_generator.py` (3x) and `test_narration_tags.py` (1x)
-- [ ] [test] `import openai` inline in `test_tts_generator.py`, `test_image_generator.py`, `test_caption_generator.py`
-- [ ] [test] `SceneImagePrompt` imported inline in `test_orchestrator.py` — add to module-level imports
-- [ ] [test] `import logging` inline in `test_cli.py:1042`
-- [ ] [test] `from openai import ...` inline in `test_retry.py:275`
-- [ ] [test] `from story_video import __version__` inline in `test_models.py:693`
+- [x] [test] `_build_audio_mix_filters` imported inline 7 times in `test_commands.py` — moved to module level
+- [x] [test] `import logging` inline in `test_tts_generator.py` (3x) and `test_narration_tags.py` (1x) — moved to module level
+- [x] [test] `import openai` inline in `test_tts_generator.py`, `test_image_generator.py`, `test_caption_generator.py` — moved to module level
+- [x] [test] `SceneImagePrompt` imported inline in `test_orchestrator.py` — moved to module level
+- [x] [test] `import logging` inline in `test_cli.py:1042` — moved to module level
+- [x] [test] `from openai import ...` inline in `test_retry.py:275` — replaced by module-level `import openai` during `_OPENAI_TRANSIENT` consolidation
+- [x] [test] `from story_video import __version__` inline in `test_models.py:693` — moved to module level
 
 **Duplication (6):**
-- [ ] [refactor] `_OPENAI_TRANSIENT` defined identically in tts_generator.py, image_generator.py, caption_generator.py — consolidate (3 cases meets threshold)
-- [ ] [refactor] Web test `output_dir`/`client` fixtures duplicated in 4 test files — extract to conftest
-- [ ] [test] Duplicated `_resolve_project_dir` traversal test in `test_web_artifacts.py` — keep in `test_web_projects.py` only
+- [x] [refactor] `_OPENAI_TRANSIENT` defined identically in tts_generator.py, image_generator.py, caption_generator.py — consolidated into `story_video.utils.openai_compat.OPENAI_TRANSIENT`
+- [x] [refactor] Web test `output_dir`/`client` fixtures duplicated in 5 test files — extracted to `tests/conftest.py`
+- [x] [test] Duplicated `_resolve_project_dir` traversal test in `test_web_artifacts.py` — removed, kept in `test_web_projects.py` only
 - [ ] [test] `MockEventSource` duplicated in `ProjectPage.test.tsx` and `useProgressStream.test.ts` — extract shared helper
-- [ ] [refactor] `_populate_image_tags` and `_populate_music_tags` near-identical — note for future extraction if a third tag type added
+- [x] [refactor] `_populate_image_tags` and `_populate_music_tags` near-identical — only 2 cases, below extraction threshold; noted for future
 - [ ] [refactor] ReviewScreen auto-approve handler duplicates `handleApprove` logic — parameterize with `auto` flag
 
 **Missing tests (4):**
-- [ ] [test] `with_retry` parameter validation guards untested (retry.py:72-77)
-- [ ] [test] `generate_project_id` 1000-attempt safety cap untested (state.py)
-- [ ] [test] Bracket escaping in `subtitle_filter` untested (subtitles.py:278-279)
-- [ ] [test] `_export_image_prompts` error and idempotency paths untested (routes_artifacts.py:93-116)
+- [x] [test] `with_retry` parameter validation guards untested (retry.py:72-77) — added 3 tests
+- [x] [test] `generate_project_id` 1000-attempt safety cap untested (state.py) — added 1 test
+- [x] [test] Bracket escaping in `subtitle_filter` untested (subtitles.py:278-279) — added 1 test
+- [x] [test] `_export_image_prompts` error and idempotency paths untested (routes_artifacts.py:93-116) — added 2 tests
 
 **Edge cases (4):**
-- [ ] [low] `AudioCueSpec` fields have no validation — upstream `AudioAsset` validates, add docstring noting valid ranges
-- [ ] [low] `_scan_project_dirs` does not handle `PermissionError` (cli.py:127)
+- [x] [low] `AudioCueSpec` fields have no validation — added docstring noting upstream `AudioAsset` validates; `AudioCueSpec` is an internal DTO
+- [x] [low] `_scan_project_dirs` does not handle `PermissionError` (cli.py) — wrapped `iterdir()` in try/except `OSError`
 - [ ] [low] `useProgressStream` events array grows unboundedly — cap or show only recent phase
 - [ ] [low] `ProjectPage` retry catch silently swallows error — show error message
 
 **Consistency (3):**
-- [ ] [refactor] `_resolve_audio_cues` raises `KeyError` instead of `ValueError` — inconsistent with rest of pipeline (video_assembler.py:76-81)
-- [ ] [low] `state.save()` patterns differ: single-save in TTS/image/caption vs double-save in video_assembler
-- [ ] [test] Mixed `@patch` decorator vs `monkeypatch` in `test_commands.py` for same function
+- [x] [refactor] `_resolve_audio_cues` raises `KeyError` instead of `ValueError` — changed to `ValueError` for consistency
+- [x] [low] `state.save()` patterns differ: single-save in TTS/image/caption vs double-save in video_assembler — added comment explaining double-save is intentional (crash recoverability)
+- [x] [test] Mixed `@patch` decorator vs `monkeypatch` in `test_commands.py` for same function — accepted as-is; style preference, not a bug
 
 **Documentation & readability (5):**
-- [ ] [docs] Unused `prose_bare` variable in caption_generator destructuring — replace with `_` (caption_generator.py:204)
-- [ ] [docs] Missing inline comment for `-shortest` flag absence in multi-image command (commands.py:400-420)
+- [x] [docs] Unused `prose_bare` variable in caption_generator destructuring — replaced with `_` (caption_generator.py)
+- [x] [docs] Missing inline comment for `-shortest` flag absence in multi-image command — added comment (commands.py)
 - [ ] [docs] `retryCount` scope in `useProgressStream` is correct but non-obvious — add comment
-- [ ] [docs] `image_prompt_writer.py:137` missing comment explaining missing-check double duty
-- [ ] [docs] Orchestrator module docstring phase counts fragile if phases change (orchestrator.py:3)
+- [x] [docs] `image_prompt_writer.py` missing comment explaining missing-check double duty — added comment
+- [x] [docs] Orchestrator module docstring phase counts fragile if phases change — replaced with constant references (orchestrator.py)
 
 **Dead code (4):**
-- [ ] [chore] Multi-image `i==0` special case in xfade offset is redundant — simplify (commands.py:362-374)
+- [x] [chore] Multi-image `i==0` special case in xfade offset is redundant — simplified to unified cumulative formula (commands.py)
 - [ ] [chore] Empty `index.css` imported but unused — remove file and import
 - [ ] [chore] `getHealth` and `deleteProject` unused by any React component — add comment or remove
-- [ ] [low] Unreachable empty-event guard in `generate_ass_content` — defensive, not harmful (subtitles.py:243-245)
+- [x] [low] Unreachable empty-event guard in `generate_ass_content` — added defensive comment explaining guard intent (subtitles.py)
 
 **Frontend (4):**
 - [ ] [chore] Duplicate `react-router-dom` import in SettingsPage.tsx — combine into one line
@@ -136,8 +136,8 @@ Acknowledged items not yet scheduled.
 - [ ] [a11y] Missing `aria-label` on ProgressBar, ReviewScreen textarea, video element
 
 **Other (2):**
-- [ ] [low] `ClaudeClient` hardcodes model default `claude-sonnet-4-5-20250929` — maintenance risk (claude_client.py:40)
-- [ ] [low] Cost estimation assumes 1 image per scene — no `image_count` param for inline-image actuals (cost.py:197)
+- [x] [low] `ClaudeClient` hardcodes model default `claude-sonnet-4-5-20250929` — added docstring note explaining why (instantiated before config load)
+- [x] [low] Cost estimation assumes 1 image per scene — added docstring note about limitation and future `image_count` param
 
 ### Sixth-Pass Review (PR6) — 2026-02-21
 

@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CLI flag `--source-material` renamed to `--input` — applies to all three modes (adapt, inspired_by, original). Clean break, no deprecated alias.
 - Expanded .dockerignore to exclude secrets, IDE files, test artifacts, and coverage output from build context
 - `TTSProvider.synthesize()` accepts optional `mood` parameter — BREAKING for custom provider implementations
+- `_OPENAI_TRANSIENT` consolidated into `story_video.utils.openai_compat.OPENAI_TRANSIENT` — no behavior change, reduces duplication across 3 pipeline modules
+- `_resolve_audio_cues` now raises `ValueError` instead of `KeyError` for missing audio cue keys — consistent with rest of pipeline
 
 ### Removed
 - `OutputConfig` and `output:` config section — BREAKING: users with custom config.yaml files containing `output:` must remove that section
@@ -45,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Music fade-out start time is clamped to 0.0 when the fade duration exceeds remaining scene time, preventing invalid FFmpeg filter values
 - Multi-image scene assembly now logs a warning when image duration is negative instead of silently clamping
 - `char_position_to_timestamp` now raises `ValueError` on empty word offsets instead of silently returning wrong data
+- `_scan_project_dirs` now handles `PermissionError` on the output directory instead of crashing
 
 ## [0.4.0] — 2026-02-18
 
