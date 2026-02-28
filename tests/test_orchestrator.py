@@ -20,6 +20,7 @@ from story_video.models import (
     PipelinePhase,
     Scene,
     SceneAudioCue,
+    SceneImagePrompt,
     SceneStatus,
     StoryHeader,
 )
@@ -28,6 +29,7 @@ from story_video.pipeline.orchestrator import (
     _determine_start_phase,
     _dispatch_phase,
     _parse_source_header,
+    _populate_image_tags,
     _populate_music_tags,
     _run_narration_prep,
     run_pipeline,
@@ -2336,7 +2338,6 @@ class TestPopulateImageTags:
 
     def test_scene_with_image_tags_gets_prompts(self, tmp_path):
         """Scene prose with image tags gets image_prompts populated from YAML."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2359,7 +2360,6 @@ class TestPopulateImageTags:
 
     def test_scene_without_tags_unchanged(self, tmp_path):
         """Scene without image tags keeps empty image_prompts."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2376,7 +2376,6 @@ class TestPopulateImageTags:
 
     def test_undefined_tag_key_raises(self, tmp_path):
         """Image tag referencing undefined key raises ValueError."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2391,7 +2390,6 @@ class TestPopulateImageTags:
 
     def test_no_header_with_tags_raises(self, tmp_path):
         """Image tags without a story header raises ValueError."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2404,7 +2402,6 @@ class TestPopulateImageTags:
 
     def test_strips_image_tags_from_narration_text(self, tmp_path):
         """_populate_image_tags strips image tags from scene.narration_text."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2429,7 +2426,6 @@ class TestPopulateImageTags:
 
     def test_sets_narration_text_from_stripped_prose_when_none(self, tmp_path):
         """When narration_text is None, sets it to prose with image tags stripped."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2454,7 +2450,6 @@ class TestPopulateImageTags:
 
     def test_uses_stripped_positions_for_image_prompts(self, tmp_path):
         """Image prompt positions use the tag-stripped coordinate system."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2477,9 +2472,6 @@ class TestPopulateImageTags:
 
     def test_skips_scenes_with_existing_prompts(self, tmp_path):
         """Scenes that already have image_prompts are not modified."""
-        from story_video.models import SceneImagePrompt
-        from story_video.pipeline.orchestrator import _populate_image_tags
-
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
         prose = "The lighthouse stood tall. **image:lighthouse** The harbor."

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
+from story_video import __version__
 from story_video.models import (
     ADAPT_FLOW_PHASES,
     CREATIVE_FLOW_PHASES,
@@ -690,8 +691,6 @@ class TestPackageVersion:
 
     def test_version_is_importable(self):
         """__version__ is a non-empty string."""
-        from story_video import __version__
-
         assert isinstance(__version__, str)
         assert len(__version__) > 0
 

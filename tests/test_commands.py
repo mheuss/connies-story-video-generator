@@ -15,6 +15,7 @@ import pytest
 from story_video.ffmpeg.commands import (
     AudioCueSpec,
     FFmpegError,
+    _build_audio_mix_filters,
     build_concat_command,
     build_segment_command,
     probe_duration,
@@ -716,7 +717,6 @@ class TestBuildAudioMixFilters:
 
     def test_single_cue_no_loop(self):
         """One-shot sound effect at 2.5s, volume 0.6."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -742,7 +742,6 @@ class TestBuildAudioMixFilters:
 
     def test_looping_ambient_track(self):
         """Ambient track that loops from 0s with fade in/out."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -765,7 +764,6 @@ class TestBuildAudioMixFilters:
 
     def test_multiple_cues(self):
         """Two cues produce amix=inputs=3."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -793,7 +791,6 @@ class TestBuildAudioMixFilters:
 
     def test_empty_cues_returns_narration_label(self):
         """No cues: returns narration label unchanged."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         filters, output_label = _build_audio_mix_filters(
             [], narration_label="[1:a]", first_cue_index=2
@@ -803,7 +800,6 @@ class TestBuildAudioMixFilters:
 
     def test_no_adelay_when_start_time_zero(self):
         """Don't add adelay filter when start_time is 0."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -822,7 +818,6 @@ class TestBuildAudioMixFilters:
 
     def test_fade_out_start_time_calculated_correctly(self):
         """Fade-out start time = (scene_duration - start_time) - fade_out duration."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -842,7 +837,6 @@ class TestBuildAudioMixFilters:
 
     def test_fade_out_start_clamped_when_exceeds_remaining(self):
         """fade_out_start is clamped to 0.0 when fade_out > remaining duration."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -862,7 +856,6 @@ class TestBuildAudioMixFilters:
 
     def test_input_indices_correct(self):
         """Each cue uses the correct FFmpeg input index."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(

@@ -7,6 +7,7 @@ Each test verifies one logical behavior of the image generator module.
 import base64
 from unittest.mock import MagicMock
 
+import openai
 import pytest
 
 from story_video.models import (
@@ -241,8 +242,6 @@ class TestOpenAIImageProviderNoRetryOnPermanentErrors:
     )
     def test_generate_no_retry_on_permanent_error(self, mock_openai, error_name, status, message):
         """generate() does not retry on permanent error."""
-        import openai
-
         error_cls = getattr(openai, error_name)
         mock_response = MagicMock()
         mock_response.status_code = status

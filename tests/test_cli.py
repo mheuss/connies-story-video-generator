@@ -1,6 +1,7 @@
 """Tests for CLI helpers and entry point."""
 
 import json
+import logging
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -1038,8 +1039,6 @@ class TestReadTextInputWarningLog:
 
     def test_warns_for_nonexistent_file_path(self, caplog):
         """Input that looks like a file path but doesn't exist logs a warning."""
-        import logging
-
         with caplog.at_level(logging.WARNING):
             result = _read_text_input("/nonexistent/story.txt")
         assert result == "/nonexistent/story.txt"

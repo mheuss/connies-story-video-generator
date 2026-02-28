@@ -4,8 +4,10 @@ TDD: These tests are written first, before the implementation.
 Each test verifies one logical behavior of the TTS generator module.
 """
 
+import logging
 from unittest.mock import MagicMock
 
+import openai
 import pytest
 
 from story_video.models import AppConfig, AssetType, InputMode, SceneStatus, StoryHeader, TTSConfig
@@ -211,8 +213,6 @@ class TestOpenAITTSProviderNoRetryOnPermanentErrors:
     )
     def test_synthesize_no_retry_on_permanent_error(self, mock_openai, error_name, status, message):
         """synthesize() does not retry on permanent error."""
-        import openai
-
         error_cls = getattr(openai, error_name)
         mock_response = MagicMock()
         mock_response.status_code = status
@@ -490,8 +490,6 @@ class TestElevenLabsTTSProvider:
 
     def test_speed_warning_logged(self, mock_elevenlabs, caplog):
         """Non-1.0 speed logs a warning since ElevenLabs ignores it."""
-        import logging
-
         mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
 
         provider = ElevenLabsTTSProvider()
@@ -502,8 +500,6 @@ class TestElevenLabsTTSProvider:
 
     def test_no_speed_warning_at_default(self, mock_elevenlabs, caplog):
         """Speed 1.0 does not log a warning."""
-        import logging
-
         mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
 
         provider = ElevenLabsTTSProvider()
@@ -514,8 +510,6 @@ class TestElevenLabsTTSProvider:
 
     def test_speed_warning_logged_once(self, mock_elevenlabs, caplog):
         """Speed warning is only logged on the first call, not subsequent ones."""
-        import logging
-
         mock_elevenlabs.text_to_speech.convert.return_value = iter([b"audio-bytes"])
 
         provider = ElevenLabsTTSProvider()

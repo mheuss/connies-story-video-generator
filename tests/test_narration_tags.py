@@ -1,5 +1,7 @@
 """Tests for story_video.utils.narration_tags — narration tag parsing."""
 
+import logging
+
 import pytest
 
 from story_video.models import AudioAsset, ImageTag, MusicTag
@@ -360,8 +362,6 @@ class TestPauseTagParsing:
 
     def test_large_pause_logs_warning(self, caplog):
         """Pause >30s logs a warning."""
-        import logging
-
         text = "Hello. **pause:60.0** Goodbye."
         with caplog.at_level(logging.WARNING):
             parse_narration_segments(text, self.VOICE_MAP, "narrator", scene_number=1)
