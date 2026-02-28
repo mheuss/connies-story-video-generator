@@ -251,6 +251,30 @@ class TestWithRetryMetadata:
 
 
 # ---------------------------------------------------------------------------
+# with_retry — input validation
+# ---------------------------------------------------------------------------
+
+
+class TestWithRetryValidation:
+    """with_retry rejects invalid configuration."""
+
+    def test_negative_max_retries_raises(self):
+        """Negative max_retries is rejected immediately."""
+        with pytest.raises(ValueError, match="max_retries must be non-negative"):
+            with_retry(max_retries=-1, retry_on=(Exception,))(lambda: None)()
+
+    def test_zero_base_delay_raises(self):
+        """Zero base_delay is rejected immediately."""
+        with pytest.raises(ValueError, match="base_delay must be positive"):
+            with_retry(max_retries=1, base_delay=0, retry_on=(Exception,))(lambda: None)()
+
+    def test_negative_base_delay_raises(self):
+        """Negative base_delay is rejected immediately."""
+        with pytest.raises(ValueError, match="base_delay must be positive"):
+            with_retry(max_retries=1, base_delay=-1.0, retry_on=(Exception,))(lambda: None)()
+
+
+# ---------------------------------------------------------------------------
 # OPENAI_TRANSIENT — shared module verification
 # ---------------------------------------------------------------------------
 

@@ -4,6 +4,7 @@ TDD: These tests are written first, before the implementation.
 Each test verifies one logical behavior of the ProjectState class.
 """
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ from story_video.state import (
     ASSET_DEPENDENCIES,
     PHASE_ASSET_MAP,
     ProjectState,
+    generate_project_id,
 )
 
 # ---------------------------------------------------------------------------
@@ -755,6 +757,29 @@ class TestResumeWorkflow:
         scene = resumed.metadata.scenes[0]
         assert scene.asset_status.text == SceneStatus.COMPLETED
         assert scene.asset_status.narration_text == SceneStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# generate_project_id — collision avoidance and safety cap
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateProjectId:
+    """generate_project_id handles collision avoidance and safety cap."""
+
+    def test_cap_raises_after_1000_attempts(self, output_dir):
+        """RuntimeError when all 1000+ suffixed directories exist."""
+        output_dir.mkdir(exist_ok=True)
+        date_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        base = f"adapt-{date_str}"
+
+        # Create base directory and suffixed dirs 2..1001
+        (output_dir / base).mkdir()
+        for i in range(2, 1002):
+            (output_dir / f"{base}-{i}").mkdir()
+
+        with pytest.raises(RuntimeError, match="Could not generate unique project ID"):
+            generate_project_id("adapt", output_dir)
 
 
 # ---------------------------------------------------------------------------
