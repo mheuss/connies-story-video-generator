@@ -60,8 +60,8 @@ class TestSetApiKeys:
         # .env file was written
         assert env_path.exists()
         content = env_path.read_text()
-        assert "ANTHROPIC_API_KEY=sk-ant-new" in content
-        assert "OPENAI_API_KEY=sk-new" in content
+        assert 'ANTHROPIC_API_KEY="sk-ant-new"' in content
+        assert 'OPENAI_API_KEY="sk-new"' in content
 
     def test_partial_update_preserves_existing(self, monkeypatch, tmp_path):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-existing")
@@ -85,4 +85,36 @@ class TestSetApiKeys:
             "/api/v1/settings/api-keys",
             json={"anthropic_api_key": "  "},
         )
+        assert response.status_code == 422
+
+    def test_rejects_control_characters_in_key(self, tmp_path):
+        """Keys with newlines are rejected to prevent .env injection."""
+        env_path = tmp_path / ".env"
+        app = create_app(env_path=env_path)
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/settings/api-keys",
+            json={"anthropic_api_key": "sk-ant-test\nEVIL_VAR=injected"},
+        )
+        assert response.status_code == 422
+
+    def test_env_values_are_quoted(self, monkeypatch, tmp_path):
+        """Values in .env file are wrapped in double quotes."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        env_path = tmp_path / ".env"
+        app = create_app(env_path=env_path)
+        client = TestClient(app)
+        client.post(
+            "/api/v1/settings/api-keys",
+            json={"anthropic_api_key": "sk-ant-test"},
+        )
+        content = env_path.read_text()
+        assert 'ANTHROPIC_API_KEY="sk-ant-test"' in content
+
+    def test_rejects_no_keys_provided(self, tmp_path):
+        """Empty request body is rejected with 422."""
+        env_path = tmp_path / ".env"
+        app = create_app(env_path=env_path)
+        client = TestClient(app)
+        response = client.post("/api/v1/settings/api-keys", json={})
         assert response.status_code == 422

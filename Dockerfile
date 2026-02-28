@@ -32,10 +32,15 @@ RUN pip install --no-cache-dir ".[web]"
 # Copy frontend build from stage 1
 COPY --from=node-build /app/web/dist/ web/dist/
 
+# Non-root user for security
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --shell /bin/bash appuser
+
 # Volume mount point for project output
-RUN mkdir /data
+RUN mkdir /data && chown appuser:appuser /data
 
 ENV PORT=8033
 EXPOSE 8033
 
+USER appuser
 CMD ["story-video", "serve", "--host", "0.0.0.0", "--output-dir", "/data"]

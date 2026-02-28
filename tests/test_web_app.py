@@ -70,6 +70,48 @@ class TestStaticFileServing:
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
 
+    def test_static_dir_without_index_html_no_catch_all(self, tmp_path):
+        """static_dir exists but has no index.html — catch-all is not registered."""
+        (tmp_path / "assets").mkdir()
+        # No index.html created
+
+        app = create_app(static_dir=tmp_path)
+        client = TestClient(app)
+
+        # API still works
+        response = client.get("/api/v1/health")
+        assert response.status_code == 200
+
+        # Root path 404s (no catch-all registered)
+        response = client.get("/")
+        assert response.status_code == 404
+
+    def test_asset_file_served_from_assets_dir(self, tmp_path):
+        """Files in assets/ are served at /assets/ path."""
+        index = tmp_path / "index.html"
+        index.write_text("<html></html>")
+        assets = tmp_path / "assets"
+        assets.mkdir()
+        (assets / "main.js").write_text("console.log('hello')")
+
+        app = create_app(static_dir=tmp_path)
+        client = TestClient(app)
+        response = client.get("/assets/main.js")
+        assert response.status_code == 200
+        assert "console.log" in response.text
+
+    def test_static_dir_without_assets_subdir(self, tmp_path):
+        """static_dir with index.html but no assets/ subdir — SPA still works."""
+        index = tmp_path / "index.html"
+        index.write_text("<html><body>No Assets</body></html>")
+        # No assets/ directory
+
+        app = create_app(static_dir=tmp_path)
+        client = TestClient(app)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "No Assets" in response.text
+
     def test_nonexistent_static_dir_ignored(self, tmp_path):
         """Nonexistent static_dir is ignored; API works, root 404s."""
         nonexistent = tmp_path / "does-not-exist"

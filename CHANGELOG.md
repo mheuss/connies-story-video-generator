@@ -20,12 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - CLI flag `--source-material` renamed to `--input` — applies to all three modes (adapt, inspired_by, original). Clean break, no deprecated alias.
+- Expanded .dockerignore to exclude secrets, IDE files, test artifacts, and coverage output from build context
 - `TTSProvider.synthesize()` accepts optional `mood` parameter — BREAKING for custom provider implementations
 
 ### Removed
 - `OutputConfig` and `output:` config section — BREAKING: users with custom config.yaml files containing `output:` must remove that section
 
 ### Fixed
+- SPA catch-all no longer crashes when static_dir exists but index.html is missing
+- Invalid PORT environment variable now shows a clear error instead of a traceback
 - Scene splitting no longer fails on Unicode look-alike characters (curly quotes, em dashes, ellipsis) swapped by Claude during processing.
 - Resume progress counter now starts from the correct scene number instead of always starting at 1.
 - Artifact export narrows exception handling to avoid silently hiding corrupt project state.
@@ -80,6 +83,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Malformed hex input to `_hex_to_ass_color` now raises `ValueError` instead of silently producing garbage
 
 ### Security
+- Run Docker container as non-root user for defense-in-depth
+- Add path traversal guards to all project and artifact routes
+- Quote API key values in .env file and reject control characters to prevent injection
 
 ---
 

@@ -15,6 +15,7 @@ from pydantic import BaseModel, field_validator
 
 from story_video.models import PipelinePhase
 from story_video.state import ProjectState
+from story_video.web.routes_projects import _resolve_project_dir
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ def _validate_phase(phase: str) -> str:
 
 def _resolve_artifact_dir(project_id: str, phase: str) -> Path:
     """Resolve the artifact directory for a project/phase combination."""
-    project_dir = _output_dir / project_id
+    project_dir = _resolve_project_dir(project_id)
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     _validate_phase(phase)
@@ -117,7 +118,7 @@ def _export_image_prompts(project_dir: Path) -> None:
 @router.get("/{project_id}/artifacts/{phase}")
 async def list_artifacts(project_id: str, phase: str) -> dict:
     """List artifact files for a pipeline phase."""
-    project_dir = _output_dir / project_id
+    project_dir = _resolve_project_dir(project_id)
     if phase == "image_prompts" and project_dir.exists():
         _export_image_prompts(project_dir)
     artifact_dir = _resolve_artifact_dir(project_id, phase)

@@ -1,6 +1,7 @@
 """Tests for story_video.web.routes_projects — project CRUD endpoints."""
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from story_video.state import ProjectState
@@ -150,3 +151,11 @@ class TestDeleteProject:
     def test_delete_nonexistent_returns_404(self, client):
         response = client.delete("/api/v1/projects/nonexistent")
         assert response.status_code == 404
+
+    def test_resolve_project_dir_rejects_traversal(self, output_dir):
+        """_resolve_project_dir rejects path traversal attempts."""
+        from story_video.web.routes_projects import _resolve_project_dir
+
+        with pytest.raises(HTTPException) as exc_info:
+            _resolve_project_dir("../../etc")
+        assert exc_info.value.status_code == 400

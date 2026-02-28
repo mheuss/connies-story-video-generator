@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from story_video.config import load_config
@@ -109,6 +110,14 @@ class TestGetArtifact:
             "/api/v1/projects/test-project/artifacts/analysis/..%2F..%2Fpyproject.toml"
         )
         assert response.status_code in (400, 404)
+
+    def test_project_id_traversal_rejected(self, output_dir):
+        """_resolve_project_dir rejects project_id path traversal in artifact routes."""
+        from story_video.web.routes_projects import _resolve_project_dir
+
+        with pytest.raises(HTTPException) as exc_info:
+            _resolve_project_dir("../../etc")
+        assert exc_info.value.status_code == 400
 
 
 class TestUpdateArtifact:

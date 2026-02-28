@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 __all__ = ["ProgressBridge", "ProgressEvent"]
 
-_TERMINAL_EVENTS = frozenset({"completed", "error", "checkpoint"})
+TERMINAL_EVENTS = frozenset({"completed", "error", "checkpoint"})
 
 
 @dataclass
@@ -40,7 +40,7 @@ class ProgressBridge:
 
     def push(self, event: ProgressEvent) -> None:
         """Push an event onto the queue."""
-        if event.event in _TERMINAL_EVENTS:
+        if event.event in TERMINAL_EVENTS:
             self._done = True
         self._queue.put(event)
 

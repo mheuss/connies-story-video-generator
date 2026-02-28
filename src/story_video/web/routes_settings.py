@@ -48,9 +48,12 @@ class ApiKeyUpdate(BaseModel):
 
     @field_validator("anthropic_api_key", "openai_api_key", "elevenlabs_api_key", mode="before")
     @classmethod
-    def reject_blank(cls, v: str | None) -> str | None:
+    def reject_blank_or_unsafe(cls, v: str | None) -> str | None:
         if v is not None and not v.strip():
             msg = "Key value must not be blank"
+            raise ValueError(msg)
+        if v is not None and any(c in v for c in ("\n", "\r", "\x00")):
+            msg = "Key value must not contain control characters"
             raise ValueError(msg)
         return v
 
@@ -76,6 +79,12 @@ async def set_api_keys(body: ApiKeyUpdate) -> dict:
     return {"status": "ok"}
 
 
+def _quote_env_value(v: str) -> str:
+    """Quote a value for safe .env file storage."""
+    escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def _write_env_file() -> None:
     """Write current API keys to the .env file."""
     lines = []
@@ -83,9 +92,9 @@ def _write_env_file() -> None:
     openai_key = os.environ.get("OPENAI_API_KEY", "")
     elevenlabs = os.environ.get("ELEVENLABS_API_KEY", "")
     if anthropic:
-        lines.append(f"ANTHROPIC_API_KEY={anthropic}")
+        lines.append(f"ANTHROPIC_API_KEY={_quote_env_value(anthropic)}")
     if openai_key:
-        lines.append(f"OPENAI_API_KEY={openai_key}")
+        lines.append(f"OPENAI_API_KEY={_quote_env_value(openai_key)}")
     if elevenlabs:
-        lines.append(f"ELEVENLABS_API_KEY={elevenlabs}")
+        lines.append(f"ELEVENLABS_API_KEY={_quote_env_value(elevenlabs)}")
     _env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

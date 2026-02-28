@@ -633,15 +633,36 @@ def serve(
 ) -> None:
     """Start the web UI server."""
     if uvicorn_run is None:
-        typer.echo("Web dependencies not installed. Run: pip install -e '.[web]'", err=True)
+        console.print(
+            Panel(
+                "Web dependencies not installed. Run: pip install -e '.[web]'",
+                title="Error",
+                border_style="red",
+            )
+        )
         raise typer.Exit(code=1)
 
-    resolved_port = port if port is not None else int(os.environ.get("PORT", "8033"))
+    if port is not None:
+        resolved_port = port
+    else:
+        raw_port = os.environ.get("PORT", "8033")
+        try:
+            resolved_port = int(raw_port)
+        except ValueError:
+            console.print(
+                Panel(
+                    f"Invalid PORT environment variable: '{raw_port}'. Must be an integer.",
+                    title="Configuration Error",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
 
     # Auto-detect built frontend (web/dist/index.html relative to cwd).
     # In Docker, CMD sets cwd to /app so web/dist resolves to /app/web/dist/.
-    static_dir = Path("web/dist")
+    static_dir: Path | None = Path("web/dist")
     if not (static_dir / "index.html").is_file():
+        logging.getLogger(__name__).debug("No frontend build at web/dist/index.html; API-only mode")
         static_dir = None
 
     from story_video.web.app import create_app

@@ -69,8 +69,7 @@ def _generate_project_id(mode: str) -> str:
         candidate = f"{base_id}-{n}"
         if not (_output_dir / candidate).exists():
             return candidate
-    msg = f"Too many projects for {date_str}"
-    raise RuntimeError(msg)
+    raise HTTPException(status_code=409, detail=f"Too many projects for {date_str}")
 
 
 @router.post("", status_code=201)
@@ -114,16 +113,28 @@ async def get_project(project_id: str) -> dict:
 @router.delete("/{project_id}")
 async def delete_project(project_id: str) -> dict:
     """Delete a project and all its files."""
-    project_dir = _output_dir / project_id
+    project_dir = _resolve_project_dir(project_id)
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     shutil.rmtree(project_dir)
     return {"status": "deleted", "project_id": project_id}
 
 
+def _resolve_project_dir(project_id: str) -> Path:
+    """Resolve and validate a project directory path.
+
+    Rejects path traversal attempts (e.g. ``../../etc``) by verifying
+    the resolved path stays within ``_output_dir``.
+    """
+    project_dir = (_output_dir / project_id).resolve()
+    if not project_dir.is_relative_to(_output_dir.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid project ID")
+    return project_dir
+
+
 def _load_project(project_id: str) -> ProjectState:
     """Load a ProjectState by ID, raising 404 if not found."""
-    project_dir = _output_dir / project_id
+    project_dir = _resolve_project_dir(project_id)
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     try:

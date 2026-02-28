@@ -2,28 +2,19 @@
 
 import asyncio
 import json
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from story_video.models import PhaseStatus
-from story_video.state import ProjectState
 from story_video.web import pipeline_runner
-from story_video.web.progress import ProgressBridge
+from story_video.web.progress import TERMINAL_EVENTS, ProgressBridge
+from story_video.web.routes_projects import _load_project, _resolve_project_dir
 
 __all__ = ["router"]
 
 router = APIRouter(prefix="/api/v1/projects", tags=["pipeline"])
-
-_output_dir: Path = Path("./output")
-
-
-def configure(output_dir: Path) -> None:
-    """Set the output directory. Called by create_app()."""
-    global _output_dir  # noqa: PLW0603
-    _output_dir = output_dir
 
 
 def get_bridge() -> ProgressBridge | None:
@@ -80,9 +71,6 @@ async def stream_progress(project_id: str) -> EventSourceResponse:
     return EventSourceResponse(_event_generator())
 
 
-_TERMINAL_EVENTS = frozenset({"completed", "error", "checkpoint"})
-
-
 async def _event_generator():
     """Yield SSE events from the bridge until a terminal event."""
     while True:
@@ -93,7 +81,7 @@ async def _event_generator():
         event = bridge.try_get(timeout=0.1)
         if event is not None:
             yield {"event": event.event, "data": json.dumps(event.data)}
-            if event.event in _TERMINAL_EVENTS:
+            if event.event in TERMINAL_EVENTS:
                 return
         else:
             await asyncio.sleep(0.1)
@@ -101,17 +89,6 @@ async def _event_generator():
 
 def _verify_project_exists(project_id: str) -> None:
     """Raise 404 if the project directory does not exist."""
-    project_dir = _output_dir / project_id
+    project_dir = _resolve_project_dir(project_id)
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-
-
-def _load_project(project_id: str) -> ProjectState:
-    """Load a ProjectState by ID, raising 404 if not found."""
-    project_dir = _output_dir / project_id
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    try:
-        return ProjectState.load(project_dir)
-    except (FileNotFoundError, ValueError) as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
