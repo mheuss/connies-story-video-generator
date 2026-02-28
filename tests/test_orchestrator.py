@@ -38,6 +38,7 @@ from story_video.pipeline.orchestrator import (
     _populate_image_tags,
     _populate_music_tags,
     _run_narration_prep,
+    _run_per_scene,
     run_pipeline,
 )
 from story_video.state import ProjectState
@@ -959,6 +960,73 @@ class TestRunPipelineStateSaved:
         # Verify by reloading from disk
         reloaded = ProjectState.load(state.project_dir)
         assert reloaded.metadata.status == PhaseStatus.AWAITING_REVIEW
+
+
+# ---------------------------------------------------------------------------
+# TestRunPipelineProgressCallbacks — on_progress callback invocation
+# ---------------------------------------------------------------------------
+
+
+class TestRunPipelineProgressCallbacks:
+    """run_pipeline() invokes on_progress callback at phase and scene boundaries."""
+
+    @patch("story_video.pipeline.orchestrator.split_scenes")
+    def test_on_progress_called_at_phase_start(self, mock_split, tmp_path):
+        """on_progress receives phase_started event when a phase begins."""
+        state = _make_adapt_state(tmp_path, autonomous=False)
+        _set_phase_state(state, PipelinePhase.ANALYSIS, PhaseStatus.AWAITING_REVIEW)
+
+        events = []
+        run_pipeline(
+            state,
+            claude_client=MagicMock(),
+            on_progress=lambda t, d: events.append((t, d)),
+        )
+
+        assert any(t == "phase_started" and d["phase"] == "scene_splitting" for t, d in events)
+
+    @patch("story_video.pipeline.orchestrator.assemble_video")
+    @patch("story_video.pipeline.orchestrator.assemble_scene")
+    def test_on_progress_reports_scene_progress(self, mock_scene, mock_video, tmp_path):
+        """on_progress receives scene_progress events during per-scene phases."""
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=2, up_to_asset=AssetType.CAPTIONS)
+        _set_phase_state(state, PipelinePhase.CAPTION_GENERATION, PhaseStatus.COMPLETED)
+
+        events = []
+        run_pipeline(
+            state,
+            claude_client=MagicMock(),
+            tts_provider=MagicMock(),
+            image_provider=MagicMock(),
+            caption_provider=MagicMock(),
+            on_progress=lambda t, d: events.append((t, d)),
+        )
+
+        scene_events = [(t, d) for t, d in events if t == "scene_progress"]
+        assert len(scene_events) == 2
+        assert scene_events[0][1]["scene_number"] == 1
+        assert scene_events[1][1]["scene_number"] == 2
+
+
+# ---------------------------------------------------------------------------
+# TestRunPerSceneCallback — on_scene_done callback invocation
+# ---------------------------------------------------------------------------
+
+
+class TestRunPerSceneCallback:
+    """_run_per_scene invokes on_scene_done after each scene."""
+
+    def test_callback_receives_scene_number_and_total(self, tmp_path):
+        """on_scene_done called with (scene_number, total) for each scene."""
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=3, up_to_asset=AssetType.IMAGE_PROMPT)
+        _set_phase_state(state, PipelinePhase.IMAGE_GENERATION, PhaseStatus.IN_PROGRESS)
+
+        calls = []
+        _run_per_scene(state, lambda scene: None, on_scene_done=lambda n, t: calls.append((n, t)))
+
+        assert calls == [(1, 3), (2, 3), (3, 3)]
 
 
 # ---------------------------------------------------------------------------
