@@ -103,6 +103,104 @@ def _set_phase_state(state, phase, status):
     # IN_PROGRESS is the default after start_phase — no extra call needed
 
 
+def _make_claude_dispatch(responses):
+    """Create a Claude mock side_effect that routes by tool_name.
+
+    Handles tts_text_prep automatically by echoing narration text back.
+    All other tool names are looked up in *responses*.
+    """
+
+    def _dispatch(**kwargs):
+        tool_name = kwargs.get("tool_name", "")
+        if tool_name == "tts_text_prep":
+            user_msg = kwargs.get("user_message", "")
+            lines = user_msg.split("\n")
+            text_start = None
+            for i, line in enumerate(lines):
+                if line.startswith("Narration text to prepare for TTS:"):
+                    text_start = i + 2
+                    break
+            narration_text = "\n".join(lines[text_start:]) if text_start else ""
+            return {
+                "modified_text": narration_text,
+                "changes": [],
+                "pronunciation_guide_additions": [],
+            }
+        return responses[tool_name]
+
+    return _dispatch
+
+
+def _make_simple_caption_result(text):
+    """Build a CaptionResult from plain text with 0.5s per word timing."""
+    words = text.split()
+    duration = len(words) * 0.5
+    return CaptionResult(
+        segments=[CaptionSegment(text=text, start=0.0, end=duration)],
+        words=[CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5) for i, w in enumerate(words)],
+        language="en",
+        duration=duration,
+    )
+
+
+def _make_timed_caption_result(words, duration):
+    """Build a CaptionResult with evenly spaced words over *duration* seconds."""
+    per_word = duration / len(words)
+    return CaptionResult(
+        segments=[CaptionSegment(text=" ".join(words), start=0.0, end=duration)],
+        words=[
+            CaptionWord(word=w, start=i * per_word, end=(i + 1) * per_word)
+            for i, w in enumerate(words)
+        ],
+        language="en",
+        duration=duration,
+    )
+
+
+def _make_mock_subprocess_run(duration="5.0", capture_commands=None):
+    """Create a subprocess.run mock that handles ffprobe and ffmpeg.
+
+    Args:
+        duration: ffprobe duration response string.
+        capture_commands: Optional list to append ffmpeg commands to.
+    """
+    real_run = _subprocess.run
+
+    def _mock(cmd, **kwargs):
+        cmd_str = cmd[0] if cmd else ""
+        if "ffprobe" in cmd_str:
+            return _subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout=f"{duration}\n", stderr=""
+            )
+        if "ffmpeg" in cmd_str:
+            if capture_commands is not None:
+                capture_commands.append(list(cmd))
+            output_path = Path(cmd[-1])
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"\x00" * 50)
+            return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+        return real_run(cmd, **kwargs)
+
+    return _mock
+
+
+def _make_mock_providers():
+    """Create mock TTS, image, and caption providers with sensible defaults.
+
+    Returns (mock_tts, mock_image, mock_caption) tuple.
+    """
+    mock_tts = MagicMock()
+    mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
+
+    fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+    mock_image = MagicMock()
+    mock_image.generate = MagicMock(return_value=fake_png)
+
+    mock_caption = MagicMock()
+
+    return mock_tts, mock_image, mock_caption
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -1292,79 +1390,19 @@ class TestPipelineIntegration:
             },
         }
 
-        def _claude_dispatch_with_narration(**kwargs):
-            """Route mock Claude calls, echoing narration text back for tts_text_prep."""
-            tool_name = kwargs.get("tool_name", "")
-            if tool_name == "tts_text_prep":
-                # Echo the input narration text back as modified_text (no changes)
-                user_msg = kwargs.get("user_message", "")
-                # The narration text is the last block after the blank line
-                lines = user_msg.split("\n")
-                # Find the text after "Narration text to prepare for TTS:" header
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2  # skip header + blank line
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            return claude_responses[tool_name]
-
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch_with_narration)
+        mock_claude.generate_structured = MagicMock(
+            side_effect=_make_claude_dispatch(claude_responses)
+        )
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
-        def _make_caption_result(text):
-            words = text.split()
-            duration = len(words) * 0.5
-            return CaptionResult(
-                segments=[CaptionSegment(text=text, start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
         mock_caption.transcribe = MagicMock(
-            side_effect=lambda path: _make_caption_result("Transcribed narration text.")
+            side_effect=lambda path: _make_simple_caption_result("Transcribed narration text.")
         )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="5.0\n", stderr=""
-                )
-
-            if "ffmpeg" in cmd_str:
-                output_path = Path(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr("subprocess.run", _make_mock_subprocess_run())
 
         # --- Create project state ---
         state = _make_adapt_state(tmp_path, autonomous=True)
@@ -1521,102 +1559,50 @@ class TestPipelineIntegration:
             },
         }
 
-        def _claude_dispatch(**kwargs):
-            tool_name = kwargs.get("tool_name", "")
-            if tool_name == "tts_text_prep":
-                user_msg = kwargs.get("user_message", "")
-                lines = user_msg.split("\n")
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            return claude_responses[tool_name]
-
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+        mock_claude.generate_structured = MagicMock(
+            side_effect=_make_claude_dispatch(claude_responses)
+        )
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
         # Captions need enough words and duration for image timing validation.
         # min_display=4.0 + crossfade=1.5 = 5.5s per image. Two images need ~11s.
-        def _make_caption_result(path):
-            words = [
-                "The",
-                "lighthouse",
-                "keeper",
-                "watched",
-                "the",
-                "storm",
-                "approach",
-                "dark",
-                "clouds",
-                "gathered",
-                "on",
-                "the",
-                "horizon",
-                "and",
-                "the",
-                "waves",
-                "grew",
-                "tall",
-                "the",
-                "harbor",
-                "below",
-                "came",
-                "alive",
-            ]
-            duration = 15.0
-            per_word = duration / len(words)
-            return CaptionResult(
-                segments=[CaptionSegment(text=" ".join(words), start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * per_word, end=(i + 1) * per_word)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
-        mock_caption.transcribe = MagicMock(side_effect=_make_caption_result)
+        _image_tag_words = [
+            "The",
+            "lighthouse",
+            "keeper",
+            "watched",
+            "the",
+            "storm",
+            "approach",
+            "dark",
+            "clouds",
+            "gathered",
+            "on",
+            "the",
+            "horizon",
+            "and",
+            "the",
+            "waves",
+            "grew",
+            "tall",
+            "the",
+            "harbor",
+            "below",
+            "came",
+            "alive",
+        ]
+        mock_caption.transcribe = MagicMock(
+            side_effect=lambda path: _make_timed_caption_result(_image_tag_words, 15.0)
+        )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
         ffmpeg_commands: list[list[str]] = []
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="15.0\n", stderr=""
-                )
-
-            if "ffmpeg" in cmd_str:
-                ffmpeg_commands.append(list(cmd))
-                output_path = Path(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr(
+            "subprocess.run",
+            _make_mock_subprocess_run(duration="15.0", capture_commands=ffmpeg_commands),
+        )
 
         # --- Create project state and run pipeline ---
         state = _make_adapt_state(tmp_path, autonomous=True)
@@ -1761,96 +1747,44 @@ class TestPipelineIntegration:
             },
         }
 
-        def _claude_dispatch(**kwargs):
-            tool_name = kwargs.get("tool_name", "")
-            if tool_name == "tts_text_prep":
-                user_msg = kwargs.get("user_message", "")
-                lines = user_msg.split("\n")
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            return claude_responses[tool_name]
-
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+        mock_claude.generate_structured = MagicMock(
+            side_effect=_make_claude_dispatch(claude_responses)
+        )
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
-        def _make_caption_result(path):
-            words = [
-                "The",
-                "rain",
-                "began",
-                "to",
-                "fall",
-                "the",
-                "lighthouse",
-                "keeper",
-                "pulled",
-                "his",
-                "coat",
-                "tighter",
-                "a",
-                "crack",
-                "of",
-                "lightning",
-                "split",
-                "the",
-                "sky",
-            ]
-            duration = 12.0
-            per_word = duration / len(words)
-            return CaptionResult(
-                segments=[CaptionSegment(text=" ".join(words), start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * per_word, end=(i + 1) * per_word)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
-        mock_caption.transcribe = MagicMock(side_effect=_make_caption_result)
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
+        _music_words = [
+            "The",
+            "rain",
+            "began",
+            "to",
+            "fall",
+            "the",
+            "lighthouse",
+            "keeper",
+            "pulled",
+            "his",
+            "coat",
+            "tighter",
+            "a",
+            "crack",
+            "of",
+            "lightning",
+            "split",
+            "the",
+            "sky",
+        ]
+        mock_caption.transcribe = MagicMock(
+            side_effect=lambda path: _make_timed_caption_result(_music_words, 12.0)
+        )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
         ffmpeg_commands: list[list[str]] = []
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="12.0\n", stderr=""
-                )
-
-            if "ffmpeg" in cmd_str:
-                ffmpeg_commands.append(list(cmd))
-                output_path = Path(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr(
+            "subprocess.run",
+            _make_mock_subprocess_run(duration="12.0", capture_commands=ffmpeg_commands),
+        )
 
         # --- Create project state ---
         state = _make_adapt_state(tmp_path, autonomous=True)
@@ -1911,37 +1845,47 @@ class TestPipelineIntegration:
         scene2_prose = "She rose from her seat and walked toward the stage, footsteps echoing."
 
         # --- Mock Claude client ---
-        def _claude_dispatch(**kwargs):
+        # Creative flow needs write_scene and critique_scene to branch on user_message
+        # content, so we wrap _make_claude_dispatch with a custom side_effect.
+        claude_responses = {
+            "analyze_source": {
+                "craft_notes": {"style": "literary fiction", "tone": "melancholic"},
+                "thematic_brief": {"themes": ["solitude", "memory"]},
+                "source_stats": {"word_count": 200, "scene_count_estimate": 2},
+            },
+            "create_story_bible": {
+                "characters": [{"name": "The Old Woman", "role": "protagonist"}],
+                "setting": "An abandoned theater",
+                "world_rules": [],
+            },
+            "create_outline": {
+                "scenes": [
+                    {
+                        "scene_number": 1,
+                        "title": "The Silence",
+                        "beat": "Introduction",
+                        "target_words": 100,
+                    },
+                    {
+                        "scene_number": 2,
+                        "title": "The Stage",
+                        "beat": "Rising action",
+                        "target_words": 100,
+                    },
+                ]
+            },
+            "generate_image_prompts": {
+                "prompts": [
+                    {"scene_number": 1, "image_prompt": "Empty theater with one person."},
+                    {"scene_number": 2, "image_prompt": "Woman walking toward lit stage."},
+                ]
+            },
+        }
+
+        _base_dispatch = _make_claude_dispatch(claude_responses)
+
+        def _creative_dispatch(**kwargs):
             tool_name = kwargs.get("tool_name", "")
-            if tool_name == "analyze_source":
-                return {
-                    "craft_notes": {"style": "literary fiction", "tone": "melancholic"},
-                    "thematic_brief": {"themes": ["solitude", "memory"]},
-                    "source_stats": {"word_count": 200, "scene_count_estimate": 2},
-                }
-            if tool_name == "create_story_bible":
-                return {
-                    "characters": [{"name": "The Old Woman", "role": "protagonist"}],
-                    "setting": "An abandoned theater",
-                    "world_rules": [],
-                }
-            if tool_name == "create_outline":
-                return {
-                    "scenes": [
-                        {
-                            "scene_number": 1,
-                            "title": "The Silence",
-                            "beat": "Introduction",
-                            "target_words": 100,
-                        },
-                        {
-                            "scene_number": 2,
-                            "title": "The Stage",
-                            "beat": "Rising action",
-                            "target_words": 100,
-                        },
-                    ]
-                }
             if tool_name == "write_scene":
                 user_msg = kwargs.get("user_message", "")
                 if "## Current Scene: The Silence" in user_msg:
@@ -1949,82 +1893,22 @@ class TestPipelineIntegration:
                 return {"prose": scene2_prose, "summary": "She walks to the stage."}
             if tool_name == "critique_scene":
                 user_msg = kwargs.get("user_message", "")
-                # Return prose unchanged (no revisions needed)
                 if "theater" in user_msg and "listening" in user_msg:
                     return {"revised_prose": scene1_prose, "changes": []}
                 return {"revised_prose": scene2_prose, "changes": []}
-            if tool_name == "generate_image_prompts":
-                return {
-                    "prompts": [
-                        {"scene_number": 1, "image_prompt": "Empty theater with one person."},
-                        {"scene_number": 2, "image_prompt": "Woman walking toward lit stage."},
-                    ]
-                }
-            if tool_name == "tts_text_prep":
-                user_msg = kwargs.get("user_message", "")
-                lines = user_msg.split("\n")
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            msg = f"Unexpected tool_name: {tool_name}"
-            raise ValueError(msg)
+            return _base_dispatch(**kwargs)
 
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+        mock_claude.generate_structured = MagicMock(side_effect=_creative_dispatch)
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
-        def _make_caption_result(text):
-            words = text.split()
-            duration = len(words) * 0.5
-            return CaptionResult(
-                segments=[CaptionSegment(text=text, start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
         mock_caption.transcribe = MagicMock(
-            side_effect=lambda path: _make_caption_result("Transcribed narration text.")
+            side_effect=lambda path: _make_simple_caption_result("Transcribed narration text.")
         )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="5.0\n", stderr=""
-                )
-            if "ffmpeg" in cmd_str:
-                output_path = Path(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr("subprocess.run", _make_mock_subprocess_run())
 
         # --- Create project state (INSPIRED_BY mode) ---
         config = AppConfig(pipeline=PipelineConfig(autonomous=True))
@@ -2100,37 +1984,47 @@ class TestPipelineIntegration:
         scene2_prose = "She rose from her seat and walked toward the stage, footsteps echoing."
 
         # --- Mock Claude client ---
-        def _claude_dispatch(**kwargs):
+        # Same creative flow dispatch as inspired_by, reuses _make_claude_dispatch
+        # with write_scene/critique_scene branching on user_message content.
+        claude_responses = {
+            "analyze_source": {
+                "craft_notes": {"style": "literary fiction", "tone": "melancholic"},
+                "thematic_brief": {"themes": ["solitude", "memory"]},
+                "source_stats": {"word_count": 200, "scene_count_estimate": 2},
+            },
+            "create_story_bible": {
+                "characters": [{"name": "The Old Woman", "role": "protagonist"}],
+                "setting": "An abandoned theater",
+                "world_rules": [],
+            },
+            "create_outline": {
+                "scenes": [
+                    {
+                        "scene_number": 1,
+                        "title": "The Silence",
+                        "beat": "Introduction",
+                        "target_words": 100,
+                    },
+                    {
+                        "scene_number": 2,
+                        "title": "The Stage",
+                        "beat": "Rising action",
+                        "target_words": 100,
+                    },
+                ]
+            },
+            "generate_image_prompts": {
+                "prompts": [
+                    {"scene_number": 1, "image_prompt": "Empty theater with one person."},
+                    {"scene_number": 2, "image_prompt": "Woman walking toward lit stage."},
+                ]
+            },
+        }
+
+        _base_dispatch = _make_claude_dispatch(claude_responses)
+
+        def _creative_dispatch(**kwargs):
             tool_name = kwargs.get("tool_name", "")
-            if tool_name == "analyze_source":
-                return {
-                    "craft_notes": {"style": "literary fiction", "tone": "melancholic"},
-                    "thematic_brief": {"themes": ["solitude", "memory"]},
-                    "source_stats": {"word_count": 200, "scene_count_estimate": 2},
-                }
-            if tool_name == "create_story_bible":
-                return {
-                    "characters": [{"name": "The Old Woman", "role": "protagonist"}],
-                    "setting": "An abandoned theater",
-                    "world_rules": [],
-                }
-            if tool_name == "create_outline":
-                return {
-                    "scenes": [
-                        {
-                            "scene_number": 1,
-                            "title": "The Silence",
-                            "beat": "Introduction",
-                            "target_words": 100,
-                        },
-                        {
-                            "scene_number": 2,
-                            "title": "The Stage",
-                            "beat": "Rising action",
-                            "target_words": 100,
-                        },
-                    ]
-                }
             if tool_name == "write_scene":
                 user_msg = kwargs.get("user_message", "")
                 if "## Current Scene: The Silence" in user_msg:
@@ -2138,82 +2032,22 @@ class TestPipelineIntegration:
                 return {"prose": scene2_prose, "summary": "She walks to the stage."}
             if tool_name == "critique_scene":
                 user_msg = kwargs.get("user_message", "")
-                # Return prose unchanged (no revisions needed)
                 if "theater" in user_msg and "listening" in user_msg:
                     return {"revised_prose": scene1_prose, "changes": []}
                 return {"revised_prose": scene2_prose, "changes": []}
-            if tool_name == "generate_image_prompts":
-                return {
-                    "prompts": [
-                        {"scene_number": 1, "image_prompt": "Empty theater with one person."},
-                        {"scene_number": 2, "image_prompt": "Woman walking toward lit stage."},
-                    ]
-                }
-            if tool_name == "tts_text_prep":
-                user_msg = kwargs.get("user_message", "")
-                lines = user_msg.split("\n")
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            msg = f"Unexpected tool_name: {tool_name}"
-            raise ValueError(msg)
+            return _base_dispatch(**kwargs)
 
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+        mock_claude.generate_structured = MagicMock(side_effect=_creative_dispatch)
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
-        def _make_caption_result(text):
-            words = text.split()
-            duration = len(words) * 0.5
-            return CaptionResult(
-                segments=[CaptionSegment(text=text, start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
         mock_caption.transcribe = MagicMock(
-            side_effect=lambda path: _make_caption_result("Transcribed narration text.")
+            side_effect=lambda path: _make_simple_caption_result("Transcribed narration text.")
         )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="5.0\n", stderr=""
-                )
-            if "ffmpeg" in cmd_str:
-                output_path = Path(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr("subprocess.run", _make_mock_subprocess_run())
 
         # --- Create project state (ORIGINAL mode) ---
         config = AppConfig(pipeline=PipelineConfig(autonomous=True))
