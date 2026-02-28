@@ -30,12 +30,114 @@ Items committed to the current sprint/cycle.
 - [ ] **Pipeline: Narration still starts too early** — The 2.0s `lead_in_duration` default was added but narration still begins before the image is fully visible. May need a longer default (3-4s), or the lead-in should be tied to `fade_in_duration` so they stay in sync. Test with different values and adjust.
 - [ ] **Pipeline: Story bible characters underused in image prompts** — Character descriptions from the story bible (analysis.json) are not sufficiently reflected in the generated image prompts. Images may not match character descriptions established in the bible. Need to brainstorm how to better inject character reference data into the image prompt generation step. Brainstorm when ready.
 - [ ] **Web UI: Image review and per-image revision** — After image generation, users should be able to see all generated images at the checkpoint. If an image doesn't look right, they should be able to step back and regenerate specific ones (edit the prompt, regenerate, keep the rest). Needs: image gallery component on review screen, per-image regeneration backend support, prompt editing UI. Brainstorm when ready.
+- [ ] **Pipeline: Last caption disappears too early** — The final caption vanishes as soon as the narrator stops speaking. When the last caption is a single word, it barely flashes on screen. The last caption should persist through the end hold / fade-out so viewers can read it. Brainstorm when ready.
 - [ ] **Web UI: `approvePipeline` sends empty body when auto is undefined** — Sends `{}` instead of no body. Harmless (FastAPI parses as `ApproveRequest(auto=False)`) but wasteful. Low priority. (S-1 from code review)
 - [ ] **Web UI: ProgressBar injects duplicate `<style>` tags** — Each ProgressBar instance injects its own `@keyframes` style block. Fine with one bar, but duplicates if multiple are visible. Consider lifting keyframes to a global stylesheet. Cosmetic only. (S-2 from code review)
 
 ## Backlog
 
 Acknowledged items not yet scheduled.
+
+### Seventh-Pass Review (PR7) — 2026-02-28
+
+#### Group A: SSE & Pipeline Thread Lifecycle (3H, 3M)
+
+- [x] [bug] **H-1: SSE generator hangs if pipeline thread dies without terminal event** — Added dead-thread detection: if bridge exists, not done, and `is_running()` is False, yields error event and returns. (routes_pipeline.py)
+- [x] [bug] **H-2: Stale bridge and thread never cleared after pipeline finishes** — Added `finally` block in `_run_pipeline_safe` that clears `_active_thread` and `_active_bridge` under the lock. (pipeline_runner.py)
+- [x] [bug] **M-1: SSE poll has no timeout when bridge is None** — Added 30s timeout counter; yields error event and returns if no bridge appears. (routes_pipeline.py)
+- [x] [bug] **M-3: `_make_tts_provider` silently defaults to OpenAI for unknown providers** — Now raises `ValueError` for unknown provider names. (pipeline_runner.py)
+- [x] [bug] **M-4: `_PHASE_DIRS` silently falls back to "scenes" for unmapped phases** — Replaced `.get(phase, "scenes")` with explicit lookup that raises HTTP 500 for unmapped phases. (routes_artifacts.py)
+- [x] [test] **H-3: `pipeline_runner.py` has zero test coverage** — Added `test_web_pipeline_runner.py` with 8 tests covering `_make_tts_provider`, global cleanup, concurrent run guard, and `is_running` states.
+
+#### Group B: Web Backend Hardening (2M)
+
+- [ ] [bug] **M-2: `_write_env_file` overwrites non-API-key content in `.env`** — Reads only three API key vars from `os.environ` and writes them back, destroying everything else. Either parse-and-update preserving other content, or document that this `.env` is exclusively managed by the web API. (routes_settings.py:88-100)
+- [ ] [refactor] **M-5: `_generate_project_id` duplicated between CLI and web** — Different time zones (UTC vs local). Extract shared function into common location, use UTC consistently. (routes_projects.py:62, cli.py:58)
+
+#### Group C: FFmpeg Edge Cases (2M)
+
+- [ ] [bug] **M-7: `fade_out_start` can go negative when music fade_out > remaining duration** — Same class of bug as the narration fade-out overlap fix. Clamp to non-negative and log warning. (commands.py:131-133)
+- [ ] [bug] **M-8: Zero/negative image duration silently clamped without warning** — `build_concat_command` logs warnings for clamped offsets but `_build_multi_image_command` does not. Add consistent warning logging. (commands.py:340-341)
+
+#### Group D: Pipeline Code Quality (2M)
+
+- [ ] [bug] **M-6: `char_position_to_timestamp` doesn't guard against empty `word_char_offsets`** — Public API exported in `__all__`. Empty list causes `words[-1]` via negative indexing. Add fail-fast guard. (image_timing.py:75-84)
+- [ ] [docs] **M-9: Three different undocumented resume strategies in `story_writer.py`** — `write_scene_prose` checks `existing_scene_numbers`, `_run_narration_prep` uses `narration_prep_done.json`, `critique_and_revise` checks changelog file existence. Add comments explaining each. (story_writer.py:837,897,942)
+
+#### Group E: Test Quality & Gaps (5M)
+
+- [ ] [test] **M-10: ~18 inline imports in `test_orchestrator.py`** — json, subprocess, pathlib, models, `_populate_image_tags` (already imported at module level). Move all to module-level imports. (test_orchestrator.py)
+- [ ] [refactor] **M-11: ~250 lines duplicated integration test boilerplate in `test_orchestrator.py`** — `_claude_dispatch`, `_mock_subprocess_run`, `_make_caption_result`, mock provider setup duplicated across 5 integration tests. Extract shared helpers. (test_orchestrator.py)
+- [ ] [test] **M-12: `on_progress`/`on_scene_done` callbacks have zero test coverage** — Web UI's real-time progress mechanism untested at orchestrator level. Add callback verification tests. (orchestrator.py:88,129)
+- [ ] [test] **M-13: `ProgressBridge` has no direct unit tests** — `push()`, `try_get()` timeout, `is_done` terminal tracking only tested indirectly via SSE tests. Add `test_web_progress.py`. (progress.py)
+- [ ] [test] **M-14: `os.environ` mutations leak past monkeypatch in `test_web_settings.py`** — Endpoint sets `os.environ` directly, bypassing monkeypatch tracking. Add explicit cleanup in teardown. (test_web_settings.py:43-78)
+
+#### Group F: React Frontend (5M)
+
+- [ ] [bug] **M-15: No 404/catch-all route in React app** — Undefined paths render empty `<main>` with no feedback. Add `<Route path="*">` fallback. (App.tsx)
+- [ ] [bug] **M-16: ReviewScreen `handleEdit` bypasses API client** — Uses raw `fetch()` without error handling. Non-200 responses load error HTML into textarea. Add `getArtifactContent` to API client or check `response.ok`. (ReviewScreen.tsx:40-49)
+- [ ] [bug] **M-17: Double project creation if `startPipeline` fails** — `createProject` succeeds, `startPipeline` throws, form re-enabled. Clicking again creates a second project. Navigate to project page after create, or detect existing project. (CreatePage.tsx:30-37)
+- [ ] [bug] **M-18: ApiKeySetup submit enabled with only one of two required keys** — Pipeline needs both Anthropic and OpenAI. Submit is enabled with just one. Validate both required keys are configured or provided. (ApiKeySetup.tsx:115)
+- [ ] [test] **M-19: ReviewScreen test leaves `globalThis.fetch` patched without `afterEach` cleanup** — Mock leaks if assertion fails before restore. Use `vi.stubGlobal` + `vi.unstubAllGlobals`. (ReviewScreen.test.tsx:99-129)
+
+#### Group G: Low-Severity Cleanup (36 items)
+
+**Inline imports in tests (7):**
+- [ ] [test] `_build_audio_mix_filters` imported inline 7 times in `test_commands.py` — move to module level
+- [ ] [test] `import logging` inline in `test_tts_generator.py` (3x) and `test_narration_tags.py` (1x)
+- [ ] [test] `import openai` inline in `test_tts_generator.py`, `test_image_generator.py`, `test_caption_generator.py`
+- [ ] [test] `SceneImagePrompt` imported inline in `test_orchestrator.py` — add to module-level imports
+- [ ] [test] `import logging` inline in `test_cli.py:1042`
+- [ ] [test] `from openai import ...` inline in `test_retry.py:275`
+- [ ] [test] `from story_video import __version__` inline in `test_models.py:693`
+
+**Duplication (6):**
+- [ ] [refactor] `_OPENAI_TRANSIENT` defined identically in tts_generator.py, image_generator.py, caption_generator.py — consolidate (3 cases meets threshold)
+- [ ] [refactor] Web test `output_dir`/`client` fixtures duplicated in 4 test files — extract to conftest
+- [ ] [test] Duplicated `_resolve_project_dir` traversal test in `test_web_artifacts.py` — keep in `test_web_projects.py` only
+- [ ] [test] `MockEventSource` duplicated in `ProjectPage.test.tsx` and `useProgressStream.test.ts` — extract shared helper
+- [ ] [refactor] `_populate_image_tags` and `_populate_music_tags` near-identical — note for future extraction if a third tag type added
+- [ ] [refactor] ReviewScreen auto-approve handler duplicates `handleApprove` logic — parameterize with `auto` flag
+
+**Missing tests (4):**
+- [ ] [test] `with_retry` parameter validation guards untested (retry.py:72-77)
+- [ ] [test] `_generate_project_id` 1000-attempt safety cap untested (cli.py:85-87)
+- [ ] [test] Bracket escaping in `subtitle_filter` untested (subtitles.py:278-279)
+- [ ] [test] `_export_image_prompts` error and idempotency paths untested (routes_artifacts.py:93-116)
+
+**Edge cases (4):**
+- [ ] [low] `AudioCueSpec` fields have no validation — upstream `AudioAsset` validates, add docstring noting valid ranges
+- [ ] [low] `_scan_project_dirs` does not handle `PermissionError` (cli.py:127)
+- [ ] [low] `useProgressStream` events array grows unboundedly — cap or show only recent phase
+- [ ] [low] `ProjectPage` retry catch silently swallows error — show error message
+
+**Consistency (3):**
+- [ ] [refactor] `_resolve_audio_cues` raises `KeyError` instead of `ValueError` — inconsistent with rest of pipeline (video_assembler.py:76-81)
+- [ ] [low] `state.save()` patterns differ: single-save in TTS/image/caption vs double-save in video_assembler
+- [ ] [test] Mixed `@patch` decorator vs `monkeypatch` in `test_commands.py` for same function
+
+**Documentation & readability (5):**
+- [ ] [docs] Unused `prose_bare` variable in caption_generator destructuring — replace with `_` (caption_generator.py:204)
+- [ ] [docs] Missing inline comment for `-shortest` flag absence in multi-image command (commands.py:400-420)
+- [ ] [docs] `retryCount` scope in `useProgressStream` is correct but non-obvious — add comment
+- [ ] [docs] `image_prompt_writer.py:137` missing comment explaining missing-check double duty
+- [ ] [docs] Orchestrator module docstring phase counts fragile if phases change (orchestrator.py:3)
+
+**Dead code (4):**
+- [ ] [chore] Multi-image `i==0` special case in xfade offset is redundant — simplify (commands.py:362-374)
+- [ ] [chore] Empty `index.css` imported but unused — remove file and import
+- [ ] [chore] `getHealth` and `deleteProject` unused by any React component — add comment or remove
+- [ ] [low] Unreachable empty-event guard in `generate_ass_content` — defensive, not harmful (subtitles.py:243-245)
+
+**Frontend (4):**
+- [ ] [chore] Duplicate `react-router-dom` import in SettingsPage.tsx — combine into one line
+- [ ] [test] `act()` warnings in Layout.test.tsx and App.test.tsx — use `waitFor`
+- [ ] [chore] `console.log` in Storybook stories instead of `@storybook/addon-actions`
+- [ ] [a11y] Missing `aria-label` on ProgressBar, ReviewScreen textarea, video element
+
+**Other (2):**
+- [ ] [low] `ClaudeClient` hardcodes model default `claude-sonnet-4-5-20250929` — maintenance risk (claude_client.py:40)
+- [ ] [low] Cost estimation assumes 1 image per scene — no `image_count` param for inline-image actuals (cost.py:197)
 
 ### Sixth-Pass Review (PR6) — 2026-02-21
 

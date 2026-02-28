@@ -78,7 +78,12 @@ def _resolve_artifact_dir(project_id: str, phase: str) -> Path:
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     _validate_phase(phase)
-    subdir = _PHASE_DIRS.get(phase, "scenes")
+    if phase not in _PHASE_DIRS:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Phase '{phase}' has no artifact directory mapping",
+        )
+    subdir = _PHASE_DIRS[phase]
     return project_dir / subdir if subdir else project_dir
 
 

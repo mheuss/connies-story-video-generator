@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import time
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -71,11 +72,23 @@ async def stream_progress(project_id: str) -> EventSourceResponse:
     return EventSourceResponse(_event_generator())
 
 
+_BRIDGE_WAIT_TIMEOUT = 30.0
+
+
 async def _event_generator():
     """Yield SSE events from the bridge until a terminal event."""
+    deadline = time.monotonic() + _BRIDGE_WAIT_TIMEOUT
+    bridge = None
     while True:
-        bridge = get_bridge()
         if bridge is None:
+            bridge = get_bridge()
+        if bridge is None:
+            if time.monotonic() >= deadline:
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"message": "No pipeline activity (timed out)"}),
+                }
+                return
             await asyncio.sleep(0.5)
             continue
         event = bridge.try_get(timeout=0.1)
@@ -84,6 +97,12 @@ async def _event_generator():
             if event.event in TERMINAL_EVENTS:
                 return
         else:
+            if not bridge.is_done and not pipeline_runner.is_running():
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"message": "Pipeline terminated unexpectedly"}),
+                }
+                return
             await asyncio.sleep(0.1)
 
 

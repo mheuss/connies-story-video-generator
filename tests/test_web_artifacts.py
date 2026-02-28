@@ -1,6 +1,7 @@
 """Tests for story_video.web.routes_artifacts -- artifact listing and serving."""
 
 import json
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
@@ -10,6 +11,7 @@ from story_video.config import load_config
 from story_video.models import InputMode
 from story_video.state import ProjectState
 from story_video.web.app import create_app
+from story_video.web.routes_artifacts import _resolve_artifact_dir
 
 
 @pytest.fixture()
@@ -146,3 +148,18 @@ class TestUpdateArtifact:
             json={"content": "  "},
         )
         assert response.status_code == 422
+
+
+class TestResolveArtifactDir:
+    """_resolve_artifact_dir raises 500 for valid but unmapped phases."""
+
+    def test_unmapped_phase_returns_500(self, project_with_artifacts):
+        """A phase that passes validation but has no _PHASE_DIRS entry raises 500."""
+        with patch(
+            "story_video.web.routes_artifacts._validate_phase",
+            return_value="future_phase",
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                _resolve_artifact_dir("test-project", "future_phase")
+            assert exc_info.value.status_code == 500
+            assert "no artifact directory mapping" in exc_info.value.detail

@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Single-segment concat no longer emits unnecessary zero-duration `tpad`/`apad` filters when `end_hold_duration` is 0.
 - Scene summaries now persist across resume — subsequent scenes get full prose summary context instead of title-only
 - Final video fade-out no longer overlaps narration — end hold is automatically extended to at least `fade_out_duration` so the fade never begins before the narrator finishes speaking
+- SSE progress stream no longer hangs when the pipeline thread dies without emitting a terminal event
+- SSE progress stream times out after 30 seconds if no pipeline starts, instead of hanging indefinitely
+- Pipeline state (active thread and bridge) is now cleaned up after every run, preventing stale state from blocking subsequent runs
+- Unknown TTS provider names in the web API now raise an error instead of silently defaulting to OpenAI
+- Invalid artifact phase lookups now return HTTP 500 instead of silently falling back to the scenes directory
 
 ## [0.4.0] — 2026-02-18
 

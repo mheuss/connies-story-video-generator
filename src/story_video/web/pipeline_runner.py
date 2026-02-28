@@ -78,7 +78,10 @@ def _make_tts_provider(
     """Instantiate a TTS provider by name."""
     if provider_name == "elevenlabs":
         return ElevenLabsTTSProvider()
-    return OpenAITTSProvider()
+    if provider_name == "openai":
+        return OpenAITTSProvider()
+    msg = f"Unknown TTS provider: {provider_name!r}. Must be 'openai' or 'elevenlabs'."
+    raise ValueError(msg)
 
 
 def _run_pipeline_safe(state: ProjectState, bridge: ProgressBridge) -> None:
@@ -125,3 +128,8 @@ def _run_pipeline_safe(state: ProjectState, bridge: ProgressBridge) -> None:
                 data={"message": f"Pipeline failed for project {state.metadata.project_id}"},
             )
         )
+    finally:
+        global _active_thread, _active_bridge  # noqa: PLW0603
+        with _lock:
+            _active_thread = None
+            _active_bridge = None
