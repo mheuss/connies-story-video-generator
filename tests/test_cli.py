@@ -3,7 +3,7 @@
 import json
 import subprocess
 import sys
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +13,6 @@ from typer.testing import CliRunner
 from story_video.cli import (
     _display_outcome,
     _find_most_recent_project,
-    _generate_project_id,
     _read_text_input,
     _run_with_providers,
     _scan_project_dirs,
@@ -30,7 +29,7 @@ from story_video.models import (
     SceneStatus,
     TTSConfig,
 )
-from story_video.state import ProjectState
+from story_video.state import ProjectState, generate_project_id
 
 runner = CliRunner()
 
@@ -52,33 +51,33 @@ class TestCLIEntryPoint:
 
 
 class TestGenerateProjectId:
-    """Tests for _generate_project_id — collision-safe project ID generation."""
+    """Tests for generate_project_id (state.py) — collision-safe project ID generation."""
 
     def test_basic_format(self, tmp_path: Path) -> None:
         """Returns mode-YYYY-MM-DD format for a clean directory."""
-        result = _generate_project_id("adapt", tmp_path)
-        today = date.today().isoformat()
+        result = generate_project_id("adapt", tmp_path)
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
         assert result == f"adapt-{today}"
 
     def test_collision_suffix(self, tmp_path: Path) -> None:
         """Appends -2, -3 when directory already exists."""
-        today = date.today().isoformat()
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
 
         # Create the base directory to cause a collision
         (tmp_path / f"adapt-{today}").mkdir()
-        result = _generate_project_id("adapt", tmp_path)
+        result = generate_project_id("adapt", tmp_path)
         assert result == f"adapt-{today}-2"
 
         # Create the -2 directory to cause another collision
         (tmp_path / f"adapt-{today}-2").mkdir()
-        result = _generate_project_id("adapt", tmp_path)
+        result = generate_project_id("adapt", tmp_path)
         assert result == f"adapt-{today}-3"
 
     def test_output_dir_does_not_exist(self, tmp_path: Path) -> None:
         """Works correctly when output_dir does not exist yet."""
         nonexistent = tmp_path / "does_not_exist"
-        result = _generate_project_id("original", nonexistent)
-        today = date.today().isoformat()
+        result = generate_project_id("original", nonexistent)
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
         assert result == f"original-{today}"
 
 

@@ -75,6 +75,12 @@ class TestCharPositionToTimestamp:
         offsets = build_word_char_offsets(captions)
         assert char_position_to_timestamp(0, captions, offsets) == 0.0
 
+    def test_raises_on_empty_offsets(self):
+        """Empty word_char_offsets raises ValueError."""
+        captions = CaptionResult(duration=1.0, words=[], segments=[], language="en")
+        with pytest.raises(ValueError, match="word_char_offsets must not be empty"):
+            char_position_to_timestamp(0, captions, [])
+
 
 class TestComputeImageTimings:
     """compute_image_timings maps image tag positions to caption timestamps."""

@@ -86,6 +86,20 @@ class TestCreateProject:
         assert source_path.exists()
         assert source_path.read_text(encoding="utf-8") == source
 
+    def test_project_creation_cap_returns_409(self, client, output_dir, monkeypatch):
+        """Creating too many projects on the same day returns 409."""
+        monkeypatch.setattr(
+            "story_video.web.routes_projects.generate_project_id",
+            lambda mode, output_dir: (_ for _ in ()).throw(
+                RuntimeError("Could not generate unique project ID")
+            ),
+        )
+        response = client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": "A story."},
+        )
+        assert response.status_code == 409
+
 
 class TestCreateProjectAutonomous:
     """POST /api/v1/projects respects the autonomous flag."""

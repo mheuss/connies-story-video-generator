@@ -130,6 +130,15 @@ def _build_audio_mix_filters(
             chain.append(f"afade=t=in:st=0:d={cue.fade_in}")
         if cue.fade_out > 0:
             fade_out_start = remaining - cue.fade_out
+            if fade_out_start < 0:
+                logger.warning(
+                    "Music cue %d fade_out (%.2fs) exceeds remaining duration (%.2fs); "
+                    "fade_out_start clamped to 0.0",
+                    i,
+                    cue.fade_out,
+                    remaining,
+                )
+                fade_out_start = 0.0
             chain.append(f"afade=t=out:st={fade_out_start}:d={cue.fade_out}")
 
         filter_parts.append(f"{input_label}{','.join(chain)}{output_label}")
@@ -336,8 +345,15 @@ def _build_multi_image_command(
     # Build input arguments: each image looped and trimmed to its duration
     inputs: list[str] = []
     durations: list[float] = []
-    for img_path, (start, end) in zip(image_paths, image_timings):
-        dur = max(0.0, end - start)
+    for i, (img_path, (start, end)) in enumerate(zip(image_paths, image_timings)):
+        raw_dur = end - start
+        dur = max(0.0, raw_dur)
+        if raw_dur < 0:
+            logger.warning(
+                "Image %d duration is negative (%.2fs); clamped to 0.0",
+                i,
+                raw_dur,
+            )
         durations.append(dur)
         inputs.extend(["-loop", "1", "-t", str(dur), "-i", str(img_path)])
 

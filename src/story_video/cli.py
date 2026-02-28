@@ -7,7 +7,6 @@ import json
 import logging
 import os
 from collections.abc import Iterator
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +24,7 @@ from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import OpenAIImageProvider
 from story_video.pipeline.orchestrator import run_pipeline
 from story_video.pipeline.tts_generator import ElevenLabsTTSProvider, OpenAITTSProvider
-from story_video.state import ProjectState
+from story_video.state import ProjectState, generate_project_id
 
 logger = logging.getLogger(__name__)
 
@@ -53,39 +52,6 @@ console = Console()
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
-
-
-def _generate_project_id(mode: str, output_dir: Path) -> str:
-    """Generate a collision-safe project ID.
-
-    Format: ``{mode}-{YYYY-MM-DD}``. When a directory with that name already
-    exists in *output_dir*, appends ``-2``, ``-3``, etc. until a free name is
-    found.  If *output_dir* doesn't exist yet, no collision is possible so the
-    base name is returned immediately.
-
-    Args:
-        mode: Input mode string (e.g. "adapt", "original", "inspired_by").
-        output_dir: Base output directory where project directories live.
-
-    Returns:
-        A project ID string guaranteed not to collide with existing directories.
-    """
-    today = date.today().isoformat()
-    base = f"{mode}-{today}"
-
-    if not output_dir.exists():
-        return base
-
-    if not (output_dir / base).exists():
-        return base
-
-    suffix = 2
-    while (output_dir / f"{base}-{suffix}").exists():
-        suffix += 1
-        if suffix > 1000:
-            msg = f"Could not generate unique project ID after 1000 attempts for base '{base}'"
-            raise RuntimeError(msg)
-    return f"{base}-{suffix}"
 
 
 def _read_text_input(value: str) -> str:
@@ -377,7 +343,7 @@ def create(
         raise typer.Exit(1)
 
     # --- Create project ---
-    project_id = _generate_project_id(mode, output_dir)
+    project_id = generate_project_id(mode, output_dir)
 
     try:
         state = ProjectState.create(project_id, input_mode, app_config, output_dir)

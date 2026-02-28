@@ -13,6 +13,7 @@ This module owns the business rules for state management:
 
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -30,7 +31,43 @@ from story_video.models import (
     SceneStatus,
 )
 
-__all__ = ["ASSET_DEPENDENCIES", "PHASE_ASSET_MAP", "ProjectState"]
+__all__ = ["ASSET_DEPENDENCIES", "PHASE_ASSET_MAP", "ProjectState", "generate_project_id"]
+
+
+def generate_project_id(mode: str, output_dir: Path) -> str:
+    """Generate a collision-safe project ID.
+
+    Format: ``{mode}-{YYYY-MM-DD}`` (UTC). When a directory with that name
+    already exists in *output_dir*, appends ``-2``, ``-3``, etc. until a
+    free name is found.
+
+    Args:
+        mode: Input mode string (e.g. "adapt", "original", "inspired_by").
+        output_dir: Base output directory where project directories live.
+
+    Returns:
+        A project ID string guaranteed not to collide with existing directories.
+
+    Raises:
+        RuntimeError: If more than 1000 projects exist for the same date.
+    """
+    date_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    base = f"{mode}-{date_str}"
+
+    if not output_dir.exists():
+        return base
+
+    if not (output_dir / base).exists():
+        return base
+
+    suffix = 2
+    while (output_dir / f"{base}-{suffix}").exists():
+        suffix += 1
+        if suffix > 1000:
+            msg = f"Could not generate unique project ID after 1000 attempts for base '{base}'"
+            raise RuntimeError(msg)
+    return f"{base}-{suffix}"
+
 
 # ---------------------------------------------------------------------------
 # Phase-to-asset mapping — which asset type each pipeline phase produces

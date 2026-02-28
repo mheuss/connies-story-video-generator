@@ -51,18 +51,18 @@ Acknowledged items not yet scheduled.
 
 #### Group B: Web Backend Hardening (2M)
 
-- [ ] [bug] **M-2: `_write_env_file` overwrites non-API-key content in `.env`** — Reads only three API key vars from `os.environ` and writes them back, destroying everything else. Either parse-and-update preserving other content, or document that this `.env` is exclusively managed by the web API. (routes_settings.py:88-100)
-- [ ] [refactor] **M-5: `_generate_project_id` duplicated between CLI and web** — Different time zones (UTC vs local). Extract shared function into common location, use UTC consistently. (routes_projects.py:62, cli.py:58)
+- [x] [bug] **M-2: `_write_env_file` overwrites non-API-key content in `.env`** — Rewrote to parse-and-update: reads existing .env line-by-line, updates managed keys in place, preserves comments and user variables. Unset keys are removed. (routes_settings.py)
+- [x] [refactor] **M-5: `_generate_project_id` duplicated between CLI and web** — Extracted `generate_project_id(mode, output_dir)` into `state.py`. Uses UTC consistently. Caps at 1000 attempts. Both CLI and web import from there. Web route converts RuntimeError to HTTP 409.
 
 #### Group C: FFmpeg Edge Cases (2M)
 
-- [ ] [bug] **M-7: `fade_out_start` can go negative when music fade_out > remaining duration** — Same class of bug as the narration fade-out overlap fix. Clamp to non-negative and log warning. (commands.py:131-133)
-- [ ] [bug] **M-8: Zero/negative image duration silently clamped without warning** — `build_concat_command` logs warnings for clamped offsets but `_build_multi_image_command` does not. Add consistent warning logging. (commands.py:340-341)
+- [x] [bug] **M-7: `fade_out_start` can go negative when music fade_out > remaining duration** — Clamped to non-negative with warning log when clamping occurs. (commands.py)
+- [x] [bug] **M-8: Zero/negative image duration silently clamped without warning** — Added warning log in `_build_multi_image_command` when duration is negative, matching `build_concat_command` pattern. (commands.py)
 
 #### Group D: Pipeline Code Quality (2M)
 
-- [ ] [bug] **M-6: `char_position_to_timestamp` doesn't guard against empty `word_char_offsets`** — Public API exported in `__all__`. Empty list causes `words[-1]` via negative indexing. Add fail-fast guard. (image_timing.py:75-84)
-- [ ] [docs] **M-9: Three different undocumented resume strategies in `story_writer.py`** — `write_scene_prose` checks `existing_scene_numbers`, `_run_narration_prep` uses `narration_prep_done.json`, `critique_and_revise` checks changelog file existence. Add comments explaining each. (story_writer.py:837,897,942)
+- [x] [bug] **M-6: `char_position_to_timestamp` doesn't guard against empty `word_char_offsets`** — Added ValueError guard at function entry. (image_timing.py)
+- [x] [docs] **M-9: Three different undocumented resume strategies in `story_writer.py`** — Added/expanded inline comments explaining each strategy: scene metadata check in `write_scene_prose`, narration_prep_done.json tracker in orchestrator (already documented), changelog file existence in `critique_and_revise`.
 
 #### Group E: Test Quality & Gaps (5M)
 
@@ -101,7 +101,7 @@ Acknowledged items not yet scheduled.
 
 **Missing tests (4):**
 - [ ] [test] `with_retry` parameter validation guards untested (retry.py:72-77)
-- [ ] [test] `_generate_project_id` 1000-attempt safety cap untested (cli.py:85-87)
+- [ ] [test] `generate_project_id` 1000-attempt safety cap untested (state.py)
 - [ ] [test] Bracket escaping in `subtitle_filter` untested (subtitles.py:278-279)
 - [ ] [test] `_export_image_prompts` error and idempotency paths untested (routes_artifacts.py:93-116)
 

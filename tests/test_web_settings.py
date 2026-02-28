@@ -118,3 +118,35 @@ class TestSetApiKeys:
         client = TestClient(app)
         response = client.post("/api/v1/settings/api-keys", json={})
         assert response.status_code == 422
+
+    def test_preserves_unmanaged_env_content(self, monkeypatch, tmp_path):
+        """Setting API keys preserves comments and non-API-key variables."""
+        env_path = tmp_path / ".env"
+        env_path.write_text('# My comment\nDEBUG=1\nANTHROPIC_API_KEY="old"\n', encoding="utf-8")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        app = create_app(env_path=env_path)
+        client = TestClient(app)
+        client.post("/api/v1/settings/api-keys", json={"anthropic_api_key": "sk-new"})
+        content = env_path.read_text()
+        assert "# My comment" in content
+        assert "DEBUG=1" in content
+        assert 'ANTHROPIC_API_KEY="sk-new"' in content
+
+    def test_removes_unset_managed_key(self, monkeypatch, tmp_path):
+        """A managed key with empty env value is removed from the file."""
+        env_path = tmp_path / ".env"
+        env_path.write_text('ANTHROPIC_API_KEY="old"\nDEBUG=1\n', encoding="utf-8")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+        app = create_app(env_path=env_path)
+        # create_app loads .env via load_dotenv, restoring ANTHROPIC_API_KEY.
+        # Remove it again to simulate the user clearing the key.
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        client = TestClient(app)
+        client.post("/api/v1/settings/api-keys", json={"openai_api_key": "sk-new"})
+        content = env_path.read_text()
+        assert "ANTHROPIC_API_KEY" not in content
+        assert "DEBUG=1" in content
+        assert 'OPENAI_API_KEY="sk-new"' in content

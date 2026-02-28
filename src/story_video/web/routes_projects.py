@@ -5,7 +5,6 @@ All state is managed through ProjectState (project.json on disk).
 """
 
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -13,7 +12,7 @@ from pydantic import BaseModel, field_validator
 
 from story_video.config import load_config
 from story_video.models import InputMode
-from story_video.state import ProjectState
+from story_video.state import ProjectState, generate_project_id
 
 __all__ = ["router"]
 
@@ -59,19 +58,6 @@ class CreateProjectRequest(BaseModel):
         return v
 
 
-def _generate_project_id(mode: str) -> str:
-    """Generate a unique project ID like 'adapt-2026-02-25'."""
-    date_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
-    base_id = f"{mode}-{date_str}"
-    if not (_output_dir / base_id).exists():
-        return base_id
-    for n in range(2, 100):
-        candidate = f"{base_id}-{n}"
-        if not (_output_dir / candidate).exists():
-            return candidate
-    raise HTTPException(status_code=409, detail=f"Too many projects for {date_str}")
-
-
 @router.post("", status_code=201)
 async def create_project(body: CreateProjectRequest) -> dict:
     """Create a new story video project."""
@@ -81,7 +67,10 @@ async def create_project(body: CreateProjectRequest) -> dict:
         update={"pipeline": config.pipeline.model_copy(update={"autonomous": body.autonomous})}
     )
 
-    project_id = _generate_project_id(body.mode)
+    try:
+        project_id = generate_project_id(body.mode, _output_dir)
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     _output_dir.mkdir(parents=True, exist_ok=True)
     state = ProjectState.create(project_id, mode, config, _output_dir)
 

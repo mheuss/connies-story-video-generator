@@ -40,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Pipeline state (active thread and bridge) is now cleaned up after every run, preventing stale state from blocking subsequent runs
 - Unknown TTS provider names in the web API now raise an error instead of silently defaulting to OpenAI
 - Invalid artifact phase lookups now return HTTP 500 instead of silently falling back to the scenes directory
+- `.env` file updates now preserve comments and user-defined variables instead of overwriting the entire file
+- Project ID generation unified between CLI and web — both use UTC and share a single implementation in `state.py`
+- Music fade-out start time is clamped to 0.0 when the fade duration exceeds remaining scene time, preventing invalid FFmpeg filter values
+- Multi-image scene assembly now logs a warning when image duration is negative instead of silently clamping
+- `char_position_to_timestamp` now raises `ValueError` on empty word offsets instead of silently returning wrong data
 
 ## [0.4.0] — 2026-02-18
 

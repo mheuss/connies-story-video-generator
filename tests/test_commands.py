@@ -647,6 +647,38 @@ class TestBuildMultiImageSegmentCommand:
             )
 
 
+class TestBuildMultiImageNegativeDuration:
+    """_build_multi_image_command warns when image duration is negative."""
+
+    def test_multi_image_logs_warning_for_negative_duration(self, tmp_path, caplog):
+        """_build_multi_image_command logs a warning when image duration is negative."""
+        import logging
+
+        from story_video.ffmpeg.commands import _build_multi_image_command
+        from story_video.models import VideoConfig
+
+        video_config = VideoConfig()
+        img = tmp_path / "img.png"
+        img.touch()
+        audio = tmp_path / "audio.mp3"
+        audio.touch()
+        output = tmp_path / "out.mp4"
+
+        with caplog.at_level(logging.WARNING, logger="story_video.ffmpeg.commands"):
+            _build_multi_image_command(
+                image_paths=[img, img],
+                image_timings=[(0.0, 5.0), (5.0, 3.0)],  # second image has negative duration
+                audio_path=audio,
+                output_path=output,
+                video_config=video_config,
+                bg_filter="scale=1920:1080",
+                fg_filter="scale=1920:1080",
+                sub_filter="",
+            )
+
+        assert "Image 1 duration is negative" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # TestAudioCueSpec — frozen dataclass for FFmpeg music mixing parameters
 # ---------------------------------------------------------------------------
@@ -807,6 +839,26 @@ class TestBuildAudioMixFilters:
         combined = ";".join(filters)
         # remaining = 30.0 - 5.0 = 25.0; fade_out_start = 25.0 - 3.0 = 22.0
         assert "afade=t=out:st=22.0:d=3.0" in combined
+
+    def test_fade_out_start_clamped_when_exceeds_remaining(self):
+        """fade_out_start is clamped to 0.0 when fade_out > remaining duration."""
+        from story_video.ffmpeg.commands import _build_audio_mix_filters
+
+        cues = [
+            AudioCueSpec(
+                file_path=Path("/music.mp3"),
+                start_time=8.0,
+                scene_duration=10.0,
+                volume=0.3,
+                loop=False,
+                fade_in=0.0,
+                fade_out=5.0,  # remaining=2.0, fade_out=5.0 -> clamped
+            )
+        ]
+        filters, _ = _build_audio_mix_filters(cues, narration_label="[0:a]", first_cue_index=1)
+        # The fade filter should use st=0.0 (clamped from -3.0)
+        fade_filter = [f for f in filters if "afade=t=out" in f][0]
+        assert "st=0.0" in fade_filter
 
     def test_input_indices_correct(self):
         """Each cue uses the correct FFmpeg input index."""
