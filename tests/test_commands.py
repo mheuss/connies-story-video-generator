@@ -348,17 +348,19 @@ class TestBuildConcatCommandFadeOut:
     """build_concat_command calculates correct fade-out start times."""
 
     def test_single_segment_fade_out_start(self):
-        """Single segment: fade starts after lead_in + duration + end_hold."""
-        config = VideoConfig()  # lead_in=2.0, fade_out_duration=3.0, end_hold_duration=2.0
+        """Single segment: fade starts no earlier than when narration ends."""
+        config = VideoConfig()  # lead_in=2.0, fade_out=3.0, end_hold=2.0
         cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
         filter_str = cmd[cmd.index("-filter_complex") + 1]
-        # total = 2.0 + 10.0 + 2.0 = 14.0; fade_out_start = 14.0 - 3.0 = 11.0
-        assert "fade=t=out:st=11.0:d=3.0" in filter_str
-        assert "tpad=stop_mode=clone:stop_duration=2.0" in filter_str
-        assert "apad=pad_dur=2.0" in filter_str
+        # effective_hold = max(2.0, 3.0) = 3.0
+        # total = 2.0 + 10.0 + 3.0 = 15.0; fade_out_start = 15.0 - 3.0 = 12.0
+        # 12.0 = lead_in(2) + duration(10) — fade starts exactly when narration ends
+        assert "fade=t=out:st=12.0:d=3.0" in filter_str
+        assert "tpad=stop_mode=clone:stop_duration=3.0" in filter_str
+        assert "apad=pad_dur=3.0" in filter_str
 
     def test_multi_segment_fade_out_accounts_for_transitions(self):
-        """Multi-segment: fade uses lead_in + audio timeline + end_hold."""
+        """Multi-segment: fade uses lead_in + audio timeline + effective hold."""
         # Defaults: lead_in=2.0, transition=1.5, audio_transition=0.05,
         # fade_out=3.0, end_hold=2.0
         config = VideoConfig()
@@ -369,12 +371,48 @@ class TestBuildConcatCommandFadeOut:
             config,
         )
         filter_str = cmd[cmd.index("-filter_complex") + 1]
-        # audio_total = 10 + 10 - 0.05 = 19.95; total = 2.0 + 19.95 + 2.0 = 23.95
-        # fade_out_start = 23.95 - 3.0 = 20.95
-        assert "fade=t=out:st=20.95:d=3.0" in filter_str
-        # Video padded: audio_total - video_total + end_hold = 19.95 - 18.5 + 2.0 = 3.45
+        # effective_hold = max(2.0, 3.0) = 3.0
+        # audio_total = 10 + 10 - 0.05 = 19.95; total = 2.0 + 19.95 + 3.0 = 24.95
+        # fade_out_start = 24.95 - 3.0 = 21.95
+        assert "fade=t=out:st=21.95:d=3.0" in filter_str
+        # Video padded: audio_total - video_total + effective_hold
+        #             = 19.95 - 18.5 + 3.0 = 4.45
         assert "tpad=stop_mode=clone:stop_duration=" in filter_str
-        assert "apad=pad_dur=2.0" in filter_str
+        assert "apad=pad_dur=3.0" in filter_str
+
+    def test_fade_out_never_overlaps_narration(self):
+        """Fade-out must not begin before narration ends, even with short end_hold."""
+        config = VideoConfig(fade_out_duration=5.0, end_hold_duration=1.0, lead_in_duration=0.0)
+        cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # effective_hold = max(1.0, 5.0) = 5.0
+        # total = 0 + 10.0 + 5.0 = 15.0; fade_out_start = 15.0 - 5.0 = 10.0
+        # 10.0 = duration — fade starts exactly when narration ends
+        assert "fade=t=out:st=10.0:d=5.0" in filter_str
+
+    def test_end_hold_longer_than_fade_preserves_hold(self):
+        """When end_hold > fade_out, the full hold period is used."""
+        config = VideoConfig(fade_out_duration=1.0, end_hold_duration=5.0, lead_in_duration=0.0)
+        cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # effective_hold = max(5.0, 1.0) = 5.0 (hold is already longer)
+        # total = 0 + 10.0 + 5.0 = 15.0; fade_out_start = 15.0 - 1.0 = 14.0
+        assert "fade=t=out:st=14.0:d=1.0" in filter_str
+
+    def test_multi_segment_end_hold_longer_than_fade(self):
+        """Multi-segment: when end_hold > fade_out, the full hold is preserved."""
+        config = VideoConfig(fade_out_duration=1.0, end_hold_duration=5.0, lead_in_duration=0.0)
+        cmd = build_concat_command(
+            [Path("/a.mp4"), Path("/b.mp4")],
+            [10.0, 10.0],
+            Path("/out.mp4"),
+            config,
+        )
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # effective_hold = max(5.0, 1.0) = 5.0
+        # audio_total = 10 + 10 - 0.05 = 19.95
+        # total = 0 + 19.95 + 5.0 = 24.95; fade_out_start = 24.95 - 1.0 = 23.95
+        assert "fade=t=out:st=23.95:d=1.0" in filter_str
 
 
 # ---------------------------------------------------------------------------
@@ -494,8 +532,9 @@ class TestBuildConcatCommandLeadIn:
         config = VideoConfig(lead_in_duration=2.0)
         cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
         filter_str = cmd[cmd.index("-filter_complex") + 1]
-        # total = 2.0 + 10.0 + 2.0 = 14.0; fade_out_start = 14.0 - 3.0 = 11.0
-        assert "fade=t=out:st=11.0:d=3.0" in filter_str
+        # effective_hold = max(2.0, 3.0) = 3.0
+        # total = 2.0 + 10.0 + 3.0 = 15.0; fade_out_start = 15.0 - 3.0 = 12.0
+        assert "fade=t=out:st=12.0:d=3.0" in filter_str
 
     def test_zero_lead_in_omits_filters(self):
         """Zero lead_in_duration produces no adelay or start tpad."""

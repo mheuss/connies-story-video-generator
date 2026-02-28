@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Artifact export narrows exception handling to avoid silently hiding corrupt project state.
 - Single-segment concat no longer emits unnecessary zero-duration `tpad`/`apad` filters when `end_hold_duration` is 0.
 - Scene summaries now persist across resume — subsequent scenes get full prose summary context instead of title-only
+- Final video fade-out no longer overlaps narration — end hold is automatically extended to at least `fade_out_duration` so the fade never begins before the narrator finishes speaking
 
 ## [0.4.0] — 2026-02-18
 

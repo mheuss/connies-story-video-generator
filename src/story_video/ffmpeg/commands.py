@@ -474,11 +474,15 @@ def build_concat_command(
     for path in segment_paths:
         inputs.extend(["-i", str(path)])
 
+    # Ensure the end hold is at least as long as the fade-out so the
+    # fade never overlaps narration audio.
+    effective_hold = max(end_hold, fade_out_dur)
+
     if n == 1:
         # Single segment: fade in/out only.
         # Add lead_in so the image can fade in before narration starts,
-        # and end_hold so the last frame lingers before the fade-out.
-        total_dur = lead_in + segment_durations[0] + end_hold
+        # and effective_hold so the last frame lingers through the fade-out.
+        total_dur = lead_in + segment_durations[0] + effective_hold
         # Clamp fades so they don't exceed half the total duration
         fade_in_dur = min(fade_in_dur, total_dur / 2)
         fade_out_dur = min(fade_out_dur, total_dur / 2)
@@ -488,8 +492,10 @@ def build_concat_command(
         lead_in_ms = int(lead_in * 1000)
         lead_in_audio = f"adelay={lead_in_ms}|{lead_in_ms}," if lead_in > 0 else ""
 
-        end_hold_video = f"tpad=stop_mode=clone:stop_duration={end_hold}," if end_hold > 0 else ""
-        end_hold_audio = f"apad=pad_dur={end_hold}," if end_hold > 0 else ""
+        end_hold_video = (
+            f"tpad=stop_mode=clone:stop_duration={effective_hold}," if effective_hold > 0 else ""
+        )
+        end_hold_audio = f"apad=pad_dur={effective_hold}," if effective_hold > 0 else ""
 
         filtergraph = (
             f"[0:v]{lead_in_video}{end_hold_video}"
@@ -553,17 +559,17 @@ def build_concat_command(
         video_total = max(0.0, last_offset + segment_durations[-1])
         audio_total = max(0.0, sum(segment_durations) - (n - 1) * audio_transition_dur)
 
-        # Pad video to match audio + end_hold; pad audio with silence for end_hold.
-        video_pad = audio_total - video_total + end_hold
+        # Pad video to match audio + effective_hold; pad audio with silence.
+        video_pad = audio_total - video_total + effective_hold
         if video_pad > 0:
             pad_label = "[vpad]"
             video_parts.append(
                 f"{prev_video_label}tpad=stop_mode=clone:stop_duration={video_pad}{pad_label}"
             )
             prev_video_label = pad_label
-        if end_hold > 0:
+        if effective_hold > 0:
             hold_label = "[ahold]"
-            audio_parts.append(f"{prev_audio_label}apad=pad_dur={end_hold}{hold_label}")
+            audio_parts.append(f"{prev_audio_label}apad=pad_dur={effective_hold}{hold_label}")
             prev_audio_label = hold_label
 
         # Lead-in: pad video at start (clone first frame) and delay audio.
@@ -579,8 +585,8 @@ def build_concat_command(
             audio_parts.append(f"{prev_audio_label}adelay={lead_in_ms}|{lead_in_ms}{lead_label_a}")
             prev_audio_label = lead_label_a
 
-        # Use lead_in + audio_total + end_hold for both fades.
-        total_dur = lead_in + audio_total + end_hold
+        # Use lead_in + audio_total + effective_hold for both fades.
+        total_dur = lead_in + audio_total + effective_hold
         fade_in_dur = min(fade_in_dur, total_dur / 2)
         fade_out_dur = min(fade_out_dur, total_dur / 2)
         fade_out_start = max(0.0, total_dur - fade_out_dur)
