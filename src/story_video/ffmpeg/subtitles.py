@@ -241,6 +241,10 @@ def generate_ass_content(
     for event_lines in events:
         # Flatten to get first and last word for timing
         all_words_in_event = [w for line in event_lines for w in line]
+        # Defensive: events should never be empty because generate_ass_content
+        # is only called with caption data that has at least one word. Kept as
+        # a guard against future callers rather than silently producing an
+        # empty subtitle file.
         if not all_words_in_event:
             logger.warning("Skipping empty subtitle event")
             continue

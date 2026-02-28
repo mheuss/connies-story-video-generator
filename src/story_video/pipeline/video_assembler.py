@@ -212,6 +212,9 @@ def assemble_scene(
     )
 
     state.update_scene_asset(scene.scene_number, AssetType.VIDEO_SEGMENT, SceneStatus.IN_PROGRESS)
+    # Persist IN_PROGRESS before the long-running FFmpeg operation so that
+    # a crash or interrupt leaves the project in a resumable state rather
+    # than appearing as if the phase never started.
     state.save()
 
     run_ffmpeg(cmd)

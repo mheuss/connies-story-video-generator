@@ -1,8 +1,8 @@
 """Pipeline orchestrator.
 
-Drives the adapt flow (9 phases) and creative flow (11 phases)
-sequentially, delegating all work to existing pipeline modules. Supports
-fresh runs and resumes from any state.
+Drives the adapt flow and creative flow sequentially, delegating all work
+to existing pipeline modules. Supports fresh runs and resumes from any state.
+See ``ADAPT_FLOW_PHASES`` and ``CREATIVE_FLOW_PHASES`` for the phase lists.
 
 The orchestrator is the single entry point for running a pipeline. It:
 - Determines the starting phase (fresh or resume)

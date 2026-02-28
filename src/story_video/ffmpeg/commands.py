@@ -64,6 +64,12 @@ class AudioCueSpec:
         fade_in: Fade-in duration in seconds.
         fade_out: Fade-out duration in seconds.
         scene_duration: Total scene duration for looping/trimming.
+
+    Note:
+        Field validation is intentionally minimal here. The upstream
+        ``AudioAsset`` model validates file paths and audio parameters
+        at parse time. ``AudioCueSpec`` is an internal FFmpeg-layer
+        data transfer object populated from already-validated data.
     """
 
     file_path: Path
@@ -406,6 +412,8 @@ def _build_multi_image_command(
 
     filtergraph = ";".join(filter_parts)
 
+    # Multi-image: durations are pre-calculated from caption word offsets,
+    # so -shortest is not needed (and would truncate the video incorrectly).
     return [
         "ffmpeg",
         "-y",

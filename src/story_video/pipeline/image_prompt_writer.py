@@ -176,8 +176,10 @@ def generate_image_prompts(state: ProjectState, client: ClaudeClient) -> None:
             state.update_scene_asset(scene_num, AssetType.IMAGE_PROMPT, SceneStatus.IN_PROGRESS)
             state.update_scene_asset(scene_num, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
 
-        # Fail early if Claude omitted any scenes — otherwise these would fail
-        # one phase later in generate_image() after wasting API calls.
+        # Double duty: validates Claude returned prompts for every scene AND
+        # marks missing scenes as FAILED so they're visible in status output.
+        # Failing early here avoids wasting API calls on image generation
+        # for scenes that would fail anyway due to missing prompts.
         scenes_in_response = {p["scene_number"] for p in result["prompts"]}
         missing = sorted(set(scene_map.keys()) - scenes_in_response)
         if missing:
