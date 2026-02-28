@@ -20,9 +20,8 @@ from story_video.models import (
     SceneStatus,
 )
 from story_video.state import ProjectState
+from story_video.utils.openai_compat import OPENAI_TRANSIENT
 from story_video.utils.retry import with_retry
-
-_OPENAI_TRANSIENT = (openai.APIConnectionError, openai.RateLimitError, openai.InternalServerError)
 
 __all__ = [
     "CaptionProvider",
@@ -67,7 +66,7 @@ class OpenAIWhisperProvider:
     def __init__(self) -> None:
         self._client = openai.OpenAI()
 
-    @with_retry(max_retries=3, base_delay=2.0, retry_on=_OPENAI_TRANSIENT)
+    @with_retry(max_retries=3, base_delay=2.0, retry_on=OPENAI_TRANSIENT)
     def transcribe(self, audio_path: Path) -> CaptionResult:
         """Transcribe an audio file via OpenAI Whisper.
 

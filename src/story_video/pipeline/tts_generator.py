@@ -14,9 +14,8 @@ import openai
 from story_video.models import AssetType, Scene, SceneStatus, StoryHeader
 from story_video.state import ProjectState
 from story_video.utils.narration_tags import has_narration_tags, parse_narration_segments
+from story_video.utils.openai_compat import OPENAI_TRANSIENT
 from story_video.utils.retry import with_retry
-
-_OPENAI_TRANSIENT = (openai.APIConnectionError, openai.RateLimitError, openai.InternalServerError)
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +106,7 @@ class OpenAITTSProvider:
     def __init__(self) -> None:
         self._client = openai.OpenAI()
 
-    @with_retry(max_retries=3, base_delay=2.0, retry_on=_OPENAI_TRANSIENT)
+    @with_retry(max_retries=3, base_delay=2.0, retry_on=OPENAI_TRANSIENT)
     def synthesize(
         self,
         text: str,
