@@ -2,23 +2,8 @@
 
 import pytest
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
 
 from story_video.state import ProjectState
-from story_video.web.app import create_app
-
-
-@pytest.fixture()
-def output_dir(tmp_path):
-    d = tmp_path / "projects"
-    d.mkdir()
-    return d
-
-
-@pytest.fixture()
-def client(output_dir):
-    app = create_app(output_dir=output_dir)
-    return TestClient(app)
 
 
 class TestCreateProject:

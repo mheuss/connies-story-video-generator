@@ -5,26 +5,11 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
 
 from story_video.config import load_config
 from story_video.models import InputMode
 from story_video.state import ProjectState
-from story_video.web.app import create_app
 from story_video.web.routes_artifacts import _resolve_artifact_dir
-
-
-@pytest.fixture()
-def output_dir(tmp_path):
-    d = tmp_path / "projects"
-    d.mkdir()
-    return d
-
-
-@pytest.fixture()
-def client(output_dir):
-    app = create_app(output_dir=output_dir)
-    return TestClient(app)
 
 
 @pytest.fixture()
@@ -112,14 +97,6 @@ class TestGetArtifact:
             "/api/v1/projects/test-project/artifacts/analysis/..%2F..%2Fpyproject.toml"
         )
         assert response.status_code in (400, 404)
-
-    def test_project_id_traversal_rejected(self, output_dir):
-        """_resolve_project_dir rejects project_id path traversal in artifact routes."""
-        from story_video.web.routes_projects import _resolve_project_dir
-
-        with pytest.raises(HTTPException) as exc_info:
-            _resolve_project_dir("../../etc")
-        assert exc_info.value.status_code == 400
 
 
 class TestUpdateArtifact:
