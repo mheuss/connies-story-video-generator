@@ -7,9 +7,9 @@ import pytest
 from fastapi import HTTPException
 
 from story_video.config import load_config
-from story_video.models import InputMode
+from story_video.models import InputMode, SceneImagePrompt
 from story_video.state import ProjectState
-from story_video.web.routes_artifacts import _resolve_artifact_dir
+from story_video.web.routes_artifacts import _export_image_prompts, _resolve_artifact_dir
 
 
 @pytest.fixture()
@@ -132,17 +132,12 @@ class TestExportImagePrompts:
 
     def test_skips_on_missing_project_state(self, output_dir):
         """Silently returns when project.json doesn't exist."""
-        from story_video.web.routes_artifacts import _export_image_prompts
-
         fake_dir = output_dir / "nonexistent"
         fake_dir.mkdir()
         _export_image_prompts(fake_dir)  # Should not raise
 
     def test_preserves_existing_files(self, client, output_dir):
         """Does not overwrite manually edited prompt files."""
-        from story_video.models import SceneImagePrompt
-        from story_video.web.routes_artifacts import _export_image_prompts
-
         # Create a project
         resp = client.post(
             "/api/v1/projects",

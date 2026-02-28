@@ -91,7 +91,7 @@ def _scan_project_dirs(output_dir: Path) -> Iterator[tuple[Path, dict]]:
         Tuples of ``(directory_path, parsed_json_dict)``.
     """
     try:
-        children = list(output_dir.iterdir())
+        children = output_dir.iterdir()
     except OSError:
         logger.debug("Cannot list directory %s: permission denied or I/O error", output_dir)
         return
