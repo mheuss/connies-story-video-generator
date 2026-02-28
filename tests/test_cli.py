@@ -1028,6 +1028,19 @@ class TestScanProjectDirs:
         results = list(_scan_project_dirs(tmp_path))
         assert len(results) == 0
 
+    def test_handles_permission_error_on_iterdir(self, tmp_path, monkeypatch):
+        """_scan_project_dirs returns empty when iterdir raises PermissionError."""
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        def raise_permission_error(self):
+            raise PermissionError("Permission denied")
+
+        monkeypatch.setattr(type(output_dir), "iterdir", raise_permission_error)
+
+        results = list(_scan_project_dirs(output_dir))
+        assert results == []
+
 
 # ---------------------------------------------------------------------------
 # _read_text_input — warning log for nonexistent file path
