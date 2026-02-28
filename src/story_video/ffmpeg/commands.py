@@ -377,17 +377,10 @@ def _build_multi_image_command(
     # Chain composites with xfade transitions
     prev_label = "[comp0]"
     for i in range(n - 1):
-        offset = max(0.0, durations[i] - transition_dur)
-        if i > 0:
-            # After first xfade, offset is relative to accumulated timeline.
-            # The accumulated output duration after xfade i-1 is:
-            # sum(durations[0..i]) - i * transition_dur
-            # The next xfade offset is that minus transition_dur from the
-            # start of the next image, which is:
-            # sum(durations[0..i]) - i * transition_dur - transition_dur
-            # = sum(durations[0..i]) - (i+1) * transition_dur
-            cumulative = sum(durations[: i + 1])
-            offset = max(0.0, cumulative - (i + 1) * transition_dur)
+        # Cumulative timeline: sum of all durations so far, minus total overlap
+        # from all transitions applied so far (including this one).
+        cumulative = sum(durations[: i + 1])
+        offset = max(0.0, cumulative - (i + 1) * transition_dur)
 
         out_label = f"[xf{i}]"
         filter_parts.append(

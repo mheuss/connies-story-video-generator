@@ -200,7 +200,7 @@ def _reconcile_punctuation(result: CaptionResult, prose: str) -> CaptionResult:
             continue
 
         # Apply punctuation from matched prose token
-        leading, prose_bare, trailing = tokens[token_idx + matched_offset]
+        leading, _, trailing = tokens[token_idx + matched_offset]
         new_word_text = leading + bare_caption + trailing
 
         if new_word_text != word.word:
