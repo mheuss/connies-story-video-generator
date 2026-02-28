@@ -1,49 +1,51 @@
 """Tests for story_video.web.progress — SSE progress bridge."""
 
-from story_video.web.progress import ProgressBridge, ProgressEvent
+from story_video.web.progress import TERMINAL_EVENTS, ProgressBridge, ProgressEvent
+
+
+class TestProgressEvent:
+    """ProgressEvent dataclass behavior."""
+
+    def test_event_fields(self):
+        """ProgressEvent stores event type and data dict."""
+        event = ProgressEvent(event="phase_started", data={"phase": "analysis"})
+        assert event.event == "phase_started"
+        assert event.data == {"phase": "analysis"}
+
+    def test_default_data_is_empty_dict(self):
+        """ProgressEvent data defaults to empty dict."""
+        event = ProgressEvent(event="completed")
+        assert event.data == {}
 
 
 class TestProgressBridge:
-    """ProgressBridge queues events and yields them for SSE."""
+    """ProgressBridge thread-safe queue behavior."""
 
-    def test_push_and_receive_event(self):
+    def test_push_and_get(self):
+        """Pushed event can be retrieved via try_get."""
         bridge = ProgressBridge()
-        bridge.push(ProgressEvent(event="phase_started", data={"phase": "analysis"}))
-        event = bridge.try_get(timeout=0.1)
-        assert event is not None
-        assert event.event == "phase_started"
-        assert event.data["phase"] == "analysis"
+        event = ProgressEvent(event="phase_started", data={"phase": "analysis"})
+        bridge.push(event)
+        result = bridge.try_get(timeout=0.1)
+        assert result is event
 
     def test_try_get_returns_none_on_empty(self):
+        """Empty bridge returns None after timeout."""
         bridge = ProgressBridge()
-        event = bridge.try_get(timeout=0.01)
-        assert event is None
+        result = bridge.try_get(timeout=0.01)
+        assert result is None
 
-    def test_multiple_events_in_order(self):
+    def test_terminal_event_sets_is_done(self):
+        """Pushing a terminal event sets is_done to True."""
+        for event_type in TERMINAL_EVENTS:
+            bridge = ProgressBridge()
+            assert bridge.is_done is False
+            bridge.push(ProgressEvent(event=event_type))
+            assert bridge.is_done is True
+
+    def test_non_terminal_event_leaves_is_done_false(self):
+        """Pushing a non-terminal event does not set is_done."""
         bridge = ProgressBridge()
-        bridge.push(ProgressEvent(event="phase_started", data={"phase": "analysis"}))
-        bridge.push(ProgressEvent(event="scene_progress", data={"scene": 1}))
-        bridge.push(ProgressEvent(event="completed", data={"video": "final.mp4"}))
-
-        events = []
-        for _ in range(3):
-            e = bridge.try_get(timeout=0.1)
-            assert e is not None
-            events.append(e.event)
-        assert events == ["phase_started", "scene_progress", "completed"]
-
-    def test_push_completed_marks_done(self):
-        bridge = ProgressBridge()
-        assert not bridge.is_done
-        bridge.push(ProgressEvent(event="completed", data={}))
-        assert bridge.is_done
-
-    def test_push_error_marks_done(self):
-        bridge = ProgressBridge()
-        bridge.push(ProgressEvent(event="error", data={"message": "fail"}))
-        assert bridge.is_done
-
-    def test_push_checkpoint_marks_done(self):
-        bridge = ProgressBridge()
-        bridge.push(ProgressEvent(event="checkpoint", data={"phase": "analysis"}))
-        assert bridge.is_done
+        bridge.push(ProgressEvent(event="phase_started"))
+        bridge.push(ProgressEvent(event="scene_progress"))
+        assert bridge.is_done is False

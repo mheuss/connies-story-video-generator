@@ -69,7 +69,7 @@ Acknowledged items not yet scheduled.
 - [ ] [test] **M-10: ~18 inline imports in `test_orchestrator.py`** — json, subprocess, pathlib, models, `_populate_image_tags` (already imported at module level). Move all to module-level imports. (test_orchestrator.py)
 - [ ] [refactor] **M-11: ~250 lines duplicated integration test boilerplate in `test_orchestrator.py`** — `_claude_dispatch`, `_mock_subprocess_run`, `_make_caption_result`, mock provider setup duplicated across 5 integration tests. Extract shared helpers. (test_orchestrator.py)
 - [ ] [test] **M-12: `on_progress`/`on_scene_done` callbacks have zero test coverage** — Web UI's real-time progress mechanism untested at orchestrator level. Add callback verification tests. (orchestrator.py:88,129)
-- [ ] [test] **M-13: `ProgressBridge` has no direct unit tests** — `push()`, `try_get()` timeout, `is_done` terminal tracking only tested indirectly via SSE tests. Add `test_web_progress.py`. (progress.py)
+- [x] [test] **M-13: `ProgressBridge` has no direct unit tests** — `push()`, `try_get()` timeout, `is_done` terminal tracking only tested indirectly via SSE tests. Add `test_web_progress.py`. (progress.py)
 - [ ] [test] **M-14: `os.environ` mutations leak past monkeypatch in `test_web_settings.py`** — Endpoint sets `os.environ` directly, bypassing monkeypatch tracking. Add explicit cleanup in teardown. (test_web_settings.py:43-78)
 
 #### Group F: React Frontend (5M)
