@@ -2,6 +2,7 @@
 
 import os
 
+import pytest
 from fastapi.testclient import TestClient
 
 from story_video.web.app import create_app
@@ -9,6 +10,13 @@ from story_video.web.app import create_app
 
 class TestGetApiKeyStatus:
     """GET /api/v1/settings/api-keys returns which keys are configured."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_managed_keys(self, monkeypatch):
+        """Ensure managed API keys are cleaned up after each test."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
 
     def test_returns_key_status_when_all_set(self, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
@@ -23,10 +31,7 @@ class TestGetApiKeyStatus:
         assert data["openai_configured"] is True
         assert data["elevenlabs_configured"] is True
 
-    def test_returns_false_when_keys_missing(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    def test_returns_false_when_keys_missing(self, tmp_path):
         app = create_app(env_path=tmp_path / ".env")
         client = TestClient(app)
         response = client.get("/api/v1/settings/api-keys")
@@ -40,9 +45,14 @@ class TestGetApiKeyStatus:
 class TestSetApiKeys:
     """POST /api/v1/settings/api-keys writes keys to .env and loads them."""
 
-    def test_sets_keys_and_writes_env_file(self, monkeypatch, tmp_path):
+    @pytest.fixture(autouse=True)
+    def _clean_managed_keys(self, monkeypatch):
+        """Ensure managed API keys are cleaned up after each test."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+
+    def test_sets_keys_and_writes_env_file(self, tmp_path):
         env_path = tmp_path / ".env"
         app = create_app(env_path=env_path)
         client = TestClient(app)
@@ -65,7 +75,6 @@ class TestSetApiKeys:
 
     def test_partial_update_preserves_existing(self, monkeypatch, tmp_path):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-existing")
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         env_path = tmp_path / ".env"
         app = create_app(env_path=env_path)
         client = TestClient(app)
@@ -98,9 +107,8 @@ class TestSetApiKeys:
         )
         assert response.status_code == 422
 
-    def test_env_values_are_quoted(self, monkeypatch, tmp_path):
+    def test_env_values_are_quoted(self, tmp_path):
         """Values in .env file are wrapped in double quotes."""
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         env_path = tmp_path / ".env"
         app = create_app(env_path=env_path)
         client = TestClient(app)
@@ -119,12 +127,10 @@ class TestSetApiKeys:
         response = client.post("/api/v1/settings/api-keys", json={})
         assert response.status_code == 422
 
-    def test_preserves_unmanaged_env_content(self, monkeypatch, tmp_path):
+    def test_preserves_unmanaged_env_content(self, tmp_path):
         """Setting API keys preserves comments and non-API-key variables."""
         env_path = tmp_path / ".env"
         env_path.write_text('# My comment\nDEBUG=1\nANTHROPIC_API_KEY="old"\n', encoding="utf-8")
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         app = create_app(env_path=env_path)
         client = TestClient(app)
         client.post("/api/v1/settings/api-keys", json={"anthropic_api_key": "sk-new"})
@@ -137,9 +143,6 @@ class TestSetApiKeys:
         """A managed key with empty env value is removed from the file."""
         env_path = tmp_path / ".env"
         env_path.write_text('ANTHROPIC_API_KEY="old"\nDEBUG=1\n', encoding="utf-8")
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
         app = create_app(env_path=env_path)
         # create_app loads .env via load_dotenv, restoring ANTHROPIC_API_KEY.
         # Remove it again to simulate the user clearing the key.
