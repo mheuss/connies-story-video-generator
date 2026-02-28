@@ -5,7 +5,10 @@ Each test verifies one logical behavior of the orchestrator module.
 All pipeline module functions are mocked — no real API calls.
 """
 
+import json
 import logging
+import subprocess as _subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,6 +17,9 @@ from story_video.models import (
     AppConfig,
     AssetType,
     AudioAsset,
+    CaptionResult,
+    CaptionSegment,
+    CaptionWord,
     InputMode,
     PhaseStatus,
     PipelineConfig,
@@ -623,8 +629,6 @@ class TestRunPipelineNarrationPrep:
     @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
     def test_narration_prep_skips_scenes_in_done_file(self, mock_prep, tmp_path):
         """Scenes listed in narration_prep_done.json are skipped on retry."""
-        import json
-
         mock_prep.return_value = {
             "modified_text": "prepped scene 2",
             "changes": [],
@@ -661,8 +665,6 @@ class TestRunPipelineNarrationPrep:
     @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
     def test_narration_prep_writes_done_file_per_scene(self, mock_prep, tmp_path):
         """narration_prep_done.json is updated after each scene is processed."""
-        import json
-
         mock_prep.return_value = {
             "modified_text": "prepped",
             "changes": [],
@@ -685,8 +687,6 @@ class TestRunPipelineNarrationPrep:
     @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
     def test_narration_prep_saves_state_after_processing(self, mock_prep, tmp_path):
         """State is saved to disk after narration prep so modifications persist."""
-        import json
-
         mock_prep.return_value = {
             "modified_text": "prepped narration",
             "changes": [],
@@ -1231,10 +1231,6 @@ class TestPipelineIntegration:
 
     def test_full_adapt_pipeline_data_flow(self, tmp_path, monkeypatch):
         """Full adapt pipeline creates expected files and state transitions."""
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         # Scene texts — source_story.txt must equal these joined by "\n\n"
         scene1_text = (
             "The lighthouse keeper watched the storm approach. "
@@ -1361,8 +1357,6 @@ class TestPipelineIntegration:
                 )
 
             if "ffmpeg" in cmd_str:
-                from pathlib import Path
-
                 output_path = Path(cmd[-1])
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_bytes(b"\x00" * 50)
@@ -1453,10 +1447,6 @@ class TestPipelineIntegration:
         narration text stripping -> multi-image generation (indexed files) ->
         caption-aligned timing -> multi-image FFmpeg command -> final assembly.
         """
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         # --- Source story with YAML header and image tags ---
         # Scene 1 has two image tags; scene 2 has one (will get Claude-generated prompt).
         source_text = (
@@ -1618,8 +1608,6 @@ class TestPipelineIntegration:
                 )
 
             if "ffmpeg" in cmd_str:
-                from pathlib import Path
-
                 ffmpeg_commands.append(list(cmd))
                 output_path = Path(cmd[-1])
                 output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1693,10 +1681,6 @@ class TestPipelineIntegration:
         narration text stripping -> audio file resolution -> caption-aligned
         timing -> amix FFmpeg filter -> final assembly.
         """
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         # --- Source story with YAML header including audio map and music tags ---
         source_text = (
             "---\n"
@@ -1858,8 +1842,6 @@ class TestPipelineIntegration:
                 )
 
             if "ffmpeg" in cmd_str:
-                from pathlib import Path
-
                 ffmpeg_commands.append(list(cmd))
                 output_path = Path(cmd[-1])
                 output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1925,10 +1907,6 @@ class TestPipelineIntegration:
 
     def test_full_creative_flow_data_flow(self, tmp_path, monkeypatch):
         """Full creative flow (inspired_by) creates expected files and state transitions."""
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         scene1_prose = "The old woman sat alone in the empty theater, listening to silence."
         scene2_prose = "She rose from her seat and walked toward the stage, footsteps echoing."
 
@@ -2040,9 +2018,7 @@ class TestPipelineIntegration:
                     args=cmd, returncode=0, stdout="5.0\n", stderr=""
                 )
             if "ffmpeg" in cmd_str:
-                from pathlib import Path as P
-
-                output_path = P(cmd[-1])
+                output_path = Path(cmd[-1])
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_bytes(b"\x00" * 50)
                 return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
@@ -2120,11 +2096,6 @@ class TestPipelineIntegration:
 
     def test_full_original_mode_data_flow(self, tmp_path, monkeypatch):
         """Full creative flow (original) uses brief prompt and config-derived source_stats."""
-        import json
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         scene1_prose = "The old woman sat alone in the empty theater, listening to silence."
         scene2_prose = "She rose from her seat and walked toward the stage, footsteps echoing."
 
@@ -2236,9 +2207,7 @@ class TestPipelineIntegration:
                     args=cmd, returncode=0, stdout="5.0\n", stderr=""
                 )
             if "ffmpeg" in cmd_str:
-                from pathlib import Path as P
-
-                output_path = P(cmd[-1])
+                output_path = Path(cmd[-1])
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_bytes(b"\x00" * 50)
                 return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
