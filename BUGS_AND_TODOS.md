@@ -66,11 +66,11 @@ Acknowledged items not yet scheduled.
 
 #### Group E: Test Quality & Gaps (5M)
 
-- [ ] [test] **M-10: ~18 inline imports in `test_orchestrator.py`** — json, subprocess, pathlib, models, `_populate_image_tags` (already imported at module level). Move all to module-level imports. (test_orchestrator.py)
-- [ ] [refactor] **M-11: ~250 lines duplicated integration test boilerplate in `test_orchestrator.py`** — `_claude_dispatch`, `_mock_subprocess_run`, `_make_caption_result`, mock provider setup duplicated across 5 integration tests. Extract shared helpers. (test_orchestrator.py)
-- [ ] [test] **M-12: `on_progress`/`on_scene_done` callbacks have zero test coverage** — Web UI's real-time progress mechanism untested at orchestrator level. Add callback verification tests. (orchestrator.py:88,129)
-- [x] [test] **M-13: `ProgressBridge` has no direct unit tests** — `push()`, `try_get()` timeout, `is_done` terminal tracking only tested indirectly via SSE tests. Add `test_web_progress.py`. (progress.py)
-- [ ] [test] **M-14: `os.environ` mutations leak past monkeypatch in `test_web_settings.py`** — Endpoint sets `os.environ` directly, bypassing monkeypatch tracking. Add explicit cleanup in teardown. (test_web_settings.py:43-78)
+- [x] [test] **M-10: ~18 inline imports in `test_orchestrator.py`** — Hoisted all inline imports (json, subprocess, pathlib, CaptionResult/CaptionSegment/CaptionWord) to module level.
+- [x] [refactor] **M-11: ~250 lines duplicated integration test boilerplate in `test_orchestrator.py`** — Extracted 5 shared helpers: `_make_claude_dispatch`, `_make_simple_caption_result`, `_make_timed_caption_result`, `_make_mock_subprocess_run`, `_make_mock_providers`. Net reduction of ~166 lines.
+- [x] [test] **M-12: `on_progress`/`on_scene_done` callbacks have zero test coverage** — Added `TestRunPipelineProgressCallbacks` (2 tests) and `TestRunPerSceneCallback` (1 test) verifying phase_started, scene_progress, and on_scene_done callbacks.
+- [x] [test] **M-13: `ProgressBridge` has no direct unit tests** — Reorganized into `TestProgressEvent` (2 tests) and `TestProgressBridge` (4 tests) covering fields, push/get, timeout, terminal/non-terminal is_done.
+- [x] [test] **M-14: `os.environ` mutations leak past monkeypatch in `test_web_settings.py`** — Added autouse `_clean_managed_keys` fixture to both test classes, removed redundant per-test delenv calls.
 
 #### Group F: React Frontend (5M)
 
