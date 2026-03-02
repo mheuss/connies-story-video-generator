@@ -72,6 +72,13 @@ Acknowledged items not yet scheduled.
 - [x] [test] **M-13: `ProgressBridge` has no direct unit tests** — Reorganized into `TestProgressEvent` (2 tests) and `TestProgressBridge` (4 tests) covering fields, push/get, timeout, terminal/non-terminal is_done.
 - [x] [test] **M-14: `os.environ` mutations leak past monkeypatch in `test_web_settings.py`** — Added autouse `_clean_managed_keys` fixture to both test classes, removed redundant per-test delenv calls.
 
+#### Group E Review Findings (deferred)
+
+- [ ] [test] **E-R1: FIFO ordering test dropped from `test_web_progress.py`** — Old `test_multiple_events_in_order` was removed during reorganization. Restore as `test_events_delivered_in_fifo_order` in `TestProgressBridge`. (test_web_progress.py)
+- [ ] [refactor] **E-R2: `_make_claude_dispatch` raises `KeyError` instead of descriptive error** — `responses[tool_name]` gives unhelpful `KeyError`. Add guard: `if tool_name not in responses: raise ValueError(f"Unexpected tool_name: {tool_name}")`. (test_orchestrator.py:~130)
+- [ ] [chore] **E-R3: `TERMINAL_EVENTS` not in `__all__` of `progress.py`** — Pre-existing gap exposed by new test imports. Add to `__all__` list. (progress.py:11)
+- [ ] [style] **E-R4: Leading underscores on local variables `_image_tag_words` / `_music_words`** — Conventionally signals "private/unused" but these are immediately used. Remove underscores. (test_orchestrator.py)
+
 #### Group F: React Frontend (5M)
 
 - [ ] [bug] **M-15: No 404/catch-all route in React app** — Undefined paths render empty `<main>` with no feedback. Add `<Route path="*">` fallback. (App.tsx)
