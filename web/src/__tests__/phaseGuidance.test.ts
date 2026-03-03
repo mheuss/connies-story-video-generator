@@ -20,6 +20,7 @@ describe("getPhaseGuidance", () => {
       "narration_flagging",
       "image_prompts",
       "narration_prep",
+      "tts_generation",
     ];
     for (const phase of phases) {
       expect(getPhaseGuidance(phase)).toBeTruthy();
@@ -27,7 +28,6 @@ describe("getPhaseGuidance", () => {
   });
 
   it("returns null for non-checkpoint phases", () => {
-    expect(getPhaseGuidance("tts_generation")).toBeNull();
     expect(getPhaseGuidance("video_assembly")).toBeNull();
     expect(getPhaseGuidance("nonexistent")).toBeNull();
   });

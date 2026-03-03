@@ -354,6 +354,7 @@ class TestRunPipelineSemiAutoCheckpoints:
                 PipelinePhase.NARRATION_FLAGGING,
                 PipelinePhase.IMAGE_PROMPTS,
                 PipelinePhase.NARRATION_PREP,
+                PipelinePhase.TTS_GENERATION,
             }
         )
 
@@ -411,6 +412,25 @@ class TestRunPipelineSemiAutoCheckpoints:
         assert state.metadata.current_phase == PipelinePhase.NARRATION_PREP
         assert state.metadata.status == PhaseStatus.AWAITING_REVIEW
         mock_prep.assert_called_once()
+
+    @patch("story_video.pipeline.orchestrator.generate_audio")
+    def test_pauses_after_tts_generation(self, mock_audio, tmp_path):
+        """Semi-auto resumes from NARRATION_PREP and pauses after TTS_GENERATION."""
+        state = _make_adapt_state(tmp_path, autonomous=False)
+        _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.IMAGE_PROMPT)
+
+        # Set narration_text on the scene (required for TTS)
+        scene = state.metadata.scenes[0]
+        scene.narration_text = scene.prose
+
+        # Resume from NARRATION_PREP AWAITING_REVIEW — next is TTS_GENERATION
+        _set_phase_state(state, PipelinePhase.NARRATION_PREP, PhaseStatus.AWAITING_REVIEW)
+
+        run_pipeline(state, tts_provider=MagicMock())
+
+        assert state.metadata.current_phase == PipelinePhase.TTS_GENERATION
+        assert state.metadata.status == PhaseStatus.AWAITING_REVIEW
+        mock_audio.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

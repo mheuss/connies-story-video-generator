@@ -38,6 +38,11 @@ Items committed to the current sprint/cycle.
 
 Acknowledged items not yet scheduled.
 
+### TTS Audio Review — 2026-03-02
+
+- [ ] [refactor] **`_make_tts_provider` is private but imported cross-module** — `routes_tts.py` imports `_make_tts_provider` from `pipeline_runner.py`. The underscore prefix signals "don't import this." Works fine with one consumer, but if more routes need TTS provider instantiation, promote to a public function or extract to a shared location (e.g. `story_video.web.providers`).
+- [ ] [refactor] **Regenerate endpoint bypasses `update_scene_asset()` API** — `regenerate_tts_scene` directly assigns `scene.asset_status.audio = SceneStatus.PENDING` because the state API refuses to overwrite COMPLETED status. If more "reset" operations appear, add a proper `reset_scene_asset()` method to `ProjectState`.
+
 ### Seventh-Pass Review (PR7) — 2026-02-28
 
 #### Group A: SSE & Pipeline Thread Lifecycle (3H, 3M)

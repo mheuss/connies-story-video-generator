@@ -5,6 +5,8 @@ import type {
   CreateProjectResponse,
   ProjectStatus,
   SetApiKeysRequest,
+  TtsScene,
+  TtsSceneList,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -101,4 +103,19 @@ export const api = {
         body: JSON.stringify({ content }),
       },
     ),
+
+  // TTS Review
+  getTtsScenes: (projectId: string) =>
+    request<TtsSceneList>(`/projects/${projectId}/tts-scenes`, { method: "GET" }),
+
+  regenerateTtsScene: (projectId: string, sceneNumber: number) =>
+    request<TtsScene>(`/projects/${projectId}/tts-scenes/${sceneNumber}/regenerate`, {
+      method: "POST",
+    }),
+
+  updateNarrationText: (projectId: string, sceneNumber: number, text: string) =>
+    request<TtsScene>(`/projects/${projectId}/tts-scenes/${sceneNumber}/narration-text`, {
+      method: "PUT",
+      body: JSON.stringify({ narration_text: text }),
+    }),
 };

@@ -74,6 +74,7 @@ _CHECKPOINT_PHASES = frozenset(
         PipelinePhase.NARRATION_FLAGGING,
         PipelinePhase.IMAGE_PROMPTS,
         PipelinePhase.NARRATION_PREP,
+        PipelinePhase.TTS_GENERATION,
     }
 )
 

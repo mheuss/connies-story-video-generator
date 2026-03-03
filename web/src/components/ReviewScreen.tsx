@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { ArtifactFile } from "../api/types";
 import { getPhaseGuidance } from "../data/phaseGuidance";
+import TtsReviewPanel from "./TtsReviewPanel";
 
 interface Props {
   projectId: string;
@@ -76,7 +77,9 @@ export default function ReviewScreen({ projectId, checkpoint, onApproved }: Prop
 
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      {editingFile ? (
+      {checkpoint.phase === "tts_generation" ? (
+        <TtsReviewPanel projectId={projectId} />
+      ) : editingFile ? (
         <div style={{ marginBottom: "1rem" }}>
           <h3>Editing: {editingFile}</h3>
           <textarea

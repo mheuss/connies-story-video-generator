@@ -58,3 +58,18 @@ export interface ProgressEvent {
   event: "phase_started" | "scene_progress" | "checkpoint" | "completed" | "error";
   data: Record<string, unknown>;
 }
+
+/** TTS scene metadata for audio review. */
+export interface TtsScene {
+  scene_number: number;
+  title: string;
+  narration_text: string;
+  audio_file: string;
+  audio_url: string;
+  has_audio: boolean;
+}
+
+/** TTS scene list response. */
+export interface TtsSceneList {
+  scenes: TtsScene[];
+}
