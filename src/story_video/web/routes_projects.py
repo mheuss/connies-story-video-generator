@@ -12,7 +12,7 @@ from pydantic import BaseModel, field_validator
 
 from story_video.config import load_config
 from story_video.models import InputMode
-from story_video.state import ProjectState, generate_project_id
+from story_video.state import ProjectState, generate_project_id, scan_project_dirs
 
 __all__ = ["router"]
 
@@ -25,6 +25,46 @@ def configure(output_dir: Path) -> None:
     """Set the output directory. Called by create_app()."""
     global _output_dir  # noqa: PLW0603
     _output_dir = output_dir
+
+
+_SOURCE_PREVIEW_LENGTH = 100
+
+
+@router.get("")
+async def list_projects() -> dict:
+    """List all projects, sorted newest first."""
+    projects = []
+
+    for child, data in scan_project_dirs(_output_dir):
+        # Read source text preview
+        source_path = child / "source_story.txt"
+        preview = ""
+        try:
+            if source_path.exists():
+                raw = source_path.read_text(encoding="utf-8")
+                if len(raw) > _SOURCE_PREVIEW_LENGTH:
+                    preview = raw[:_SOURCE_PREVIEW_LENGTH] + "..."
+                else:
+                    preview = raw
+        except OSError:
+            pass
+
+        projects.append(
+            {
+                "project_id": data.get("project_id", child.name),
+                "mode": data.get("mode", "unknown"),
+                "status": data.get("status", "unknown"),
+                "current_phase": data.get("current_phase"),
+                "scene_count": len(data.get("scenes", [])),
+                "created_at": data.get("created_at", ""),
+                "source_text_preview": preview,
+            }
+        )
+
+    # Sort by created_at descending (newest first)
+    projects.sort(key=lambda p: p["created_at"], reverse=True)
+
+    return {"projects": projects}
 
 
 class CreateProjectRequest(BaseModel):
