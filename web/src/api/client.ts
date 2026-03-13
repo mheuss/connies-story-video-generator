@@ -3,6 +3,7 @@ import type {
   ArtifactList,
   CreateProjectRequest,
   CreateProjectResponse,
+  ListProjectsResponse,
   ProjectStatus,
   SetApiKeysRequest,
   TtsScene,
@@ -55,6 +56,9 @@ export const api = {
     }),
 
   // Projects
+  listProjects: () =>
+    request<ListProjectsResponse>("/projects", { method: "GET" }),
+
   createProject: (data: CreateProjectRequest) =>
     request<CreateProjectResponse>("/projects", {
       method: "POST",

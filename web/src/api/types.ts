@@ -41,6 +41,22 @@ export interface ProjectStatus {
   created_at: string;
 }
 
+/** Project summary for list view. */
+export interface ProjectSummary {
+  project_id: string;
+  mode: string;
+  status: "pending" | "in_progress" | "completed" | "awaiting_review" | "failed";
+  current_phase: string | null;
+  scene_count: number;
+  created_at: string;
+  source_text_preview: string;
+}
+
+/** Response from listing projects. */
+export interface ListProjectsResponse {
+  projects: ProjectSummary[];
+}
+
 /** Artifact file metadata. */
 export interface ArtifactFile {
   name: string;
