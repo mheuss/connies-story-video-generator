@@ -3,10 +3,8 @@
 Commands: create, resume, estimate, status, list, serve.
 """
 
-import json
 import logging
 import os
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +22,7 @@ from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import OpenAIImageProvider
 from story_video.pipeline.orchestrator import run_pipeline
 from story_video.pipeline.tts_generator import ElevenLabsTTSProvider, OpenAITTSProvider
-from story_video.state import ProjectState, generate_project_id
+from story_video.state import ProjectState, generate_project_id, scan_project_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -78,45 +76,6 @@ def _read_text_input(value: str) -> str:
     return value
 
 
-def _scan_project_dirs(output_dir: Path) -> Iterator[tuple[Path, dict]]:
-    """Yield ``(path, data)`` for each subdirectory with valid ``project.json``.
-
-    Silently skips directories without ``project.json`` and files with
-    corrupted or unreadable JSON.
-
-    Args:
-        output_dir: Base output directory to scan.
-
-    Yields:
-        Tuples of ``(directory_path, parsed_json_dict)``.
-    """
-    try:
-        children = output_dir.iterdir()
-    except OSError:
-        logger.debug("Cannot list directory %s: permission denied or I/O error", output_dir)
-        return
-
-    for child in children:
-        if not child.is_dir():
-            continue
-
-        json_path = child / "project.json"
-        if not json_path.exists():
-            continue
-
-        try:
-            data = json.loads(json_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            logger.debug("Skipping %s: invalid or unreadable project.json", child)
-            continue
-
-        if not isinstance(data, dict):
-            logger.debug("Skipping %s: project.json is not a JSON object", child)
-            continue
-
-        yield child, data
-
-
 def _find_most_recent_project(output_dir: Path) -> Path | None:
     """Find the most recently created project in *output_dir*.
 
@@ -140,7 +99,7 @@ def _find_most_recent_project(output_dir: Path) -> Path | None:
     most_recent_path: Path | None = None
     most_recent_timestamp: str = ""
 
-    for child, data in _scan_project_dirs(output_dir):
+    for child, data in scan_project_dirs(output_dir):
         created_at = data.get("created_at", "")
         if created_at > most_recent_timestamp:
             most_recent_timestamp = created_at
@@ -545,7 +504,7 @@ def list_projects(
     # --- Scan for projects with lightweight JSON parse ---
     projects: list[dict[str, str]] = []
 
-    for child, data in _scan_project_dirs(output_dir):
+    for child, data in scan_project_dirs(output_dir):
         projects.append(
             {
                 "project_id": data.get("project_id", child.name),

@@ -11,8 +11,11 @@ This module owns the business rules for state management:
 - Resume logic (skip completed, retry failed, process pending)
 """
 
+import json
+import logging
 import os
 import tempfile
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,7 +34,54 @@ from story_video.models import (
     SceneStatus,
 )
 
-__all__ = ["ASSET_DEPENDENCIES", "PHASE_ASSET_MAP", "ProjectState", "generate_project_id"]
+__all__ = [
+    "ASSET_DEPENDENCIES",
+    "PHASE_ASSET_MAP",
+    "ProjectState",
+    "generate_project_id",
+    "scan_project_dirs",
+]
+
+logger = logging.getLogger(__name__)
+
+
+def scan_project_dirs(output_dir: Path) -> Iterator[tuple[Path, dict]]:
+    """Yield (path, data) for each subdirectory with valid project.json.
+
+    Silently skips directories without project.json and files with
+    corrupted or unreadable JSON.
+
+    Args:
+        output_dir: Base output directory to scan.
+
+    Yields:
+        Tuples of (directory_path, parsed_json_dict).
+    """
+    try:
+        children = output_dir.iterdir()
+    except OSError:
+        logger.debug("Cannot list directory %s: permission denied or I/O error", output_dir)
+        return
+
+    for child in children:
+        if not child.is_dir():
+            continue
+
+        json_path = child / "project.json"
+        if not json_path.exists():
+            continue
+
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            logger.debug("Skipping %s: invalid or unreadable project.json", child)
+            continue
+
+        if not isinstance(data, dict):
+            logger.debug("Skipping %s: project.json is not a JSON object", child)
+            continue
+
+        yield child, data
 
 
 def generate_project_id(mode: str, output_dir: Path) -> str:
