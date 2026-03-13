@@ -7,6 +7,7 @@ vi.mock("../api/client", () => ({
   api: {
     getApiKeyStatus: vi.fn().mockResolvedValue({ anthropic_configured: false, openai_configured: false }),
     setApiKeys: vi.fn(),
+    listProjects: vi.fn().mockResolvedValue({ projects: [] }),
   },
 }));
 
@@ -20,14 +21,14 @@ describe("Layout", () => {
     expect(screen.getByText("Story Video")).toBeInTheDocument();
   });
 
-  it("shows create page at root route", async () => {
+  it("shows project list page at root route", async () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <App />
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText(/api key setup/i)).toBeInTheDocument();
+      expect(screen.getByText("No projects yet")).toBeInTheDocument();
     });
   });
 });
