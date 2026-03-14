@@ -72,7 +72,7 @@ async def stream_progress(project_id: str) -> EventSourceResponse:
     return EventSourceResponse(_event_generator())
 
 
-_BRIDGE_WAIT_TIMEOUT = 30.0
+_BRIDGE_WAIT_TIMEOUT = 120.0
 
 
 async def _event_generator():
@@ -84,9 +84,13 @@ async def _event_generator():
             bridge = get_bridge()
         if bridge is None:
             if time.monotonic() >= deadline:
+                if pipeline_runner.is_running():
+                    msg = "Pipeline is running but not streaming progress (timed out)"
+                else:
+                    msg = "Pipeline is not running (timed out)"
                 yield {
                     "event": "error",
-                    "data": json.dumps({"message": "No pipeline activity (timed out)"}),
+                    "data": json.dumps({"message": msg}),
                 }
                 return
             await asyncio.sleep(0.5)
