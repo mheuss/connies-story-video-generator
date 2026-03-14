@@ -195,7 +195,12 @@ def _calculate_tts_cost(tts_model: str, character_count: int) -> ServiceCost:
 def _calculate_image_cost(quality: str, scene_count: int) -> ServiceCost:
     """Calculate image generation cost.
 
-    Formula: scene_count * per_image_rate (one image per scene)
+    Formula: scene_count * per_image_rate
+
+    Assumes one image per scene, which is the default for stories without
+    inline ``**image:key**`` tags. For stories with multiple images per scene,
+    the actual cost will be higher. A future ``image_count`` parameter could
+    improve accuracy for the ``actual`` cost mode.
 
     Args:
         quality: Image quality tier (e.g. "medium", "high", "standard", "hd").

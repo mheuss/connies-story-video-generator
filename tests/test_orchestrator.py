@@ -5,7 +5,10 @@ Each test verifies one logical behavior of the orchestrator module.
 All pipeline module functions are mocked — no real API calls.
 """
 
+import json
 import logging
+import subprocess as _subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,12 +17,16 @@ from story_video.models import (
     AppConfig,
     AssetType,
     AudioAsset,
+    CaptionResult,
+    CaptionSegment,
+    CaptionWord,
     InputMode,
     PhaseStatus,
     PipelineConfig,
     PipelinePhase,
     Scene,
     SceneAudioCue,
+    SceneImagePrompt,
     SceneStatus,
     StoryHeader,
 )
@@ -28,8 +35,10 @@ from story_video.pipeline.orchestrator import (
     _determine_start_phase,
     _dispatch_phase,
     _parse_source_header,
+    _populate_image_tags,
     _populate_music_tags,
     _run_narration_prep,
+    _run_per_scene,
     run_pipeline,
 )
 from story_video.state import ProjectState
@@ -93,6 +102,104 @@ def _set_phase_state(state, phase, status):
     elif status == PhaseStatus.AWAITING_REVIEW:
         state.await_review()
     # IN_PROGRESS is the default after start_phase — no extra call needed
+
+
+def _make_claude_dispatch(responses):
+    """Create a Claude mock side_effect that routes by tool_name.
+
+    Handles tts_text_prep automatically by echoing narration text back.
+    All other tool names are looked up in *responses*.
+    """
+
+    def _dispatch(**kwargs):
+        tool_name = kwargs.get("tool_name", "")
+        if tool_name == "tts_text_prep":
+            user_msg = kwargs.get("user_message", "")
+            lines = user_msg.split("\n")
+            text_start = None
+            for i, line in enumerate(lines):
+                if line.startswith("Narration text to prepare for TTS:"):
+                    text_start = i + 2
+                    break
+            narration_text = "\n".join(lines[text_start:]) if text_start else ""
+            return {
+                "modified_text": narration_text,
+                "changes": [],
+                "pronunciation_guide_additions": [],
+            }
+        return responses[tool_name]
+
+    return _dispatch
+
+
+def _make_simple_caption_result(text):
+    """Build a CaptionResult from plain text with 0.5s per word timing."""
+    words = text.split()
+    duration = len(words) * 0.5
+    return CaptionResult(
+        segments=[CaptionSegment(text=text, start=0.0, end=duration)],
+        words=[CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5) for i, w in enumerate(words)],
+        language="en",
+        duration=duration,
+    )
+
+
+def _make_timed_caption_result(words, duration):
+    """Build a CaptionResult with evenly spaced words over *duration* seconds."""
+    per_word = duration / len(words)
+    return CaptionResult(
+        segments=[CaptionSegment(text=" ".join(words), start=0.0, end=duration)],
+        words=[
+            CaptionWord(word=w, start=i * per_word, end=(i + 1) * per_word)
+            for i, w in enumerate(words)
+        ],
+        language="en",
+        duration=duration,
+    )
+
+
+def _make_mock_subprocess_run(duration="5.0", capture_commands=None):
+    """Create a subprocess.run mock that handles ffprobe and ffmpeg.
+
+    Args:
+        duration: ffprobe duration response string.
+        capture_commands: Optional list to append ffmpeg commands to.
+    """
+    real_run = _subprocess.run
+
+    def _mock(cmd, **kwargs):
+        cmd_str = cmd[0] if cmd else ""
+        if "ffprobe" in cmd_str:
+            return _subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout=f"{duration}\n", stderr=""
+            )
+        if "ffmpeg" in cmd_str:
+            if capture_commands is not None:
+                capture_commands.append(list(cmd))
+            output_path = Path(cmd[-1])
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"\x00" * 50)
+            return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+        return real_run(cmd, **kwargs)
+
+    return _mock
+
+
+def _make_mock_providers():
+    """Create mock TTS, image, and caption providers with sensible defaults.
+
+    Returns (mock_tts, mock_image, mock_caption) tuple.
+    """
+    mock_tts = MagicMock()
+    mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
+
+    fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+    mock_image = MagicMock()
+    mock_image.generate = MagicMock(return_value=fake_png)
+
+    mock_caption = MagicMock()
+
+    return mock_tts, mock_image, mock_caption
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +354,7 @@ class TestRunPipelineSemiAutoCheckpoints:
                 PipelinePhase.NARRATION_FLAGGING,
                 PipelinePhase.IMAGE_PROMPTS,
                 PipelinePhase.NARRATION_PREP,
+                PipelinePhase.TTS_GENERATION,
             }
         )
 
@@ -304,6 +412,25 @@ class TestRunPipelineSemiAutoCheckpoints:
         assert state.metadata.current_phase == PipelinePhase.NARRATION_PREP
         assert state.metadata.status == PhaseStatus.AWAITING_REVIEW
         mock_prep.assert_called_once()
+
+    @patch("story_video.pipeline.orchestrator.generate_audio")
+    def test_pauses_after_tts_generation(self, mock_audio, tmp_path):
+        """Semi-auto resumes from NARRATION_PREP and pauses after TTS_GENERATION."""
+        state = _make_adapt_state(tmp_path, autonomous=False)
+        _add_scenes_with_assets(state, count=1, up_to_asset=AssetType.IMAGE_PROMPT)
+
+        # Set narration_text on the scene (required for TTS)
+        scene = state.metadata.scenes[0]
+        scene.narration_text = scene.prose
+
+        # Resume from NARRATION_PREP AWAITING_REVIEW — next is TTS_GENERATION
+        _set_phase_state(state, PipelinePhase.NARRATION_PREP, PhaseStatus.AWAITING_REVIEW)
+
+        run_pipeline(state, tts_provider=MagicMock())
+
+        assert state.metadata.current_phase == PipelinePhase.TTS_GENERATION
+        assert state.metadata.status == PhaseStatus.AWAITING_REVIEW
+        mock_audio.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -621,8 +748,6 @@ class TestRunPipelineNarrationPrep:
     @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
     def test_narration_prep_skips_scenes_in_done_file(self, mock_prep, tmp_path):
         """Scenes listed in narration_prep_done.json are skipped on retry."""
-        import json
-
         mock_prep.return_value = {
             "modified_text": "prepped scene 2",
             "changes": [],
@@ -659,8 +784,6 @@ class TestRunPipelineNarrationPrep:
     @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
     def test_narration_prep_writes_done_file_per_scene(self, mock_prep, tmp_path):
         """narration_prep_done.json is updated after each scene is processed."""
-        import json
-
         mock_prep.return_value = {
             "modified_text": "prepped",
             "changes": [],
@@ -683,8 +806,6 @@ class TestRunPipelineNarrationPrep:
     @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
     def test_narration_prep_saves_state_after_processing(self, mock_prep, tmp_path):
         """State is saved to disk after narration prep so modifications persist."""
-        import json
-
         mock_prep.return_value = {
             "modified_text": "prepped narration",
             "changes": [],
@@ -859,6 +980,73 @@ class TestRunPipelineStateSaved:
         # Verify by reloading from disk
         reloaded = ProjectState.load(state.project_dir)
         assert reloaded.metadata.status == PhaseStatus.AWAITING_REVIEW
+
+
+# ---------------------------------------------------------------------------
+# TestRunPipelineProgressCallbacks — on_progress callback invocation
+# ---------------------------------------------------------------------------
+
+
+class TestRunPipelineProgressCallbacks:
+    """run_pipeline() invokes on_progress callback at phase and scene boundaries."""
+
+    @patch("story_video.pipeline.orchestrator.split_scenes")
+    def test_on_progress_called_at_phase_start(self, mock_split, tmp_path):
+        """on_progress receives phase_started event when a phase begins."""
+        state = _make_adapt_state(tmp_path, autonomous=False)
+        _set_phase_state(state, PipelinePhase.ANALYSIS, PhaseStatus.AWAITING_REVIEW)
+
+        events = []
+        run_pipeline(
+            state,
+            claude_client=MagicMock(),
+            on_progress=lambda t, d: events.append((t, d)),
+        )
+
+        assert any(t == "phase_started" and d["phase"] == "scene_splitting" for t, d in events)
+
+    @patch("story_video.pipeline.orchestrator.assemble_video")
+    @patch("story_video.pipeline.orchestrator.assemble_scene")
+    def test_on_progress_reports_scene_progress(self, mock_scene, mock_video, tmp_path):
+        """on_progress receives scene_progress events during per-scene phases."""
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=2, up_to_asset=AssetType.CAPTIONS)
+        _set_phase_state(state, PipelinePhase.CAPTION_GENERATION, PhaseStatus.COMPLETED)
+
+        events = []
+        run_pipeline(
+            state,
+            claude_client=MagicMock(),
+            tts_provider=MagicMock(),
+            image_provider=MagicMock(),
+            caption_provider=MagicMock(),
+            on_progress=lambda t, d: events.append((t, d)),
+        )
+
+        scene_events = [(t, d) for t, d in events if t == "scene_progress"]
+        assert len(scene_events) == 2
+        assert scene_events[0][1]["scene_number"] == 1
+        assert scene_events[1][1]["scene_number"] == 2
+
+
+# ---------------------------------------------------------------------------
+# TestRunPerSceneCallback — on_scene_done callback invocation
+# ---------------------------------------------------------------------------
+
+
+class TestRunPerSceneCallback:
+    """_run_per_scene invokes on_scene_done after each scene."""
+
+    def test_callback_receives_scene_number_and_total(self, tmp_path):
+        """on_scene_done called with (scene_number, total) for each scene."""
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=3, up_to_asset=AssetType.IMAGE_PROMPT)
+        _set_phase_state(state, PipelinePhase.IMAGE_GENERATION, PhaseStatus.IN_PROGRESS)
+
+        calls = []
+        _run_per_scene(state, lambda scene: None, on_scene_done=lambda n, t: calls.append((n, t)))
+
+        assert calls == [(1, 3), (2, 3), (3, 3)]
 
 
 # ---------------------------------------------------------------------------
@@ -1229,10 +1417,6 @@ class TestPipelineIntegration:
 
     def test_full_adapt_pipeline_data_flow(self, tmp_path, monkeypatch):
         """Full adapt pipeline creates expected files and state transitions."""
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         # Scene texts — source_story.txt must equal these joined by "\n\n"
         scene1_text = (
             "The lighthouse keeper watched the storm approach. "
@@ -1294,81 +1478,19 @@ class TestPipelineIntegration:
             },
         }
 
-        def _claude_dispatch_with_narration(**kwargs):
-            """Route mock Claude calls, echoing narration text back for tts_text_prep."""
-            tool_name = kwargs.get("tool_name", "")
-            if tool_name == "tts_text_prep":
-                # Echo the input narration text back as modified_text (no changes)
-                user_msg = kwargs.get("user_message", "")
-                # The narration text is the last block after the blank line
-                lines = user_msg.split("\n")
-                # Find the text after "Narration text to prepare for TTS:" header
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2  # skip header + blank line
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            return claude_responses[tool_name]
-
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch_with_narration)
+        mock_claude.generate_structured = MagicMock(
+            side_effect=_make_claude_dispatch(claude_responses)
+        )
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
-        def _make_caption_result(text):
-            words = text.split()
-            duration = len(words) * 0.5
-            return CaptionResult(
-                segments=[CaptionSegment(text=text, start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
         mock_caption.transcribe = MagicMock(
-            side_effect=lambda path: _make_caption_result("Transcribed narration text.")
+            side_effect=lambda path: _make_simple_caption_result("Transcribed narration text.")
         )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="5.0\n", stderr=""
-                )
-
-            if "ffmpeg" in cmd_str:
-                from pathlib import Path
-
-                output_path = Path(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr("subprocess.run", _make_mock_subprocess_run())
 
         # --- Create project state ---
         state = _make_adapt_state(tmp_path, autonomous=True)
@@ -1451,10 +1573,6 @@ class TestPipelineIntegration:
         narration text stripping -> multi-image generation (indexed files) ->
         caption-aligned timing -> multi-image FFmpeg command -> final assembly.
         """
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         # --- Source story with YAML header and image tags ---
         # Scene 1 has two image tags; scene 2 has one (will get Claude-generated prompt).
         source_text = (
@@ -1529,104 +1647,50 @@ class TestPipelineIntegration:
             },
         }
 
-        def _claude_dispatch(**kwargs):
-            tool_name = kwargs.get("tool_name", "")
-            if tool_name == "tts_text_prep":
-                user_msg = kwargs.get("user_message", "")
-                lines = user_msg.split("\n")
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            return claude_responses[tool_name]
-
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+        mock_claude.generate_structured = MagicMock(
+            side_effect=_make_claude_dispatch(claude_responses)
+        )
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
         # Captions need enough words and duration for image timing validation.
         # min_display=4.0 + crossfade=1.5 = 5.5s per image. Two images need ~11s.
-        def _make_caption_result(path):
-            words = [
-                "The",
-                "lighthouse",
-                "keeper",
-                "watched",
-                "the",
-                "storm",
-                "approach",
-                "dark",
-                "clouds",
-                "gathered",
-                "on",
-                "the",
-                "horizon",
-                "and",
-                "the",
-                "waves",
-                "grew",
-                "tall",
-                "the",
-                "harbor",
-                "below",
-                "came",
-                "alive",
-            ]
-            duration = 15.0
-            per_word = duration / len(words)
-            return CaptionResult(
-                segments=[CaptionSegment(text=" ".join(words), start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * per_word, end=(i + 1) * per_word)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
-        mock_caption.transcribe = MagicMock(side_effect=_make_caption_result)
+        _image_tag_words = [
+            "The",
+            "lighthouse",
+            "keeper",
+            "watched",
+            "the",
+            "storm",
+            "approach",
+            "dark",
+            "clouds",
+            "gathered",
+            "on",
+            "the",
+            "horizon",
+            "and",
+            "the",
+            "waves",
+            "grew",
+            "tall",
+            "the",
+            "harbor",
+            "below",
+            "came",
+            "alive",
+        ]
+        mock_caption.transcribe = MagicMock(
+            side_effect=lambda path: _make_timed_caption_result(_image_tag_words, 15.0)
+        )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
         ffmpeg_commands: list[list[str]] = []
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="15.0\n", stderr=""
-                )
-
-            if "ffmpeg" in cmd_str:
-                from pathlib import Path
-
-                ffmpeg_commands.append(list(cmd))
-                output_path = Path(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr(
+            "subprocess.run",
+            _make_mock_subprocess_run(duration="15.0", capture_commands=ffmpeg_commands),
+        )
 
         # --- Create project state and run pipeline ---
         state = _make_adapt_state(tmp_path, autonomous=True)
@@ -1691,10 +1755,6 @@ class TestPipelineIntegration:
         narration text stripping -> audio file resolution -> caption-aligned
         timing -> amix FFmpeg filter -> final assembly.
         """
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         # --- Source story with YAML header including audio map and music tags ---
         source_text = (
             "---\n"
@@ -1775,98 +1835,44 @@ class TestPipelineIntegration:
             },
         }
 
-        def _claude_dispatch(**kwargs):
-            tool_name = kwargs.get("tool_name", "")
-            if tool_name == "tts_text_prep":
-                user_msg = kwargs.get("user_message", "")
-                lines = user_msg.split("\n")
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            return claude_responses[tool_name]
-
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+        mock_claude.generate_structured = MagicMock(
+            side_effect=_make_claude_dispatch(claude_responses)
+        )
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
-        def _make_caption_result(path):
-            words = [
-                "The",
-                "rain",
-                "began",
-                "to",
-                "fall",
-                "the",
-                "lighthouse",
-                "keeper",
-                "pulled",
-                "his",
-                "coat",
-                "tighter",
-                "a",
-                "crack",
-                "of",
-                "lightning",
-                "split",
-                "the",
-                "sky",
-            ]
-            duration = 12.0
-            per_word = duration / len(words)
-            return CaptionResult(
-                segments=[CaptionSegment(text=" ".join(words), start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * per_word, end=(i + 1) * per_word)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
-        mock_caption.transcribe = MagicMock(side_effect=_make_caption_result)
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
+        _music_words = [
+            "The",
+            "rain",
+            "began",
+            "to",
+            "fall",
+            "the",
+            "lighthouse",
+            "keeper",
+            "pulled",
+            "his",
+            "coat",
+            "tighter",
+            "a",
+            "crack",
+            "of",
+            "lightning",
+            "split",
+            "the",
+            "sky",
+        ]
+        mock_caption.transcribe = MagicMock(
+            side_effect=lambda path: _make_timed_caption_result(_music_words, 12.0)
+        )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
         ffmpeg_commands: list[list[str]] = []
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="12.0\n", stderr=""
-                )
-
-            if "ffmpeg" in cmd_str:
-                from pathlib import Path
-
-                ffmpeg_commands.append(list(cmd))
-                output_path = Path(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr(
+            "subprocess.run",
+            _make_mock_subprocess_run(duration="12.0", capture_commands=ffmpeg_commands),
+        )
 
         # --- Create project state ---
         state = _make_adapt_state(tmp_path, autonomous=True)
@@ -1923,45 +1929,51 @@ class TestPipelineIntegration:
 
     def test_full_creative_flow_data_flow(self, tmp_path, monkeypatch):
         """Full creative flow (inspired_by) creates expected files and state transitions."""
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         scene1_prose = "The old woman sat alone in the empty theater, listening to silence."
         scene2_prose = "She rose from her seat and walked toward the stage, footsteps echoing."
 
         # --- Mock Claude client ---
-        def _claude_dispatch(**kwargs):
+        # Creative flow needs write_scene and critique_scene to branch on user_message
+        # content, so we wrap _make_claude_dispatch with a custom side_effect.
+        claude_responses = {
+            "analyze_source": {
+                "craft_notes": {"style": "literary fiction", "tone": "melancholic"},
+                "thematic_brief": {"themes": ["solitude", "memory"]},
+                "source_stats": {"word_count": 200, "scene_count_estimate": 2},
+            },
+            "create_story_bible": {
+                "characters": [{"name": "The Old Woman", "role": "protagonist"}],
+                "setting": "An abandoned theater",
+                "world_rules": [],
+            },
+            "create_outline": {
+                "scenes": [
+                    {
+                        "scene_number": 1,
+                        "title": "The Silence",
+                        "beat": "Introduction",
+                        "target_words": 100,
+                    },
+                    {
+                        "scene_number": 2,
+                        "title": "The Stage",
+                        "beat": "Rising action",
+                        "target_words": 100,
+                    },
+                ]
+            },
+            "generate_image_prompts": {
+                "prompts": [
+                    {"scene_number": 1, "image_prompt": "Empty theater with one person."},
+                    {"scene_number": 2, "image_prompt": "Woman walking toward lit stage."},
+                ]
+            },
+        }
+
+        _base_dispatch = _make_claude_dispatch(claude_responses)
+
+        def _creative_dispatch(**kwargs):
             tool_name = kwargs.get("tool_name", "")
-            if tool_name == "analyze_source":
-                return {
-                    "craft_notes": {"style": "literary fiction", "tone": "melancholic"},
-                    "thematic_brief": {"themes": ["solitude", "memory"]},
-                    "source_stats": {"word_count": 200, "scene_count_estimate": 2},
-                }
-            if tool_name == "create_story_bible":
-                return {
-                    "characters": [{"name": "The Old Woman", "role": "protagonist"}],
-                    "setting": "An abandoned theater",
-                    "world_rules": [],
-                }
-            if tool_name == "create_outline":
-                return {
-                    "scenes": [
-                        {
-                            "scene_number": 1,
-                            "title": "The Silence",
-                            "beat": "Introduction",
-                            "target_words": 100,
-                        },
-                        {
-                            "scene_number": 2,
-                            "title": "The Stage",
-                            "beat": "Rising action",
-                            "target_words": 100,
-                        },
-                    ]
-                }
             if tool_name == "write_scene":
                 user_msg = kwargs.get("user_message", "")
                 if "## Current Scene: The Silence" in user_msg:
@@ -1969,84 +1981,22 @@ class TestPipelineIntegration:
                 return {"prose": scene2_prose, "summary": "She walks to the stage."}
             if tool_name == "critique_scene":
                 user_msg = kwargs.get("user_message", "")
-                # Return prose unchanged (no revisions needed)
                 if "theater" in user_msg and "listening" in user_msg:
                     return {"revised_prose": scene1_prose, "changes": []}
                 return {"revised_prose": scene2_prose, "changes": []}
-            if tool_name == "generate_image_prompts":
-                return {
-                    "prompts": [
-                        {"scene_number": 1, "image_prompt": "Empty theater with one person."},
-                        {"scene_number": 2, "image_prompt": "Woman walking toward lit stage."},
-                    ]
-                }
-            if tool_name == "tts_text_prep":
-                user_msg = kwargs.get("user_message", "")
-                lines = user_msg.split("\n")
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            msg = f"Unexpected tool_name: {tool_name}"
-            raise ValueError(msg)
+            return _base_dispatch(**kwargs)
 
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+        mock_claude.generate_structured = MagicMock(side_effect=_creative_dispatch)
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
-        def _make_caption_result(text):
-            words = text.split()
-            duration = len(words) * 0.5
-            return CaptionResult(
-                segments=[CaptionSegment(text=text, start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
         mock_caption.transcribe = MagicMock(
-            side_effect=lambda path: _make_caption_result("Transcribed narration text.")
+            side_effect=lambda path: _make_simple_caption_result("Transcribed narration text.")
         )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="5.0\n", stderr=""
-                )
-            if "ffmpeg" in cmd_str:
-                from pathlib import Path as P
-
-                output_path = P(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr("subprocess.run", _make_mock_subprocess_run())
 
         # --- Create project state (INSPIRED_BY mode) ---
         config = AppConfig(pipeline=PipelineConfig(autonomous=True))
@@ -2118,46 +2068,51 @@ class TestPipelineIntegration:
 
     def test_full_original_mode_data_flow(self, tmp_path, monkeypatch):
         """Full creative flow (original) uses brief prompt and config-derived source_stats."""
-        import json
-        import subprocess as _subprocess
-
-        from story_video.models import CaptionResult, CaptionSegment, CaptionWord
-
         scene1_prose = "The old woman sat alone in the empty theater, listening to silence."
         scene2_prose = "She rose from her seat and walked toward the stage, footsteps echoing."
 
         # --- Mock Claude client ---
-        def _claude_dispatch(**kwargs):
+        # Same creative flow dispatch as inspired_by, reuses _make_claude_dispatch
+        # with write_scene/critique_scene branching on user_message content.
+        claude_responses = {
+            "analyze_source": {
+                "craft_notes": {"style": "literary fiction", "tone": "melancholic"},
+                "thematic_brief": {"themes": ["solitude", "memory"]},
+                "source_stats": {"word_count": 200, "scene_count_estimate": 2},
+            },
+            "create_story_bible": {
+                "characters": [{"name": "The Old Woman", "role": "protagonist"}],
+                "setting": "An abandoned theater",
+                "world_rules": [],
+            },
+            "create_outline": {
+                "scenes": [
+                    {
+                        "scene_number": 1,
+                        "title": "The Silence",
+                        "beat": "Introduction",
+                        "target_words": 100,
+                    },
+                    {
+                        "scene_number": 2,
+                        "title": "The Stage",
+                        "beat": "Rising action",
+                        "target_words": 100,
+                    },
+                ]
+            },
+            "generate_image_prompts": {
+                "prompts": [
+                    {"scene_number": 1, "image_prompt": "Empty theater with one person."},
+                    {"scene_number": 2, "image_prompt": "Woman walking toward lit stage."},
+                ]
+            },
+        }
+
+        _base_dispatch = _make_claude_dispatch(claude_responses)
+
+        def _creative_dispatch(**kwargs):
             tool_name = kwargs.get("tool_name", "")
-            if tool_name == "analyze_source":
-                return {
-                    "craft_notes": {"style": "literary fiction", "tone": "melancholic"},
-                    "thematic_brief": {"themes": ["solitude", "memory"]},
-                    "source_stats": {"word_count": 200, "scene_count_estimate": 2},
-                }
-            if tool_name == "create_story_bible":
-                return {
-                    "characters": [{"name": "The Old Woman", "role": "protagonist"}],
-                    "setting": "An abandoned theater",
-                    "world_rules": [],
-                }
-            if tool_name == "create_outline":
-                return {
-                    "scenes": [
-                        {
-                            "scene_number": 1,
-                            "title": "The Silence",
-                            "beat": "Introduction",
-                            "target_words": 100,
-                        },
-                        {
-                            "scene_number": 2,
-                            "title": "The Stage",
-                            "beat": "Rising action",
-                            "target_words": 100,
-                        },
-                    ]
-                }
             if tool_name == "write_scene":
                 user_msg = kwargs.get("user_message", "")
                 if "## Current Scene: The Silence" in user_msg:
@@ -2165,84 +2120,22 @@ class TestPipelineIntegration:
                 return {"prose": scene2_prose, "summary": "She walks to the stage."}
             if tool_name == "critique_scene":
                 user_msg = kwargs.get("user_message", "")
-                # Return prose unchanged (no revisions needed)
                 if "theater" in user_msg and "listening" in user_msg:
                     return {"revised_prose": scene1_prose, "changes": []}
                 return {"revised_prose": scene2_prose, "changes": []}
-            if tool_name == "generate_image_prompts":
-                return {
-                    "prompts": [
-                        {"scene_number": 1, "image_prompt": "Empty theater with one person."},
-                        {"scene_number": 2, "image_prompt": "Woman walking toward lit stage."},
-                    ]
-                }
-            if tool_name == "tts_text_prep":
-                user_msg = kwargs.get("user_message", "")
-                lines = user_msg.split("\n")
-                text_start = None
-                for i, line in enumerate(lines):
-                    if line.startswith("Narration text to prepare for TTS:"):
-                        text_start = i + 2
-                        break
-                narration_text = "\n".join(lines[text_start:]) if text_start else ""
-                return {
-                    "modified_text": narration_text,
-                    "changes": [],
-                    "pronunciation_guide_additions": [],
-                }
-            msg = f"Unexpected tool_name: {tool_name}"
-            raise ValueError(msg)
+            return _base_dispatch(**kwargs)
 
         mock_claude = MagicMock()
-        mock_claude.generate_structured = MagicMock(side_effect=_claude_dispatch)
+        mock_claude.generate_structured = MagicMock(side_effect=_creative_dispatch)
 
-        # --- Mock TTS provider ---
-        mock_tts = MagicMock()
-        mock_tts.synthesize = MagicMock(return_value=b"\xff" * 100)
-
-        # --- Mock image provider ---
-        fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        mock_image = MagicMock()
-        mock_image.generate = MagicMock(return_value=fake_png)
-
-        # --- Mock caption provider ---
-        def _make_caption_result(text):
-            words = text.split()
-            duration = len(words) * 0.5
-            return CaptionResult(
-                segments=[CaptionSegment(text=text, start=0.0, end=duration)],
-                words=[
-                    CaptionWord(word=w, start=i * 0.5, end=(i + 1) * 0.5)
-                    for i, w in enumerate(words)
-                ],
-                language="en",
-                duration=duration,
-            )
-
-        mock_caption = MagicMock()
+        # --- Mock providers ---
+        mock_tts, mock_image, mock_caption = _make_mock_providers()
         mock_caption.transcribe = MagicMock(
-            side_effect=lambda path: _make_caption_result("Transcribed narration text.")
+            side_effect=lambda path: _make_simple_caption_result("Transcribed narration text.")
         )
 
         # --- Mock subprocess.run (FFmpeg/ffprobe) ---
-        real_subprocess_run = _subprocess.run
-
-        def _mock_subprocess_run(cmd, **kwargs):
-            cmd_str = cmd[0] if cmd else ""
-            if "ffprobe" in cmd_str:
-                return _subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="5.0\n", stderr=""
-                )
-            if "ffmpeg" in cmd_str:
-                from pathlib import Path as P
-
-                output_path = P(cmd[-1])
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(b"\x00" * 50)
-                return _subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-            return real_subprocess_run(cmd, **kwargs)
-
-        monkeypatch.setattr("subprocess.run", _mock_subprocess_run)
+        monkeypatch.setattr("subprocess.run", _make_mock_subprocess_run())
 
         # --- Create project state (ORIGINAL mode) ---
         config = AppConfig(pipeline=PipelineConfig(autonomous=True))
@@ -2336,7 +2229,6 @@ class TestPopulateImageTags:
 
     def test_scene_with_image_tags_gets_prompts(self, tmp_path):
         """Scene prose with image tags gets image_prompts populated from YAML."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2359,7 +2251,6 @@ class TestPopulateImageTags:
 
     def test_scene_without_tags_unchanged(self, tmp_path):
         """Scene without image tags keeps empty image_prompts."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2376,7 +2267,6 @@ class TestPopulateImageTags:
 
     def test_undefined_tag_key_raises(self, tmp_path):
         """Image tag referencing undefined key raises ValueError."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2391,7 +2281,6 @@ class TestPopulateImageTags:
 
     def test_no_header_with_tags_raises(self, tmp_path):
         """Image tags without a story header raises ValueError."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2404,7 +2293,6 @@ class TestPopulateImageTags:
 
     def test_strips_image_tags_from_narration_text(self, tmp_path):
         """_populate_image_tags strips image tags from scene.narration_text."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2429,7 +2317,6 @@ class TestPopulateImageTags:
 
     def test_sets_narration_text_from_stripped_prose_when_none(self, tmp_path):
         """When narration_text is None, sets it to prose with image tags stripped."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2454,7 +2341,6 @@ class TestPopulateImageTags:
 
     def test_uses_stripped_positions_for_image_prompts(self, tmp_path):
         """Image prompt positions use the tag-stripped coordinate system."""
-        from story_video.pipeline.orchestrator import _populate_image_tags
 
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
@@ -2477,9 +2363,6 @@ class TestPopulateImageTags:
 
     def test_skips_scenes_with_existing_prompts(self, tmp_path):
         """Scenes that already have image_prompts are not modified."""
-        from story_video.models import SceneImagePrompt
-        from story_video.pipeline.orchestrator import _populate_image_tags
-
         config = AppConfig()
         state = ProjectState.create("tag-test", InputMode.ADAPT, config, tmp_path)
         prose = "The lighthouse stood tall. **image:lighthouse** The harbor."

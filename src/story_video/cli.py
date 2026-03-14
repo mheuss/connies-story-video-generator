@@ -3,11 +3,8 @@
 Commands: create, resume, estimate, status, list, serve.
 """
 
-import json
 import logging
 import os
-from collections.abc import Iterator
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +22,7 @@ from story_video.pipeline.claude_client import ClaudeClient
 from story_video.pipeline.image_generator import OpenAIImageProvider
 from story_video.pipeline.orchestrator import run_pipeline
 from story_video.pipeline.tts_generator import ElevenLabsTTSProvider, OpenAITTSProvider
-from story_video.state import ProjectState
+from story_video.state import ProjectState, generate_project_id, scan_project_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -55,39 +52,6 @@ console = Console()
 # ---------------------------------------------------------------------------
 
 
-def _generate_project_id(mode: str, output_dir: Path) -> str:
-    """Generate a collision-safe project ID.
-
-    Format: ``{mode}-{YYYY-MM-DD}``. When a directory with that name already
-    exists in *output_dir*, appends ``-2``, ``-3``, etc. until a free name is
-    found.  If *output_dir* doesn't exist yet, no collision is possible so the
-    base name is returned immediately.
-
-    Args:
-        mode: Input mode string (e.g. "adapt", "original", "inspired_by").
-        output_dir: Base output directory where project directories live.
-
-    Returns:
-        A project ID string guaranteed not to collide with existing directories.
-    """
-    today = date.today().isoformat()
-    base = f"{mode}-{today}"
-
-    if not output_dir.exists():
-        return base
-
-    if not (output_dir / base).exists():
-        return base
-
-    suffix = 2
-    while (output_dir / f"{base}-{suffix}").exists():
-        suffix += 1
-        if suffix > 1000:
-            msg = f"Could not generate unique project ID after 1000 attempts for base '{base}'"
-            raise RuntimeError(msg)
-    return f"{base}-{suffix}"
-
-
 def _read_text_input(value: str) -> str:
     """Read text from a file path or return inline text.
 
@@ -110,39 +74,6 @@ def _read_text_input(value: str) -> str:
     if ("/" in value or "\\" in value) and value.endswith((".txt", ".md", ".text")):
         logger.warning("Input looks like a file path but was not found: %s", value)
     return value
-
-
-def _scan_project_dirs(output_dir: Path) -> Iterator[tuple[Path, dict]]:
-    """Yield ``(path, data)`` for each subdirectory with valid ``project.json``.
-
-    Silently skips directories without ``project.json`` and files with
-    corrupted or unreadable JSON.
-
-    Args:
-        output_dir: Base output directory to scan.
-
-    Yields:
-        Tuples of ``(directory_path, parsed_json_dict)``.
-    """
-    for child in output_dir.iterdir():
-        if not child.is_dir():
-            continue
-
-        json_path = child / "project.json"
-        if not json_path.exists():
-            continue
-
-        try:
-            data = json.loads(json_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            logger.debug("Skipping %s: invalid or unreadable project.json", child)
-            continue
-
-        if not isinstance(data, dict):
-            logger.debug("Skipping %s: project.json is not a JSON object", child)
-            continue
-
-        yield child, data
 
 
 def _find_most_recent_project(output_dir: Path) -> Path | None:
@@ -168,7 +99,7 @@ def _find_most_recent_project(output_dir: Path) -> Path | None:
     most_recent_path: Path | None = None
     most_recent_timestamp: str = ""
 
-    for child, data in _scan_project_dirs(output_dir):
+    for child, data in scan_project_dirs(output_dir):
         created_at = data.get("created_at", "")
         if created_at > most_recent_timestamp:
             most_recent_timestamp = created_at
@@ -377,7 +308,7 @@ def create(
         raise typer.Exit(1)
 
     # --- Create project ---
-    project_id = _generate_project_id(mode, output_dir)
+    project_id = generate_project_id(mode, output_dir)
 
     try:
         state = ProjectState.create(project_id, input_mode, app_config, output_dir)
@@ -573,7 +504,7 @@ def list_projects(
     # --- Scan for projects with lightweight JSON parse ---
     projects: list[dict[str, str]] = []
 
-    for child, data in _scan_project_dirs(output_dir):
+    for child, data in scan_project_dirs(output_dir):
         projects.append(
             {
                 "project_id": data.get("project_id", child.name),
@@ -633,15 +564,36 @@ def serve(
 ) -> None:
     """Start the web UI server."""
     if uvicorn_run is None:
-        typer.echo("Web dependencies not installed. Run: pip install -e '.[web]'", err=True)
+        console.print(
+            Panel(
+                "Web dependencies not installed. Run: pip install -e '.[web]'",
+                title="Error",
+                border_style="red",
+            )
+        )
         raise typer.Exit(code=1)
 
-    resolved_port = port if port is not None else int(os.environ.get("PORT", "8033"))
+    if port is not None:
+        resolved_port = port
+    else:
+        raw_port = os.environ.get("PORT", "8033")
+        try:
+            resolved_port = int(raw_port)
+        except ValueError:
+            console.print(
+                Panel(
+                    f"Invalid PORT environment variable: '{raw_port}'. Must be an integer.",
+                    title="Configuration Error",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
 
     # Auto-detect built frontend (web/dist/index.html relative to cwd).
     # In Docker, CMD sets cwd to /app so web/dist resolves to /app/web/dist/.
-    static_dir = Path("web/dist")
+    static_dir: Path | None = Path("web/dist")
     if not (static_dir / "index.html").is_file():
+        logging.getLogger(__name__).debug("No frontend build at web/dist/index.html; API-only mode")
         static_dir = None
 
     from story_video.web.app import create_app

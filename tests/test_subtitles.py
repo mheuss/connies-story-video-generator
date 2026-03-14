@@ -337,6 +337,15 @@ class TestSubtitleFilter:
         result = subtitle_filter(Path("/tmp/back\\slash/scene.ass"))
         assert result == "ass='/tmp/back\\\\slash/scene.ass'"
 
+    def test_escapes_brackets_in_path(self, tmp_path):
+        """Square brackets in path are backslash-escaped for FFmpeg."""
+        ass_path = tmp_path / "scene [1].ass"
+        ass_path.touch()
+        result = subtitle_filter(ass_path)
+        assert "\\[" in result
+        assert "\\]" in result
+        assert "[1]" not in result
+
     def test_special_chars_safe_inside_quotes(self):
         """Colons and semicolons (FFmpeg separators) are safe inside single-quoted values."""
         result = subtitle_filter(Path("/tmp/project:v2/scene.ass"))

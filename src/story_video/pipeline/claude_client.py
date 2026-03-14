@@ -35,6 +35,9 @@ class ClaudeClient:
 
     Args:
         model: Claude model identifier. Defaults to claude-sonnet-4-5-20250929.
+            This default is hardcoded rather than derived from config because
+            ClaudeClient is instantiated before AppConfig is loaded in several
+            code paths. Update this value when upgrading the model.
     """
 
     def __init__(self, model: str = "claude-sonnet-4-5-20250929"):

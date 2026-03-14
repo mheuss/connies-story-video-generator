@@ -2,28 +2,20 @@
 
 import asyncio
 import json
-from pathlib import Path
+import time
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from story_video.models import PhaseStatus
-from story_video.state import ProjectState
 from story_video.web import pipeline_runner
-from story_video.web.progress import ProgressBridge
+from story_video.web.progress import TERMINAL_EVENTS, ProgressBridge
+from story_video.web.routes_projects import _load_project, _resolve_project_dir
 
 __all__ = ["router"]
 
 router = APIRouter(prefix="/api/v1/projects", tags=["pipeline"])
-
-_output_dir: Path = Path("./output")
-
-
-def configure(output_dir: Path) -> None:
-    """Set the output directory. Called by create_app()."""
-    global _output_dir  # noqa: PLW0603
-    _output_dir = output_dir
 
 
 def get_bridge() -> ProgressBridge | None:
@@ -80,38 +72,42 @@ async def stream_progress(project_id: str) -> EventSourceResponse:
     return EventSourceResponse(_event_generator())
 
 
-_TERMINAL_EVENTS = frozenset({"completed", "error", "checkpoint"})
+_BRIDGE_WAIT_TIMEOUT = 30.0
 
 
 async def _event_generator():
     """Yield SSE events from the bridge until a terminal event."""
+    deadline = time.monotonic() + _BRIDGE_WAIT_TIMEOUT
+    bridge = None
     while True:
-        bridge = get_bridge()
         if bridge is None:
+            bridge = get_bridge()
+        if bridge is None:
+            if time.monotonic() >= deadline:
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"message": "No pipeline activity (timed out)"}),
+                }
+                return
             await asyncio.sleep(0.5)
             continue
         event = bridge.try_get(timeout=0.1)
         if event is not None:
             yield {"event": event.event, "data": json.dumps(event.data)}
-            if event.event in _TERMINAL_EVENTS:
+            if event.event in TERMINAL_EVENTS:
                 return
         else:
+            if not bridge.is_done and not pipeline_runner.is_running():
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"message": "Pipeline terminated unexpectedly"}),
+                }
+                return
             await asyncio.sleep(0.1)
 
 
 def _verify_project_exists(project_id: str) -> None:
     """Raise 404 if the project directory does not exist."""
-    project_dir = _output_dir / project_id
+    project_dir = _resolve_project_dir(project_id)
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-
-
-def _load_project(project_id: str) -> ProjectState:
-    """Load a ProjectState by ID, raising 404 if not found."""
-    project_dir = _output_dir / project_id
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    try:
-        return ProjectState.load(project_dir)
-    except (FileNotFoundError, ValueError) as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e

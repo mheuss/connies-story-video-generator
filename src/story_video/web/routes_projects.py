@@ -5,7 +5,6 @@ All state is managed through ProjectState (project.json on disk).
 """
 
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -13,7 +12,7 @@ from pydantic import BaseModel, field_validator
 
 from story_video.config import load_config
 from story_video.models import InputMode
-from story_video.state import ProjectState
+from story_video.state import ProjectState, generate_project_id, scan_project_dirs
 
 __all__ = ["router"]
 
@@ -26,6 +25,46 @@ def configure(output_dir: Path) -> None:
     """Set the output directory. Called by create_app()."""
     global _output_dir  # noqa: PLW0603
     _output_dir = output_dir
+
+
+_SOURCE_PREVIEW_LENGTH = 100
+
+
+@router.get("")
+async def list_projects() -> dict:
+    """List all projects, sorted newest first."""
+    projects = []
+
+    for child, data in scan_project_dirs(_output_dir):
+        # Read source text preview
+        source_path = child / "source_story.txt"
+        preview = ""
+        try:
+            if source_path.exists():
+                raw = source_path.read_text(encoding="utf-8")
+                if len(raw) > _SOURCE_PREVIEW_LENGTH:
+                    preview = raw[:_SOURCE_PREVIEW_LENGTH] + "..."
+                else:
+                    preview = raw
+        except OSError:
+            pass
+
+        projects.append(
+            {
+                "project_id": data.get("project_id", child.name),
+                "mode": data.get("mode", "unknown"),
+                "status": data.get("status", "unknown"),
+                "current_phase": data.get("current_phase"),
+                "scene_count": len(data.get("scenes", [])),
+                "created_at": data.get("created_at", ""),
+                "source_text_preview": preview,
+            }
+        )
+
+    # Sort by created_at descending (newest first)
+    projects.sort(key=lambda p: p["created_at"], reverse=True)
+
+    return {"projects": projects}
 
 
 class CreateProjectRequest(BaseModel):
@@ -59,20 +98,6 @@ class CreateProjectRequest(BaseModel):
         return v
 
 
-def _generate_project_id(mode: str) -> str:
-    """Generate a unique project ID like 'adapt-2026-02-25'."""
-    date_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
-    base_id = f"{mode}-{date_str}"
-    if not (_output_dir / base_id).exists():
-        return base_id
-    for n in range(2, 100):
-        candidate = f"{base_id}-{n}"
-        if not (_output_dir / candidate).exists():
-            return candidate
-    msg = f"Too many projects for {date_str}"
-    raise RuntimeError(msg)
-
-
 @router.post("", status_code=201)
 async def create_project(body: CreateProjectRequest) -> dict:
     """Create a new story video project."""
@@ -82,7 +107,10 @@ async def create_project(body: CreateProjectRequest) -> dict:
         update={"pipeline": config.pipeline.model_copy(update={"autonomous": body.autonomous})}
     )
 
-    project_id = _generate_project_id(body.mode)
+    try:
+        project_id = generate_project_id(body.mode, _output_dir)
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     _output_dir.mkdir(parents=True, exist_ok=True)
     state = ProjectState.create(project_id, mode, config, _output_dir)
 
@@ -114,16 +142,28 @@ async def get_project(project_id: str) -> dict:
 @router.delete("/{project_id}")
 async def delete_project(project_id: str) -> dict:
     """Delete a project and all its files."""
-    project_dir = _output_dir / project_id
+    project_dir = _resolve_project_dir(project_id)
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     shutil.rmtree(project_dir)
     return {"status": "deleted", "project_id": project_id}
 
 
+def _resolve_project_dir(project_id: str) -> Path:
+    """Resolve and validate a project directory path.
+
+    Rejects path traversal attempts (e.g. ``../../etc``) by verifying
+    the resolved path stays within ``_output_dir``.
+    """
+    project_dir = (_output_dir / project_id).resolve()
+    if not project_dir.is_relative_to(_output_dir.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid project ID")
+    return project_dir
+
+
 def _load_project(project_id: str) -> ProjectState:
     """Load a ProjectState by ID, raising 404 if not found."""
-    project_dir = _output_dir / project_id
+    project_dir = _resolve_project_dir(project_id)
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
     try:

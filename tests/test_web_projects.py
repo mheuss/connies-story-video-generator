@@ -1,23 +1,9 @@
 """Tests for story_video.web.routes_projects — project CRUD endpoints."""
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 from story_video.state import ProjectState
-from story_video.web.app import create_app
-
-
-@pytest.fixture()
-def output_dir(tmp_path):
-    d = tmp_path / "projects"
-    d.mkdir()
-    return d
-
-
-@pytest.fixture()
-def client(output_dir):
-    app = create_app(output_dir=output_dir)
-    return TestClient(app)
 
 
 class TestCreateProject:
@@ -85,6 +71,20 @@ class TestCreateProject:
         assert source_path.exists()
         assert source_path.read_text(encoding="utf-8") == source
 
+    def test_project_creation_cap_returns_409(self, client, output_dir, monkeypatch):
+        """Creating too many projects on the same day returns 409."""
+        monkeypatch.setattr(
+            "story_video.web.routes_projects.generate_project_id",
+            lambda mode, output_dir: (_ for _ in ()).throw(
+                RuntimeError("Could not generate unique project ID")
+            ),
+        )
+        response = client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": "A story."},
+        )
+        assert response.status_code == 409
+
 
 class TestCreateProjectAutonomous:
     """POST /api/v1/projects respects the autonomous flag."""
@@ -150,3 +150,112 @@ class TestDeleteProject:
     def test_delete_nonexistent_returns_404(self, client):
         response = client.delete("/api/v1/projects/nonexistent")
         assert response.status_code == 404
+
+    def test_resolve_project_dir_rejects_traversal(self, output_dir):
+        """_resolve_project_dir rejects path traversal attempts."""
+        from story_video.web.routes_projects import _resolve_project_dir
+
+        with pytest.raises(HTTPException) as exc_info:
+            _resolve_project_dir("../../etc")
+        assert exc_info.value.status_code == 400
+
+
+class TestListProjects:
+    """GET /api/v1/projects lists all projects."""
+
+    def test_list_returns_empty_when_no_projects(self, client):
+        response = client.get("/api/v1/projects")
+        assert response.status_code == 200
+        assert response.json() == {"projects": []}
+
+    def test_list_returns_projects_sorted_newest_first(self, client, output_dir):
+        # Create two projects
+        client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": "First story."},
+        )
+        client.post(
+            "/api/v1/projects",
+            json={"mode": "original", "source_text": "Second story."},
+        )
+
+        response = client.get("/api/v1/projects")
+        assert response.status_code == 200
+        projects = response.json()["projects"]
+        assert len(projects) == 2
+        # Newest first — both created on same date, second gets -2 suffix
+        # but created_at timestamp is later
+        assert projects[0]["mode"] == "original"
+        assert projects[1]["mode"] == "adapt"
+
+    def test_list_includes_expected_fields(self, client):
+        client.post(
+            "/api/v1/projects",
+            json={
+                "mode": "adapt",
+                "source_text": "The lighthouse keeper climbed the spiral stairs.",
+            },
+        )
+
+        response = client.get("/api/v1/projects")
+        project = response.json()["projects"][0]
+        assert "project_id" in project
+        assert project["mode"] == "adapt"
+        assert project["status"] == "pending"
+        assert "current_phase" in project
+        assert "scene_count" in project
+        assert "created_at" in project
+        assert "source_text_preview" in project
+
+    def test_list_truncates_source_text_preview(self, client):
+        long_text = "A" * 200
+        client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": long_text},
+        )
+
+        response = client.get("/api/v1/projects")
+        preview = response.json()["projects"][0]["source_text_preview"]
+        assert len(preview) <= 103  # 100 chars + "..."
+        assert preview.endswith("...")
+
+    def test_list_short_source_text_not_truncated(self, client):
+        short_text = "A short story."
+        client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": short_text},
+        )
+
+        response = client.get("/api/v1/projects")
+        preview = response.json()["projects"][0]["source_text_preview"]
+        assert preview == short_text
+
+    def test_list_skips_corrupted_project_json(self, client, output_dir):
+        # Create a valid project
+        client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": "Valid story."},
+        )
+        # Create a corrupted project directory
+        bad_dir = output_dir / "bad-project"
+        bad_dir.mkdir()
+        (bad_dir / "project.json").write_text("not json", encoding="utf-8")
+
+        response = client.get("/api/v1/projects")
+        assert response.status_code == 200
+        projects = response.json()["projects"]
+        assert len(projects) == 1
+
+    def test_list_returns_empty_preview_when_no_source_file(self, client, output_dir):
+        """Projects without source_story.txt get an empty preview."""
+        client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": "A story."},
+        )
+        # Remove the source file to simulate a project without one
+        project_id = client.get("/api/v1/projects").json()["projects"][0]["project_id"]
+        (output_dir / project_id / "source_story.txt").unlink()
+
+        response = client.get("/api/v1/projects")
+        preview = response.json()["projects"][0]["source_text_preview"]
+        assert preview == ""

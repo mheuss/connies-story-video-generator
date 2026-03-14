@@ -59,6 +59,13 @@ const PHASE_GUIDANCE: Record<string, PhaseGuidance> = {
       "How the narrator will pronounce names, numbers, and unusual words. " +
       "Fix anything that would sound wrong when spoken aloud.",
   },
+  tts_generation: {
+    title: "TTS Audio",
+    description:
+      "Listen to the generated narration for each scene. " +
+      "If something sounds wrong, expand the text to check for issues. " +
+      "You can edit the narration text and regenerate audio for individual scenes.",
+  },
 };
 
 export function getPhaseGuidance(phase: string): PhaseGuidance | null {

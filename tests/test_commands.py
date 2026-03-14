@@ -15,6 +15,7 @@ import pytest
 from story_video.ffmpeg.commands import (
     AudioCueSpec,
     FFmpegError,
+    _build_audio_mix_filters,
     build_concat_command,
     build_segment_command,
     probe_duration,
@@ -348,17 +349,19 @@ class TestBuildConcatCommandFadeOut:
     """build_concat_command calculates correct fade-out start times."""
 
     def test_single_segment_fade_out_start(self):
-        """Single segment: fade starts after lead_in + duration + end_hold."""
-        config = VideoConfig()  # lead_in=2.0, fade_out_duration=3.0, end_hold_duration=2.0
+        """Single segment: fade starts no earlier than when narration ends."""
+        config = VideoConfig()  # lead_in=2.0, fade_out=3.0, end_hold=2.0
         cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
         filter_str = cmd[cmd.index("-filter_complex") + 1]
-        # total = 2.0 + 10.0 + 2.0 = 14.0; fade_out_start = 14.0 - 3.0 = 11.0
-        assert "fade=t=out:st=11.0:d=3.0" in filter_str
-        assert "tpad=stop_mode=clone:stop_duration=2.0" in filter_str
-        assert "apad=pad_dur=2.0" in filter_str
+        # effective_hold = max(2.0, 3.0) = 3.0
+        # total = 2.0 + 10.0 + 3.0 = 15.0; fade_out_start = 15.0 - 3.0 = 12.0
+        # 12.0 = lead_in(2) + duration(10) — fade starts exactly when narration ends
+        assert "fade=t=out:st=12.0:d=3.0" in filter_str
+        assert "tpad=stop_mode=clone:stop_duration=3.0" in filter_str
+        assert "apad=pad_dur=3.0" in filter_str
 
     def test_multi_segment_fade_out_accounts_for_transitions(self):
-        """Multi-segment: fade uses lead_in + audio timeline + end_hold."""
+        """Multi-segment: fade uses lead_in + audio timeline + effective hold."""
         # Defaults: lead_in=2.0, transition=1.5, audio_transition=0.05,
         # fade_out=3.0, end_hold=2.0
         config = VideoConfig()
@@ -369,12 +372,48 @@ class TestBuildConcatCommandFadeOut:
             config,
         )
         filter_str = cmd[cmd.index("-filter_complex") + 1]
-        # audio_total = 10 + 10 - 0.05 = 19.95; total = 2.0 + 19.95 + 2.0 = 23.95
-        # fade_out_start = 23.95 - 3.0 = 20.95
-        assert "fade=t=out:st=20.95:d=3.0" in filter_str
-        # Video padded: audio_total - video_total + end_hold = 19.95 - 18.5 + 2.0 = 3.45
+        # effective_hold = max(2.0, 3.0) = 3.0
+        # audio_total = 10 + 10 - 0.05 = 19.95; total = 2.0 + 19.95 + 3.0 = 24.95
+        # fade_out_start = 24.95 - 3.0 = 21.95
+        assert "fade=t=out:st=21.95:d=3.0" in filter_str
+        # Video padded: audio_total - video_total + effective_hold
+        #             = 19.95 - 18.5 + 3.0 = 4.45
         assert "tpad=stop_mode=clone:stop_duration=" in filter_str
-        assert "apad=pad_dur=2.0" in filter_str
+        assert "apad=pad_dur=3.0" in filter_str
+
+    def test_fade_out_never_overlaps_narration(self):
+        """Fade-out must not begin before narration ends, even with short end_hold."""
+        config = VideoConfig(fade_out_duration=5.0, end_hold_duration=1.0, lead_in_duration=0.0)
+        cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # effective_hold = max(1.0, 5.0) = 5.0
+        # total = 0 + 10.0 + 5.0 = 15.0; fade_out_start = 15.0 - 5.0 = 10.0
+        # 10.0 = duration — fade starts exactly when narration ends
+        assert "fade=t=out:st=10.0:d=5.0" in filter_str
+
+    def test_end_hold_longer_than_fade_preserves_hold(self):
+        """When end_hold > fade_out, the full hold period is used."""
+        config = VideoConfig(fade_out_duration=1.0, end_hold_duration=5.0, lead_in_duration=0.0)
+        cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # effective_hold = max(5.0, 1.0) = 5.0 (hold is already longer)
+        # total = 0 + 10.0 + 5.0 = 15.0; fade_out_start = 15.0 - 1.0 = 14.0
+        assert "fade=t=out:st=14.0:d=1.0" in filter_str
+
+    def test_multi_segment_end_hold_longer_than_fade(self):
+        """Multi-segment: when end_hold > fade_out, the full hold is preserved."""
+        config = VideoConfig(fade_out_duration=1.0, end_hold_duration=5.0, lead_in_duration=0.0)
+        cmd = build_concat_command(
+            [Path("/a.mp4"), Path("/b.mp4")],
+            [10.0, 10.0],
+            Path("/out.mp4"),
+            config,
+        )
+        filter_str = cmd[cmd.index("-filter_complex") + 1]
+        # effective_hold = max(5.0, 1.0) = 5.0
+        # audio_total = 10 + 10 - 0.05 = 19.95
+        # total = 0 + 19.95 + 5.0 = 24.95; fade_out_start = 24.95 - 1.0 = 23.95
+        assert "fade=t=out:st=23.95:d=1.0" in filter_str
 
 
 # ---------------------------------------------------------------------------
@@ -494,8 +533,9 @@ class TestBuildConcatCommandLeadIn:
         config = VideoConfig(lead_in_duration=2.0)
         cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
         filter_str = cmd[cmd.index("-filter_complex") + 1]
-        # total = 2.0 + 10.0 + 2.0 = 14.0; fade_out_start = 14.0 - 3.0 = 11.0
-        assert "fade=t=out:st=11.0:d=3.0" in filter_str
+        # effective_hold = max(2.0, 3.0) = 3.0
+        # total = 2.0 + 10.0 + 3.0 = 15.0; fade_out_start = 15.0 - 3.0 = 12.0
+        assert "fade=t=out:st=12.0:d=3.0" in filter_str
 
     def test_zero_lead_in_omits_filters(self):
         """Zero lead_in_duration produces no adelay or start tpad."""
@@ -608,6 +648,38 @@ class TestBuildMultiImageSegmentCommand:
             )
 
 
+class TestBuildMultiImageNegativeDuration:
+    """_build_multi_image_command warns when image duration is negative."""
+
+    def test_multi_image_logs_warning_for_negative_duration(self, tmp_path, caplog):
+        """_build_multi_image_command logs a warning when image duration is negative."""
+        import logging
+
+        from story_video.ffmpeg.commands import _build_multi_image_command
+        from story_video.models import VideoConfig
+
+        video_config = VideoConfig()
+        img = tmp_path / "img.png"
+        img.touch()
+        audio = tmp_path / "audio.mp3"
+        audio.touch()
+        output = tmp_path / "out.mp4"
+
+        with caplog.at_level(logging.WARNING, logger="story_video.ffmpeg.commands"):
+            _build_multi_image_command(
+                image_paths=[img, img],
+                image_timings=[(0.0, 5.0), (5.0, 3.0)],  # second image has negative duration
+                audio_path=audio,
+                output_path=output,
+                video_config=video_config,
+                bg_filter="scale=1920:1080",
+                fg_filter="scale=1920:1080",
+                sub_filter="",
+            )
+
+        assert "Image 1 duration is negative" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # TestAudioCueSpec — frozen dataclass for FFmpeg music mixing parameters
 # ---------------------------------------------------------------------------
@@ -645,7 +717,6 @@ class TestBuildAudioMixFilters:
 
     def test_single_cue_no_loop(self):
         """One-shot sound effect at 2.5s, volume 0.6."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -671,7 +742,6 @@ class TestBuildAudioMixFilters:
 
     def test_looping_ambient_track(self):
         """Ambient track that loops from 0s with fade in/out."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -694,7 +764,6 @@ class TestBuildAudioMixFilters:
 
     def test_multiple_cues(self):
         """Two cues produce amix=inputs=3."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -722,7 +791,6 @@ class TestBuildAudioMixFilters:
 
     def test_empty_cues_returns_narration_label(self):
         """No cues: returns narration label unchanged."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         filters, output_label = _build_audio_mix_filters(
             [], narration_label="[1:a]", first_cue_index=2
@@ -732,7 +800,6 @@ class TestBuildAudioMixFilters:
 
     def test_no_adelay_when_start_time_zero(self):
         """Don't add adelay filter when start_time is 0."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -751,7 +818,6 @@ class TestBuildAudioMixFilters:
 
     def test_fade_out_start_time_calculated_correctly(self):
         """Fade-out start time = (scene_duration - start_time) - fade_out duration."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(
@@ -769,9 +835,27 @@ class TestBuildAudioMixFilters:
         # remaining = 30.0 - 5.0 = 25.0; fade_out_start = 25.0 - 3.0 = 22.0
         assert "afade=t=out:st=22.0:d=3.0" in combined
 
+    def test_fade_out_start_clamped_when_exceeds_remaining(self):
+        """fade_out_start is clamped to 0.0 when fade_out > remaining duration."""
+
+        cues = [
+            AudioCueSpec(
+                file_path=Path("/music.mp3"),
+                start_time=8.0,
+                scene_duration=10.0,
+                volume=0.3,
+                loop=False,
+                fade_in=0.0,
+                fade_out=5.0,  # remaining=2.0, fade_out=5.0 -> clamped
+            )
+        ]
+        filters, _ = _build_audio_mix_filters(cues, narration_label="[0:a]", first_cue_index=1)
+        # The fade filter should use st=0.0 (clamped from -3.0)
+        fade_filter = [f for f in filters if "afade=t=out" in f][0]
+        assert "st=0.0" in fade_filter
+
     def test_input_indices_correct(self):
         """Each cue uses the correct FFmpeg input index."""
-        from story_video.ffmpeg.commands import _build_audio_mix_filters
 
         cues = [
             AudioCueSpec(

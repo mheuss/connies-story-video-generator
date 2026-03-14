@@ -2,6 +2,7 @@
 
 import logging
 
+import openai
 import pytest
 
 from story_video.utils.retry import with_retry
@@ -250,34 +251,43 @@ class TestWithRetryMetadata:
 
 
 # ---------------------------------------------------------------------------
-# _OPENAI_TRANSIENT — cross-module consistency check
-# Lives here (not per-module tests) because it verifies all three modules
-# define the same constant, which is a retry-related concern.
+# with_retry — input validation
 # ---------------------------------------------------------------------------
 
 
-class TestOpenAITransientPerModule:
-    """Each OpenAI-consuming module defines its own _OPENAI_TRANSIENT tuple."""
+class TestWithRetryValidation:
+    """with_retry rejects invalid configuration."""
 
-    @pytest.mark.parametrize(
-        "module_path",
-        [
-            "story_video.pipeline.tts_generator",
-            "story_video.pipeline.image_generator",
-            "story_video.pipeline.caption_generator",
-        ],
-        ids=["tts_generator", "image_generator", "caption_generator"],
-    )
-    def test_module_defines_transient(self, module_path):
-        """Each OpenAI-consuming module defines _OPENAI_TRANSIENT with 3 error types."""
-        import importlib
+    def test_negative_max_retries_raises(self):
+        """Negative max_retries is rejected immediately."""
+        with pytest.raises(ValueError, match="max_retries must be non-negative"):
+            with_retry(max_retries=-1, retry_on=(Exception,))(lambda: None)()
 
-        from openai import APIConnectionError, InternalServerError, RateLimitError
+    def test_zero_base_delay_raises(self):
+        """Zero base_delay is rejected immediately."""
+        with pytest.raises(ValueError, match="base_delay must be positive"):
+            with_retry(max_retries=1, base_delay=0, retry_on=(Exception,))(lambda: None)()
 
-        module = importlib.import_module(module_path)
-        transient = module._OPENAI_TRANSIENT
-        assert isinstance(transient, tuple)
-        assert len(transient) == 3
-        assert APIConnectionError in transient
-        assert RateLimitError in transient
-        assert InternalServerError in transient
+    def test_negative_base_delay_raises(self):
+        """Negative base_delay is rejected immediately."""
+        with pytest.raises(ValueError, match="base_delay must be positive"):
+            with_retry(max_retries=1, base_delay=-1.0, retry_on=(Exception,))(lambda: None)()
+
+
+# ---------------------------------------------------------------------------
+# OPENAI_TRANSIENT — shared module verification
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAITransient:
+    """Shared OPENAI_TRANSIENT tuple contains the expected error types."""
+
+    def test_openai_transient_contains_expected_errors(self):
+        """Shared OPENAI_TRANSIENT tuple contains the 3 expected error types."""
+        from story_video.utils.openai_compat import OPENAI_TRANSIENT
+
+        assert isinstance(OPENAI_TRANSIENT, tuple)
+        assert len(OPENAI_TRANSIENT) == 3
+        assert openai.APIConnectionError in OPENAI_TRANSIENT
+        assert openai.RateLimitError in OPENAI_TRANSIENT
+        assert openai.InternalServerError in OPENAI_TRANSIENT

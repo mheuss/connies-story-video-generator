@@ -66,6 +66,7 @@ def _resolve_audio_cues(
         List of AudioCueSpec objects ready for FFmpeg.
 
     Raises:
+        ValueError: If an audio cue key is not found in the audio map.
         FileNotFoundError: If an audio file doesn't exist.
     """
     scene_duration = captions.duration
@@ -78,7 +79,7 @@ def _resolve_audio_cues(
                 f"Audio cue key '{cue.key}' not found in story header audio map. "
                 f"Available keys: {', '.join(sorted(audio_map.keys())) or 'none'}"
             )
-            raise KeyError(msg)
+            raise ValueError(msg)
         asset = audio_map[cue.key]
 
         # Resolve and validate audio file path.
@@ -211,6 +212,9 @@ def assemble_scene(
     )
 
     state.update_scene_asset(scene.scene_number, AssetType.VIDEO_SEGMENT, SceneStatus.IN_PROGRESS)
+    # Persist IN_PROGRESS before the long-running FFmpeg operation so that
+    # a crash or interrupt leaves the project in a resumable state rather
+    # than appearing as if the phase never started.
     state.save()
 
     run_ffmpeg(cmd)

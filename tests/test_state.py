@@ -4,6 +4,7 @@ TDD: These tests are written first, before the implementation.
 Each test verifies one logical behavior of the ProjectState class.
 """
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,8 @@ from story_video.state import (
     ASSET_DEPENDENCIES,
     PHASE_ASSET_MAP,
     ProjectState,
+    generate_project_id,
+    scan_project_dirs,
 )
 
 # ---------------------------------------------------------------------------
@@ -758,6 +761,29 @@ class TestResumeWorkflow:
 
 
 # ---------------------------------------------------------------------------
+# generate_project_id — collision avoidance and safety cap
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateProjectId:
+    """generate_project_id handles collision avoidance and safety cap."""
+
+    def test_cap_raises_after_1000_attempts(self, output_dir):
+        """RuntimeError when all 1000+ suffixed directories exist."""
+        output_dir.mkdir(exist_ok=True)
+        date_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        base = f"adapt-{date_str}"
+
+        # Create base directory and suffixed dirs 2..1001
+        (output_dir / base).mkdir()
+        for i in range(2, 1002):
+            (output_dir / f"{base}-{i}").mkdir()
+
+        with pytest.raises(RuntimeError, match="Could not generate unique project ID"):
+            generate_project_id("adapt", output_dir)
+
+
+# ---------------------------------------------------------------------------
 # Edge cases and structural invariants
 # ---------------------------------------------------------------------------
 
@@ -770,3 +796,72 @@ class TestEdgeCases:
         for asset, deps in ASSET_DEPENDENCIES.items():
             for dep in deps:
                 assert isinstance(dep, AssetType), f"{asset} has invalid dependency {dep}"
+
+
+# ---------------------------------------------------------------------------
+# scan_project_dirs — discovers valid project directories
+# ---------------------------------------------------------------------------
+
+
+class TestScanProjectDirs:
+    """scan_project_dirs discovers valid project directories."""
+
+    def test_yields_valid_project_dirs(self, tmp_path):
+        """Returns (path, data) tuples for dirs with valid project.json."""
+        proj_dir = tmp_path / "adapt-2026-01-01"
+        proj_dir.mkdir()
+        project_json = (
+            '{"project_id": "adapt-2026-01-01",'
+            ' "mode": "adapt",'
+            ' "created_at": "2026-01-01T00:00:00"}'
+        )
+        (proj_dir / "project.json").write_text(project_json, encoding="utf-8")
+
+        results = list(scan_project_dirs(tmp_path))
+
+        assert len(results) == 1
+        path, data = results[0]
+        assert path == proj_dir
+        assert data["project_id"] == "adapt-2026-01-01"
+
+    def test_skips_dirs_without_project_json(self, tmp_path):
+        """Directories without project.json are silently skipped."""
+        (tmp_path / "some-dir").mkdir()
+
+        results = list(scan_project_dirs(tmp_path))
+
+        assert results == []
+
+    def test_skips_corrupted_project_json(self, tmp_path):
+        """Directories with invalid JSON are silently skipped."""
+        proj_dir = tmp_path / "bad-project"
+        proj_dir.mkdir()
+        (proj_dir / "project.json").write_text("not json", encoding="utf-8")
+
+        results = list(scan_project_dirs(tmp_path))
+
+        assert results == []
+
+    def test_skips_non_dict_project_json(self, tmp_path):
+        """project.json that parses to a non-dict value is skipped."""
+        proj_dir = tmp_path / "array-project"
+        proj_dir.mkdir()
+        (proj_dir / "project.json").write_text("[1, 2, 3]", encoding="utf-8")
+
+        results = list(scan_project_dirs(tmp_path))
+
+        assert results == []
+
+    def test_returns_empty_for_nonexistent_dir(self, tmp_path):
+        """A directory that doesn't exist yields nothing."""
+        results = list(scan_project_dirs(tmp_path / "nonexistent"))
+
+        assert results == []
+
+    def test_skips_regular_files(self, tmp_path):
+        """Regular files in the output dir are not treated as projects."""
+        (tmp_path / "not-a-dir.txt").write_text("hello", encoding="utf-8")
+
+        results = list(scan_project_dirs(tmp_path))
+
+        assert results == []

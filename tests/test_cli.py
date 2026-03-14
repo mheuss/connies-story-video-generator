@@ -1,9 +1,10 @@
 """Tests for CLI helpers and entry point."""
 
 import json
+import logging
 import subprocess
 import sys
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,10 +14,8 @@ from typer.testing import CliRunner
 from story_video.cli import (
     _display_outcome,
     _find_most_recent_project,
-    _generate_project_id,
     _read_text_input,
     _run_with_providers,
-    _scan_project_dirs,
     _status_icon,
     _validate_mode,
     app,
@@ -30,7 +29,7 @@ from story_video.models import (
     SceneStatus,
     TTSConfig,
 )
-from story_video.state import ProjectState
+from story_video.state import ProjectState, generate_project_id, scan_project_dirs
 
 runner = CliRunner()
 
@@ -52,33 +51,33 @@ class TestCLIEntryPoint:
 
 
 class TestGenerateProjectId:
-    """Tests for _generate_project_id — collision-safe project ID generation."""
+    """Tests for generate_project_id (state.py) — collision-safe project ID generation."""
 
     def test_basic_format(self, tmp_path: Path) -> None:
         """Returns mode-YYYY-MM-DD format for a clean directory."""
-        result = _generate_project_id("adapt", tmp_path)
-        today = date.today().isoformat()
+        result = generate_project_id("adapt", tmp_path)
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
         assert result == f"adapt-{today}"
 
     def test_collision_suffix(self, tmp_path: Path) -> None:
         """Appends -2, -3 when directory already exists."""
-        today = date.today().isoformat()
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
 
         # Create the base directory to cause a collision
         (tmp_path / f"adapt-{today}").mkdir()
-        result = _generate_project_id("adapt", tmp_path)
+        result = generate_project_id("adapt", tmp_path)
         assert result == f"adapt-{today}-2"
 
         # Create the -2 directory to cause another collision
         (tmp_path / f"adapt-{today}-2").mkdir()
-        result = _generate_project_id("adapt", tmp_path)
+        result = generate_project_id("adapt", tmp_path)
         assert result == f"adapt-{today}-3"
 
     def test_output_dir_does_not_exist(self, tmp_path: Path) -> None:
         """Works correctly when output_dir does not exist yet."""
         nonexistent = tmp_path / "does_not_exist"
-        result = _generate_project_id("original", nonexistent)
-        today = date.today().isoformat()
+        result = generate_project_id("original", nonexistent)
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
         assert result == f"original-{today}"
 
 
@@ -992,7 +991,7 @@ class TestValidateMode:
 
 
 class TestScanProjectDirs:
-    """_scan_project_dirs yields (path, data) for valid project directories."""
+    """scan_project_dirs yields (path, data) for valid project directories."""
 
     def test_yields_valid_project(self, tmp_path):
         project_dir = tmp_path / "my-project"
@@ -1000,7 +999,7 @@ class TestScanProjectDirs:
         data = {"project_id": "my-project", "mode": "adapt"}
         (project_dir / "project.json").write_text(json.dumps(data), encoding="utf-8")
 
-        results = list(_scan_project_dirs(tmp_path))
+        results = list(scan_project_dirs(tmp_path))
         assert len(results) == 1
         assert results[0][0] == project_dir
         assert results[0][1]["project_id"] == "my-project"
@@ -1010,13 +1009,13 @@ class TestScanProjectDirs:
         bad_dir.mkdir()
         (bad_dir / "project.json").write_text("{broken", encoding="utf-8")
 
-        results = list(_scan_project_dirs(tmp_path))
+        results = list(scan_project_dirs(tmp_path))
         assert len(results) == 0
 
     def test_skips_dirs_without_project_json(self, tmp_path):
         (tmp_path / "empty-dir").mkdir()
 
-        results = list(_scan_project_dirs(tmp_path))
+        results = list(scan_project_dirs(tmp_path))
         assert len(results) == 0
 
     def test_skips_non_dict_json(self, tmp_path):
@@ -1025,8 +1024,21 @@ class TestScanProjectDirs:
         arr_dir.mkdir()
         (arr_dir / "project.json").write_text("[1, 2, 3]", encoding="utf-8")
 
-        results = list(_scan_project_dirs(tmp_path))
+        results = list(scan_project_dirs(tmp_path))
         assert len(results) == 0
+
+    def test_handles_permission_error_on_iterdir(self, tmp_path, monkeypatch):
+        """scan_project_dirs returns empty when iterdir raises PermissionError."""
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        def raise_permission_error(self):
+            raise PermissionError("Permission denied")
+
+        monkeypatch.setattr(type(output_dir), "iterdir", raise_permission_error)
+
+        results = list(scan_project_dirs(output_dir))
+        assert results == []
 
 
 # ---------------------------------------------------------------------------
@@ -1039,8 +1051,6 @@ class TestReadTextInputWarningLog:
 
     def test_warns_for_nonexistent_file_path(self, caplog):
         """Input that looks like a file path but doesn't exist logs a warning."""
-        import logging
-
         with caplog.at_level(logging.WARNING):
             result = _read_text_input("/nonexistent/story.txt")
         assert result == "/nonexistent/story.txt"

@@ -833,7 +833,12 @@ def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
     bible = _load_json_artifact(state.project_dir, "story_bible.json")
     outline = _load_json_artifact(state.project_dir, "outline.json")
 
-    # Determine which scenes already exist (for resume)
+    # Resume strategy: scene metadata check.
+    # Scenes already in state.metadata.scenes are skipped. This works because
+    # add_scene() is called immediately after each scene is generated and saved,
+    # so metadata presence means the .md file also exists. On resume, we still
+    # iterate all outline beats to rebuild the running summary from existing
+    # scene summaries, preserving context continuity for later scenes.
     existing_scene_numbers = {s.scene_number for s in state.metadata.scenes}
 
     # Shared context
@@ -935,9 +940,10 @@ def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
     scenes_dir.mkdir(exist_ok=True)
 
     for scene in scenes:
-        # Resume support: skip scenes that already have a changelog file.
-        # Assumes changelog write and .md write happen atomically enough that
-        # if the changelog exists, the .md was also written in the same iteration.
+        # Resume strategy: changelog file existence.
+        # Scenes with an existing changelog file are skipped. This assumes the
+        # changelog and revised .md are written in the same loop iteration, so
+        # if the changelog exists, the revision was also completed.
         changes_filename = f"scene_{scene.scene_number:03d}_changes.md"
         if (critique_dir / changes_filename).exists():
             logger.info("Scene %d already critiqued — skipping", scene.scene_number)

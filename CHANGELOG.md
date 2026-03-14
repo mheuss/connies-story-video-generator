@@ -20,17 +20,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - CLI flag `--source-material` renamed to `--input` — applies to all three modes (adapt, inspired_by, original). Clean break, no deprecated alias.
+- Expanded .dockerignore to exclude secrets, IDE files, test artifacts, and coverage output from build context
 - `TTSProvider.synthesize()` accepts optional `mood` parameter — BREAKING for custom provider implementations
+- `_OPENAI_TRANSIENT` consolidated into `story_video.utils.openai_compat.OPENAI_TRANSIENT` — no behavior change, reduces duplication across 3 pipeline modules
+- `_resolve_audio_cues` now raises `ValueError` instead of `KeyError` for missing audio cue keys — consistent with rest of pipeline
 
 ### Removed
 - `OutputConfig` and `output:` config section — BREAKING: users with custom config.yaml files containing `output:` must remove that section
 
 ### Fixed
+- SPA catch-all no longer crashes when static_dir exists but index.html is missing
+- Invalid PORT environment variable now shows a clear error instead of a traceback
 - Scene splitting no longer fails on Unicode look-alike characters (curly quotes, em dashes, ellipsis) swapped by Claude during processing.
 - Resume progress counter now starts from the correct scene number instead of always starting at 1.
 - Artifact export narrows exception handling to avoid silently hiding corrupt project state.
 - Single-segment concat no longer emits unnecessary zero-duration `tpad`/`apad` filters when `end_hold_duration` is 0.
 - Scene summaries now persist across resume — subsequent scenes get full prose summary context instead of title-only
+- Final video fade-out no longer overlaps narration — end hold is automatically extended to at least `fade_out_duration` so the fade never begins before the narrator finishes speaking
+- SSE progress stream no longer hangs when the pipeline thread dies without emitting a terminal event
+- SSE progress stream times out after 30 seconds if no pipeline starts, instead of hanging indefinitely
+- Pipeline state (active thread and bridge) is now cleaned up after every run, preventing stale state from blocking subsequent runs
+- Unknown TTS provider names in the web API now raise an error instead of silently defaulting to OpenAI
+- Invalid artifact phase lookups now return HTTP 500 instead of silently falling back to the scenes directory
+- `.env` file updates now preserve comments and user-defined variables instead of overwriting the entire file
+- Project ID generation unified between CLI and web — both use UTC and share a single implementation in `state.py`
+- Music fade-out start time is clamped to 0.0 when the fade duration exceeds remaining scene time, preventing invalid FFmpeg filter values
+- Multi-image scene assembly now logs a warning when image duration is negative instead of silently clamping
+- `char_position_to_timestamp` now raises `ValueError` on empty word offsets instead of silently returning wrong data
+- `_scan_project_dirs` now handles `PermissionError` on the output directory instead of crashing
 
 ## [0.4.0] — 2026-02-18
 
@@ -80,6 +97,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Malformed hex input to `_hex_to_ass_color` now raises `ValueError` instead of silently producing garbage
 
 ### Security
+- Run Docker container as non-root user for defense-in-depth
+- Add path traversal guards to all project and artifact routes
+- Quote API key values in .env file and reject control characters to prevent injection
 
 ---
 

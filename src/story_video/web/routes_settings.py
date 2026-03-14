@@ -48,9 +48,12 @@ class ApiKeyUpdate(BaseModel):
 
     @field_validator("anthropic_api_key", "openai_api_key", "elevenlabs_api_key", mode="before")
     @classmethod
-    def reject_blank(cls, v: str | None) -> str | None:
+    def reject_blank_or_unsafe(cls, v: str | None) -> str | None:
         if v is not None and not v.strip():
             msg = "Key value must not be blank"
+            raise ValueError(msg)
+        if v is not None and any(c in v for c in ("\n", "\r", "\x00")):
+            msg = "Key value must not contain control characters"
             raise ValueError(msg)
         return v
 
@@ -76,16 +79,40 @@ async def set_api_keys(body: ApiKeyUpdate) -> dict:
     return {"status": "ok"}
 
 
+def _quote_env_value(v: str) -> str:
+    """Quote a value for safe .env file storage."""
+    escaped = v.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+_MANAGED_KEYS = frozenset({"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY"})
+
+
 def _write_env_file() -> None:
-    """Write current API keys to the .env file."""
-    lines = []
-    anthropic = os.environ.get("ANTHROPIC_API_KEY", "")
-    openai_key = os.environ.get("OPENAI_API_KEY", "")
-    elevenlabs = os.environ.get("ELEVENLABS_API_KEY", "")
-    if anthropic:
-        lines.append(f"ANTHROPIC_API_KEY={anthropic}")
-    if openai_key:
-        lines.append(f"OPENAI_API_KEY={openai_key}")
-    if elevenlabs:
-        lines.append(f"ELEVENLABS_API_KEY={elevenlabs}")
-    _env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    """Write current API keys to the .env file, preserving unmanaged content."""
+    # Collect current values for managed keys
+    managed: dict[str, str] = {}
+    for key in _MANAGED_KEYS:
+        value = os.environ.get(key, "")
+        if value:
+            managed[key] = value
+
+    # Read existing file and update managed lines in place
+    written_keys: set[str] = set()
+    output_lines: list[str] = []
+    if _env_path.exists():
+        for line in _env_path.read_text(encoding="utf-8").splitlines():
+            key_name = line.split("=", 1)[0].strip() if "=" in line else ""
+            if key_name in _MANAGED_KEYS:
+                if key_name in managed:
+                    output_lines.append(f"{key_name}={_quote_env_value(managed[key_name])}")
+                    written_keys.add(key_name)
+                # else: key was unset, drop the line
+            else:
+                output_lines.append(line)
+
+    # Append any managed keys that weren't in the original file
+    for key in sorted(managed.keys() - written_keys):
+        output_lines.append(f"{key}={_quote_env_value(managed[key])}")
+
+    _env_path.write_text("\n".join(output_lines) + "\n", encoding="utf-8")

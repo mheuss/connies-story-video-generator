@@ -1,14 +1,61 @@
+# Version control
 .git/
-.venv/
+
+# Python
 __pycache__/
-*.pyc
-.pytest_cache/
-.ruff_cache/
-.claude/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+
+# Environment variables
+.env
+.env.*
+
+# Secrets and credentials
+credentials.json
+secrets.yaml
+*.pem
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output
 output/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Test artifacts
+tests/
+.pytest_cache/
+
+# Ruff cache
+.ruff_cache/
+
+# Claude Code
+.claude/
+
+# Git worktrees
+.worktrees/
+
+# Frontend (rebuilt in Docker build)
 web/node_modules/
 web/dist/
-.env
-*.env.*
+web/storybook-static/
+
+# Documentation
 docs/
-.worktrees/

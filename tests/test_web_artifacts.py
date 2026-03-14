@@ -1,27 +1,15 @@
 """Tests for story_video.web.routes_artifacts -- artifact listing and serving."""
 
 import json
+from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 from story_video.config import load_config
-from story_video.models import InputMode
+from story_video.models import InputMode, SceneImagePrompt
 from story_video.state import ProjectState
-from story_video.web.app import create_app
-
-
-@pytest.fixture()
-def output_dir(tmp_path):
-    d = tmp_path / "projects"
-    d.mkdir()
-    return d
-
-
-@pytest.fixture()
-def client(output_dir):
-    app = create_app(output_dir=output_dir)
-    return TestClient(app)
+from story_video.web.routes_artifacts import _export_image_prompts, _resolve_artifact_dir
 
 
 @pytest.fixture()
@@ -137,3 +125,60 @@ class TestUpdateArtifact:
             json={"content": "  "},
         )
         assert response.status_code == 422
+
+
+class TestExportImagePrompts:
+    """_export_image_prompts writes scene prompts as editable JSON files."""
+
+    def test_skips_on_missing_project_state(self, output_dir):
+        """Silently returns when project.json doesn't exist."""
+        fake_dir = output_dir / "nonexistent"
+        fake_dir.mkdir()
+        _export_image_prompts(fake_dir)  # Should not raise
+
+    def test_preserves_existing_files(self, client, output_dir):
+        """Does not overwrite manually edited prompt files."""
+        # Create a project
+        resp = client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": "A story."},
+        )
+        pid = resp.json()["project_id"]
+        project_dir = output_dir / pid
+
+        # Load state, add a scene with image prompts
+        state = ProjectState.load(project_dir)
+        state.add_scene(scene_number=1, title="Test Scene", prose="Once upon a time.")
+        scene = state.metadata.scenes[0]
+        scene.image_prompts = [SceneImagePrompt(key="hero", prompt="A hero stands tall")]
+        state.save()
+
+        # Create existing file that should not be overwritten
+        scenes_dir = project_dir / "scenes"
+        scenes_dir.mkdir(exist_ok=True)
+        existing = scenes_dir / f"image_prompts_scene_{scene.scene_number:03d}.json"
+        existing.write_text("CUSTOM EDIT", encoding="utf-8")
+
+        _export_image_prompts(project_dir)
+        assert existing.read_text(encoding="utf-8") == "CUSTOM EDIT"
+
+
+class TestResolveArtifactDir:
+    """_resolve_artifact_dir raises 500 for valid but unmapped phases."""
+
+    def test_unmapped_phase_returns_500(self, project_with_artifacts):
+        """A phase that passes validation but has no _PHASE_DIRS entry raises 500."""
+        with (
+            patch(
+                "story_video.web.routes_projects._output_dir",
+                project_with_artifacts.project_dir.parent,
+            ),
+            patch(
+                "story_video.web.routes_artifacts._validate_phase",
+                return_value="future_phase",
+            ),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                _resolve_artifact_dir("test-project", "future_phase")
+            assert exc_info.value.status_code == 500
+            assert "no artifact directory mapping" in exc_info.value.detail

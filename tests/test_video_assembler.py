@@ -5,6 +5,7 @@ Each test verifies one logical behavior of the video assembler module.
 FFmpeg calls are mocked — no actual FFmpeg execution.
 """
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -24,7 +25,11 @@ from story_video.models import (
     StoryHeader,
     TTSConfig,
 )
-from story_video.pipeline.video_assembler import assemble_scene, assemble_video
+from story_video.pipeline.video_assembler import (
+    _resolve_audio_cues,
+    assemble_scene,
+    assemble_video,
+)
 from story_video.state import ProjectState
 
 # ---------------------------------------------------------------------------
@@ -455,11 +460,11 @@ class TestAssembleSceneWithAudioCues:
         assert "rain.mp3" in cmd_str
 
     def test_unknown_cue_key_raises(self, project_state):
-        """Audio cue with key absent from the audio map raises KeyError."""
+        """Audio cue with key absent from the audio map raises ValueError."""
         scene = project_state.metadata.scenes[0]
         scene.audio_cues = [SceneAudioCue(key="nonexistent", position=0)]
 
-        with pytest.raises(KeyError, match="nonexistent"):
+        with pytest.raises(ValueError, match="nonexistent"):
             assemble_scene(scene, project_state, story_header=self._HEADER)
 
     def test_path_traversal_raises(self, project_state):
@@ -485,3 +490,23 @@ class TestAssembleSceneWithAudioCues:
         cmd = mock_run.call_args[0][0]
         cmd_str = " ".join(str(c) for c in cmd)
         assert "amix" not in cmd_str
+
+
+# ---------------------------------------------------------------------------
+# TestResolveAudioCuesMissingKey — direct unit test for ValueError on missing key
+# ---------------------------------------------------------------------------
+
+
+class TestResolveAudioCuesMissingKey:
+    """_resolve_audio_cues raises ValueError for missing audio cue keys."""
+
+    def test_missing_key_raises_value_error(self):
+        """Missing audio cue key raises ValueError, not KeyError."""
+        cue = SceneAudioCue(key="missing", position=0)
+        with pytest.raises(ValueError, match="Audio cue key 'missing' not found"):
+            _resolve_audio_cues(
+                audio_cues=[cue],
+                audio_map={},
+                captions=CaptionResult(duration=5.0, words=[], segments=[], language="en"),
+                source_dir=Path("/tmp"),
+            )

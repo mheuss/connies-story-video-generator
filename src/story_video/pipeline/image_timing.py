@@ -71,7 +71,13 @@ def char_position_to_timestamp(
 
     Returns:
         Start time in seconds of the nearest caption word.
+
+    Raises:
+        ValueError: If *word_char_offsets* is empty.
     """
+    if not word_char_offsets:
+        msg = "word_char_offsets must not be empty"
+        raise ValueError(msg)
     idx = bisect_left(word_char_offsets, position)
     if idx >= len(word_char_offsets):
         best_idx = len(word_char_offsets) - 1

@@ -3,23 +3,8 @@
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
 
-from story_video.web.app import create_app
 from story_video.web.progress import ProgressBridge, ProgressEvent
-
-
-@pytest.fixture()
-def output_dir(tmp_path):
-    d = tmp_path / "projects"
-    d.mkdir()
-    return d
-
-
-@pytest.fixture()
-def client(output_dir):
-    app = create_app(output_dir=output_dir)
-    return TestClient(app)
 
 
 @pytest.fixture()
@@ -59,3 +44,42 @@ class TestSSEProgressEndpoint:
     def test_404_for_nonexistent_project(self, client):
         response = client.get("/api/v1/projects/nonexistent/progress")
         assert response.status_code == 404
+
+    def test_emits_error_when_thread_dies(self, client, project_id):
+        """SSE yields error event when pipeline thread dies without terminal event."""
+        bridge = ProgressBridge()
+        # Bridge has no events queued and is_done is False.
+
+        with (
+            patch(
+                "story_video.web.routes_pipeline.get_bridge",
+                return_value=bridge,
+            ),
+            patch("story_video.web.routes_pipeline.pipeline_runner") as mock_runner,
+        ):
+            mock_runner.is_running.return_value = False
+            with client.stream("GET", f"/api/v1/projects/{project_id}/progress") as response:
+                lines = list(response.iter_lines())
+
+        text = "\n".join(lines)
+        assert "event: error" in text
+        assert "Pipeline terminated unexpectedly" in text
+
+    def test_times_out_when_no_bridge(self, client, project_id):
+        """SSE yields timeout error when no bridge appears within timeout."""
+        with (
+            patch(
+                "story_video.web.routes_pipeline.get_bridge",
+                return_value=None,
+            ),
+            patch(
+                "story_video.web.routes_pipeline._BRIDGE_WAIT_TIMEOUT",
+                0.5,
+            ),
+        ):
+            with client.stream("GET", f"/api/v1/projects/{project_id}/progress") as response:
+                lines = list(response.iter_lines())
+
+        text = "\n".join(lines)
+        assert "event: error" in text
+        assert "No pipeline activity (timed out)" in text

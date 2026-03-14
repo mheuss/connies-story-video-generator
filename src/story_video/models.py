@@ -467,8 +467,9 @@ class VideoConfig(BaseModel):
         audio_transition_duration: Audio crossfade duration between scenes in seconds.
         fade_in_duration: Fade-from-black duration at video start in seconds.
         fade_out_duration: Fade-to-black duration at video end in seconds.
-        end_hold_duration: Seconds to hold the last frame after narration ends,
-            before the fade-out begins.
+        end_hold_duration: Minimum seconds to hold the last frame after narration
+            ends. The actual hold is at least as long as fade_out_duration so the
+            fade never overlaps narration audio.
         lead_in_duration: Seconds of silence before narration starts, giving the
             opening image time to fade in from black.
     """

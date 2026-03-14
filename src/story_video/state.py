@@ -11,8 +11,12 @@ This module owns the business rules for state management:
 - Resume logic (skip completed, retry failed, process pending)
 """
 
+import json
+import logging
 import os
 import tempfile
+from collections.abc import Iterator
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -30,7 +34,90 @@ from story_video.models import (
     SceneStatus,
 )
 
-__all__ = ["ASSET_DEPENDENCIES", "PHASE_ASSET_MAP", "ProjectState"]
+__all__ = [
+    "ASSET_DEPENDENCIES",
+    "PHASE_ASSET_MAP",
+    "ProjectState",
+    "generate_project_id",
+    "scan_project_dirs",
+]
+
+logger = logging.getLogger(__name__)
+
+
+def scan_project_dirs(output_dir: Path) -> Iterator[tuple[Path, dict]]:
+    """Yield (path, data) for each subdirectory with valid project.json.
+
+    Silently skips directories without project.json and files with
+    corrupted or unreadable JSON.
+
+    Args:
+        output_dir: Base output directory to scan.
+
+    Yields:
+        Tuples of (directory_path, parsed_json_dict).
+    """
+    try:
+        children = output_dir.iterdir()
+    except OSError:
+        logger.debug("Cannot list directory %s: permission denied or I/O error", output_dir)
+        return
+
+    for child in children:
+        if not child.is_dir():
+            continue
+
+        json_path = child / "project.json"
+        if not json_path.exists():
+            continue
+
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            logger.debug("Skipping %s: invalid or unreadable project.json", child)
+            continue
+
+        if not isinstance(data, dict):
+            logger.debug("Skipping %s: project.json is not a JSON object", child)
+            continue
+
+        yield child, data
+
+
+def generate_project_id(mode: str, output_dir: Path) -> str:
+    """Generate a collision-safe project ID.
+
+    Format: ``{mode}-{YYYY-MM-DD}`` (UTC). When a directory with that name
+    already exists in *output_dir*, appends ``-2``, ``-3``, etc. until a
+    free name is found.
+
+    Args:
+        mode: Input mode string (e.g. "adapt", "original", "inspired_by").
+        output_dir: Base output directory where project directories live.
+
+    Returns:
+        A project ID string guaranteed not to collide with existing directories.
+
+    Raises:
+        RuntimeError: If more than 1000 projects exist for the same date.
+    """
+    date_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    base = f"{mode}-{date_str}"
+
+    if not output_dir.exists():
+        return base
+
+    if not (output_dir / base).exists():
+        return base
+
+    suffix = 2
+    while (output_dir / f"{base}-{suffix}").exists():
+        suffix += 1
+        if suffix > 1000:
+            msg = f"Could not generate unique project ID after 1000 attempts for base '{base}'"
+            raise RuntimeError(msg)
+    return f"{base}-{suffix}"
+
 
 # ---------------------------------------------------------------------------
 # Phase-to-asset mapping — which asset type each pipeline phase produces

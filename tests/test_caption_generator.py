@@ -7,6 +7,7 @@ Each test verifies one logical behavior of the caption generator module.
 import json
 from unittest.mock import MagicMock
 
+import openai
 import pytest
 
 from story_video.models import AppConfig, AssetType, InputMode, SceneStatus, TTSConfig
@@ -248,8 +249,6 @@ class TestTranscribeRetryBehavior:
         self, mock_openai, tmp_path, error_name, status, message
     ):
         """transcribe() does not retry on permanent error."""
-        import openai
-
         error_cls = getattr(openai, error_name)
         mock_response = MagicMock()
         mock_response.status_code = status

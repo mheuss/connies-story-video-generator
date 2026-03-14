@@ -71,7 +71,7 @@ Python 3.11+, Claude API (writing), OpenAI TTS or ElevenLabs v3 (narration), GPT
 ```
 pip install -e ".[dev]"
 ```
-
++
 You'll need FFmpeg installed on your system and API keys in a `.env` file:
 
 ```
@@ -82,9 +82,10 @@ ELEVENLABS_API_KEY=...          # optional, only if using ElevenLabs TTS
 
 ### Web UI
 
-Start the web server:
+Build the frontend and start the server:
 
 ```
+cd web && npm install && npm run build && cd ..
 story-video serve
 ```
 
@@ -247,6 +248,33 @@ docker buildx build --platform linux/amd64,linux/arm64 -t story-video .
 ```
 
 ## Development
+
+### Running Locally
+
+You need two terminals — one for the backend API, one for the frontend dev server.
+
+**Terminal 1 — Backend:**
+
+```
+pip install -e ".[dev]"
+story-video serve
+```
+
+This starts the FastAPI backend on `http://localhost:8033`. Without a built frontend in `web/dist/`, it runs in API-only mode.
+
+**Terminal 2 — Frontend:**
+
+```
+cd web
+npm install
+npm run dev
+```
+
+This starts the Vite dev server on `http://localhost:5173` with hot reload. API requests are proxied to the backend on port 8033.
+
+Open `http://localhost:5173` in your browser.
+
+### Tests and Linting
 
 ```
 pytest                       # run all tests

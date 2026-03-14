@@ -11,7 +11,13 @@ from fastapi import APIRouter, FastAPI
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
-from story_video.web import routes_artifacts, routes_pipeline, routes_projects, routes_settings
+from story_video.web import (
+    routes_artifacts,
+    routes_pipeline,
+    routes_projects,
+    routes_settings,
+    routes_tts,
+)
 
 __all__ = ["create_app"]
 
@@ -52,8 +58,8 @@ def create_app(
 
     if output_dir is not None:
         routes_projects.configure(output_dir)
-        routes_pipeline.configure(output_dir)
         routes_artifacts.configure(output_dir)
+        routes_tts.configure(output_dir)
 
     app = FastAPI(title="Story Video", version="0.1.0")
 
@@ -63,6 +69,7 @@ def create_app(
     app.include_router(routes_projects.router)
     app.include_router(routes_pipeline.router)
     app.include_router(routes_artifacts.router)
+    app.include_router(routes_tts.router)
 
     # Static file serving for the SPA frontend.
     if static_dir is not None and static_dir.is_dir():
@@ -76,9 +83,11 @@ def create_app(
                 name="static-assets",
             )
 
-        @app.get("/{full_path:path}")
-        async def spa_catch_all(full_path: str) -> FileResponse:
-            """Serve index.html for all non-API paths (SPA routing)."""
-            return FileResponse(str(index_html))
+        if index_html.is_file():
+
+            @app.get("/{full_path:path}")
+            async def spa_catch_all(full_path: str) -> FileResponse:
+                """Serve index.html for all non-API paths (SPA routing)."""
+                return FileResponse(str(index_html))
 
     return app

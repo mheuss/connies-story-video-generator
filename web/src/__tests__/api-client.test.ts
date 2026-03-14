@@ -253,6 +253,38 @@ describe("api.updateArtifact", () => {
   });
 });
 
+describe("api.listProjects", () => {
+  it("calls GET /api/v1/projects and returns project list", async () => {
+    const mockResponse = {
+      projects: [
+        {
+          project_id: "adapt-2026-01-01",
+          mode: "adapt",
+          status: "completed",
+          current_phase: "VIDEO_ASSEMBLY",
+          scene_count: 5,
+          created_at: "2026-01-01T00:00:00",
+          source_text_preview: "Once upon a time...",
+        },
+      ],
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    const result = await api.listProjects();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/v1/projects",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(result.projects).toHaveLength(1);
+    expect(result.projects[0].project_id).toBe("adapt-2026-01-01");
+  });
+});
+
 describe("error handling", () => {
   it("throws ApiError on non-ok response", async () => {
     mockFetch.mockResolvedValueOnce({

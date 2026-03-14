@@ -12,9 +12,8 @@ import openai
 
 from story_video.models import AssetType, Scene, SceneStatus
 from story_video.state import ProjectState
+from story_video.utils.openai_compat import OPENAI_TRANSIENT
 from story_video.utils.retry import with_retry
-
-_OPENAI_TRANSIENT = (openai.APIConnectionError, openai.RateLimitError, openai.InternalServerError)
 
 __all__ = ["ImageProvider", "OpenAIImageProvider", "generate_image"]
 
@@ -53,7 +52,7 @@ class OpenAIImageProvider:
     def __init__(self) -> None:
         self._client = openai.OpenAI()
 
-    @with_retry(max_retries=3, base_delay=2.0, retry_on=_OPENAI_TRANSIENT)
+    @with_retry(max_retries=3, base_delay=2.0, retry_on=OPENAI_TRANSIENT)
     def generate(
         self, prompt: str, *, model: str, size: str, quality: str, style: str | None = None
     ) -> bytes:
