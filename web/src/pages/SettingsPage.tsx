@@ -7,8 +7,12 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <h2>Settings</h2>
-      <p><Link to="/">Back to home</Link></p>
+      <h2 className="text-lg font-semibold mb-2">Settings</h2>
+      <p className="mb-6">
+        <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+          Back to home
+        </Link>
+      </p>
       <ApiKeySetup onComplete={() => navigate("/")} forceShow />
     </div>
   );

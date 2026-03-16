@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 
 interface Props {
   onComplete: () => void;
@@ -58,63 +60,72 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <h2>API Key Setup</h2>
-      <p>
-        Enter your API keys to get started. These are stored locally and never
-        sent anywhere except to the AI providers.
-      </p>
+    <Card>
+      <CardHeader>
+        <CardTitle>API Key Setup</CardTitle>
+        <CardDescription>
+          Enter your API keys to get started. These are stored locally and never
+          sent anywhere except to the AI providers.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="anthropic-key" className="block text-sm font-medium text-foreground">
+              Anthropic API Key{anthropicConfigured && " (configured)"}
+            </label>
+            <input
+              id="anthropic-key"
+              type="password"
+              value={anthropicKey}
+              onChange={(e) => setAnthropicKey(e.target.value)}
+              placeholder="sk-ant-..."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
 
-      <div style={{ marginBottom: "1rem" }}>
-        <label htmlFor="anthropic-key">
-          Anthropic API Key{anthropicConfigured && " (configured)"}
-        </label>
-        <br />
-        <input
-          id="anthropic-key"
-          type="password"
-          value={anthropicKey}
-          onChange={(e) => setAnthropicKey(e.target.value)}
-          placeholder="sk-ant-..."
-          style={{ width: "100%", padding: "0.5rem" }}
-        />
-      </div>
+          <div className="space-y-1.5">
+            <label htmlFor="openai-key" className="block text-sm font-medium text-foreground">
+              OpenAI API Key{openaiConfigured && " (configured)"}
+            </label>
+            <input
+              id="openai-key"
+              type="password"
+              value={openaiKey}
+              onChange={(e) => setOpenaiKey(e.target.value)}
+              placeholder="sk-..."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
 
-      <div style={{ marginBottom: "1rem" }}>
-        <label htmlFor="openai-key">
-          OpenAI API Key{openaiConfigured && " (configured)"}
-        </label>
-        <br />
-        <input
-          id="openai-key"
-          type="password"
-          value={openaiKey}
-          onChange={(e) => setOpenaiKey(e.target.value)}
-          placeholder="sk-..."
-          style={{ width: "100%", padding: "0.5rem" }}
-        />
-      </div>
+          <div className="space-y-1.5">
+            <label htmlFor="elevenlabs-key" className="block text-sm font-medium text-foreground">
+              ElevenLabs API Key (optional){elevenlabsConfigured && " (configured)"}
+            </label>
+            <input
+              id="elevenlabs-key"
+              type="password"
+              value={elevenlabsKey}
+              onChange={(e) => setElevenlabsKey(e.target.value)}
+              placeholder="sk_..."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
 
-      <div style={{ marginBottom: "1rem" }}>
-        <label htmlFor="elevenlabs-key">
-          ElevenLabs API Key (optional){elevenlabsConfigured && " (configured)"}
-        </label>
-        <br />
-        <input
-          id="elevenlabs-key"
-          type="password"
-          value={elevenlabsKey}
-          onChange={(e) => setElevenlabsKey(e.target.value)}
-          placeholder="sk_..."
-          style={{ width: "100%", padding: "0.5rem" }}
-        />
-      </div>
+          {error && (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
 
-      {error && <p style={{ color: "red" }}>{error}</p>}
-
-      <button type="submit" disabled={saving || (!anthropicKey && !openaiKey && !elevenlabsKey)}>
-        {saving ? "Saving..." : "Save Keys"}
-      </button>
-    </form>
+          <Button
+            type="submit"
+            disabled={saving || (!anthropicKey && !openaiKey && !elevenlabsKey)}
+          >
+            {saving ? "Saving..." : "Save Keys"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
