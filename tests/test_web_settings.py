@@ -153,3 +153,44 @@ class TestSetApiKeys:
         assert "ANTHROPIC_API_KEY" not in content
         assert "DEBUG=1" in content
         assert 'OPENAI_API_KEY="sk-new"' in content
+
+
+class TestEnvFilePermissions:
+    """API key writes restrict .env file permissions."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_managed_keys(self, monkeypatch):
+        """Ensure managed API keys are cleaned up after each test."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+
+    def test_env_file_has_owner_only_permissions_after_write(self, tmp_path):
+        """After setting API keys, .env file should be mode 0o600 (owner read/write only)."""
+        env_path = tmp_path / ".env"
+        app = create_app(env_path=env_path)
+        client = TestClient(app)
+        client.post(
+            "/api/v1/settings/api-keys",
+            json={"anthropic_api_key": "sk-ant-test-key"},
+        )
+
+        mode = env_path.stat().st_mode & 0o777
+        assert mode == 0o600, f"Expected 0o600, got {oct(mode)}"
+
+    def test_env_file_permissions_preserved_on_update(self, tmp_path):
+        """Permissions stay restricted when keys are updated."""
+        env_path = tmp_path / ".env"
+        app = create_app(env_path=env_path)
+        client = TestClient(app)
+        client.post(
+            "/api/v1/settings/api-keys",
+            json={"anthropic_api_key": "sk-ant-first"},
+        )
+        client.post(
+            "/api/v1/settings/api-keys",
+            json={"openai_api_key": "sk-openai-second"},
+        )
+
+        mode = env_path.stat().st_mode & 0o777
+        assert mode == 0o600, f"Expected 0o600, got {oct(mode)}"

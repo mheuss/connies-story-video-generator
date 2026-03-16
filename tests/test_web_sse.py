@@ -65,8 +65,14 @@ class TestSSEProgressEndpoint:
         assert "event: error" in text
         assert "Pipeline terminated unexpectedly" in text
 
-    def test_times_out_when_no_bridge(self, client, project_id):
-        """SSE yields timeout error when no bridge appears within timeout."""
+    def test_timeout_value_is_120_seconds(self):
+        """The bridge wait timeout should be 120 seconds."""
+        from story_video.web.routes_pipeline import _BRIDGE_WAIT_TIMEOUT
+
+        assert _BRIDGE_WAIT_TIMEOUT == 120.0
+
+    def test_timeout_error_when_pipeline_not_running(self, client, project_id):
+        """When bridge times out and pipeline is not running, error says so."""
         with (
             patch(
                 "story_video.web.routes_pipeline.get_bridge",
@@ -74,12 +80,36 @@ class TestSSEProgressEndpoint:
             ),
             patch(
                 "story_video.web.routes_pipeline._BRIDGE_WAIT_TIMEOUT",
-                0.5,
+                0.0,
             ),
+            patch("story_video.web.routes_pipeline.pipeline_runner") as mock_runner,
         ):
+            mock_runner.is_running.return_value = False
             with client.stream("GET", f"/api/v1/projects/{project_id}/progress") as response:
                 lines = list(response.iter_lines())
 
         text = "\n".join(lines)
         assert "event: error" in text
-        assert "No pipeline activity (timed out)" in text
+        assert "not running" in text.lower()
+
+    def test_timeout_error_when_pipeline_is_running(self, client, project_id):
+        """When bridge times out but pipeline IS running, error indicates bridge issue."""
+        with (
+            patch(
+                "story_video.web.routes_pipeline.get_bridge",
+                return_value=None,
+            ),
+            patch(
+                "story_video.web.routes_pipeline._BRIDGE_WAIT_TIMEOUT",
+                0.0,
+            ),
+            patch("story_video.web.routes_pipeline.pipeline_runner") as mock_runner,
+        ):
+            mock_runner.is_running.return_value = True
+            with client.stream("GET", f"/api/v1/projects/{project_id}/progress") as response:
+                lines = list(response.iter_lines())
+
+        text = "\n".join(lines)
+        assert "event: error" in text
+        assert "running" in text.lower()
+        assert "not streaming" in text.lower() or "progress" in text.lower()

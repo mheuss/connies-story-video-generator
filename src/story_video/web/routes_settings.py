@@ -116,3 +116,4 @@ def _write_env_file() -> None:
         output_lines.append(f"{key}={_quote_env_value(managed[key])}")
 
     _env_path.write_text("\n".join(output_lines) + "\n", encoding="utf-8")
+    _env_path.chmod(0o600)
