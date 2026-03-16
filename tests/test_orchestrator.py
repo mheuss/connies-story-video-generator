@@ -273,6 +273,21 @@ class TestDetermineStartPhase:
 
         assert result is None
 
+    def test_after_invalidation_starts_at_next_phase(self, adapt_state):
+        """After invalidate_from(), orchestrator starts at the next phase."""
+        # Complete first two phases
+        _set_phase_state(adapt_state, PipelinePhase.ANALYSIS, PhaseStatus.COMPLETED)
+        _set_phase_state(adapt_state, PipelinePhase.SCENE_SPLITTING, PhaseStatus.COMPLETED)
+
+        # Invalidate from analysis — sets current_phase=ANALYSIS, status=COMPLETED
+        adapt_state.invalidate_from(PipelinePhase.ANALYSIS)
+
+        phases = adapt_state.get_phase_sequence()
+        result = _determine_start_phase(adapt_state, phases)
+
+        # Should pick up from scene_splitting (next after analysis)
+        assert result == PipelinePhase.SCENE_SPLITTING
+
 
 # ---------------------------------------------------------------------------
 # TestRunPipelineAlreadyComplete — no-op when pipeline is done
