@@ -308,3 +308,25 @@ describe("error handling", () => {
     await expect(api.getHealth()).rejects.toThrow("Request failed");
   });
 });
+
+describe("api.rerunFromPhase", () => {
+  it("calls POST /api/v1/projects/{id}/rerun-from/{phase}", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          status: "rerunning",
+          from_phase: "analysis",
+          project_id: "test-1",
+        }),
+    });
+
+    const result = await api.rerunFromPhase("test-1", "analysis");
+    expect(result.status).toBe("rerunning");
+    expect(result.from_phase).toBe("analysis");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/v1/projects/test-1/rerun-from/analysis",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});

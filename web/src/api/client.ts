@@ -5,6 +5,7 @@ import type {
   CreateProjectResponse,
   ListProjectsResponse,
   ProjectStatus,
+  RerunResponse,
   SetApiKeysRequest,
   TtsScene,
   TtsSceneList,
@@ -83,6 +84,11 @@ export const api = {
     request<{ status: string }>(`/projects/${projectId}/approve`, {
       method: "POST",
       body: JSON.stringify(auto ? { auto: true } : {}),
+    }),
+
+  rerunFromPhase: (projectId: string, phase: string) =>
+    request<RerunResponse>(`/projects/${projectId}/rerun-from/${phase}`, {
+      method: "POST",
     }),
 
   // Artifacts
