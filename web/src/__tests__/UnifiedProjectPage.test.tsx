@@ -24,6 +24,9 @@ vi.mock("../api/client", () => ({
     listArtifacts: vi.fn().mockResolvedValue({ files: [] }),
     getArtifactUrl: vi.fn().mockReturnValue("/mock-artifact-url"),
     updateArtifact: vi.fn(),
+    getTtsScenes: vi.fn().mockResolvedValue({ scenes: [] }),
+    updateNarrationText: vi.fn(),
+    regenerateTtsScene: vi.fn(),
   },
 }));
 
@@ -523,6 +526,159 @@ describe("UnifiedProjectPage - Edit and re-run", () => {
     // Now the ArtifactViewer inside Analysis should mount and fetch artifacts
     await waitFor(() => {
       expect(api.listArtifacts).toHaveBeenCalledWith("test-1", "analysis");
+    });
+  });
+});
+
+describe("UnifiedProjectPage - TTS integration", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders TtsReviewPanel for tts_generation checkpoint", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "tts_generation",
+      scene_count: 3,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.getTtsScenes).mockResolvedValue({
+      scenes: [
+        {
+          scene_number: 1,
+          title: "Scene 1",
+          narration_text: "Hello",
+          audio_file: "scene_001.mp3",
+          audio_url: "/audio/1.mp3",
+          has_audio: true,
+        },
+      ],
+    });
+
+    renderPage("test-1");
+
+    await waitFor(() => {
+      // TtsReviewPanel content should be visible
+      expect(screen.getByText("Scene 1: Scene 1")).toBeInTheDocument();
+    });
+
+    // Approve buttons should also be present since it's a checkpoint
+    expect(
+      screen.getByRole("button", { name: /approve & continue/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders TtsReviewPanel instead of ArtifactViewer for tts_generation", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "tts_generation",
+      scene_count: 3,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.getTtsScenes).mockResolvedValue({
+      scenes: [
+        {
+          scene_number: 1,
+          title: "The Lighthouse",
+          narration_text: "A beam of light swept across the dark sea.",
+          audio_file: "scene_001.mp3",
+          audio_url: "/audio/1.mp3",
+          has_audio: true,
+        },
+      ],
+    });
+
+    renderPage("test-1");
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Scene 1: The Lighthouse"),
+      ).toBeInTheDocument();
+    });
+
+    // TTS panel uses getTtsScenes, NOT listArtifacts for tts_generation
+    expect(api.getTtsScenes).toHaveBeenCalledWith("test-1");
+    expect(api.listArtifacts).not.toHaveBeenCalledWith(
+      "test-1",
+      "tts_generation",
+    );
+  });
+
+  it("shows approve buttons for tts_generation checkpoint", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "tts_generation",
+      scene_count: 3,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.getTtsScenes).mockResolvedValue({ scenes: [] });
+
+    renderPage("test-1");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /approve & continue/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /auto-approve remaining/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("renders TtsReviewPanel for completed tts_generation when expanded", async () => {
+    const { api } = await import("../api/client");
+    // Project has progressed past tts_generation so it's completed
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "image_generation",
+      scene_count: 3,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.getTtsScenes).mockResolvedValue({
+      scenes: [
+        {
+          scene_number: 1,
+          title: "The Storm",
+          narration_text: "Wind howled through the tower.",
+          audio_file: "scene_001.mp3",
+          audio_url: "/audio/1.mp3",
+          has_audio: true,
+        },
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderPage("test-1");
+
+    await waitFor(() => {
+      expect(screen.getByText("TTS Generation")).toBeInTheDocument();
+    });
+
+    // tts_generation is completed and collapsed by default. Expand it.
+    await user.click(
+      screen.getByRole("button", {
+        name: /tts generation phase, completed/i,
+      }),
+    );
+
+    // TtsReviewPanel should load its scenes
+    await waitFor(() => {
+      expect(api.getTtsScenes).toHaveBeenCalledWith("test-1");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Scene 1: The Storm")).toBeInTheDocument();
     });
   });
 });

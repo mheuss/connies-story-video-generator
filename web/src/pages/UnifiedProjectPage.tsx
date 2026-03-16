@@ -8,6 +8,7 @@ import ApiKeySetup from "@/components/ApiKeySetup";
 import { ArtifactViewer } from "@/components/ArtifactViewer";
 import { PhaseTimeline } from "@/components/PhaseTimeline";
 import { ProcessingModal } from "@/components/ProcessingModal";
+import TtsReviewPanel from "@/components/TtsReviewPanel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -277,6 +278,41 @@ export function UnifiedProjectPage() {
   // Render content inside each PhaseCard
   const renderPhaseContent = useCallback(
     (phase: string, status: string) => {
+      // TTS generation uses a specialized review panel instead of the
+      // generic ArtifactViewer. It shows per-scene audio playback,
+      // narration text editing, and single-scene regeneration.
+      if (
+        phase === "tts_generation" &&
+        (status === "completed" || status === "checkpoint")
+      ) {
+        return (
+          <>
+            <TtsReviewPanel
+              projectId={project!.project_id}
+              onNarrationEdited={() => handleArtifactEdited(phase)}
+            />
+            {staleAfter === phase && (
+              <Button className="mt-4" onClick={() => handleRerunFrom(phase)}>
+                Re-run from here
+              </Button>
+            )}
+            {status === "checkpoint" && (
+              <div className="flex gap-2 mt-4">
+                <Button onClick={() => handleApprove()}>
+                  Approve & Continue
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleApprove(true)}
+                >
+                  Auto-approve remaining
+                </Button>
+              </div>
+            )}
+          </>
+        );
+      }
+
       if (status === "completed" || status === "checkpoint") {
         return (
           <>
