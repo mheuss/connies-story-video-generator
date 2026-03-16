@@ -1,12 +1,165 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
-import type { ProjectStatus } from "@/api/types";
+import type { CreateProjectRequest, ProjectStatus } from "@/api/types";
 import { useProgressStream } from "@/hooks/useProgressStream";
+import ApiKeySetup from "@/components/ApiKeySetup";
 import { PhaseTimeline } from "@/components/PhaseTimeline";
 import { ProcessingModal } from "@/components/ProcessingModal";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+
+type Mode = CreateProjectRequest["mode"];
+
+const MODE_OPTIONS: { value: Mode; label: string; description: string }[] = [
+  { value: "adapt", label: "Adapt", description: "Narrate an existing story" },
+  { value: "original", label: "Original", description: "Write from a topic" },
+  {
+    value: "inspired_by",
+    label: "Inspired By",
+    description: "New story from existing",
+  },
+];
+
+function CreationForm() {
+  const navigate = useNavigate();
+  const [keysReady, setKeysReady] = useState(false);
+  const [mode, setMode] = useState<Mode>("adapt");
+  const [sourceText, setSourceText] = useState("");
+  const [autonomous, setAutonomous] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const handleKeysComplete = useCallback(() => setKeysReady(true), []);
+
+  const sourceTextLabel =
+    mode === "adapt" ? "Story to adapt" : "Topic or idea";
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sourceText.trim()) return;
+
+    setError(null);
+    setCreating(true);
+
+    try {
+      const project = await api.createProject({
+        mode,
+        source_text: sourceText,
+        autonomous,
+      });
+      navigate(`/project/${project.project_id}`, { replace: true });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create project"
+      );
+      setCreating(false);
+    }
+  };
+
+  if (!keysReady) {
+    return (
+      <div className="max-w-xl mx-auto py-8 px-4">
+        <ApiKeySetup onComplete={handleKeysComplete} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-xl mx-auto py-8 px-4">
+      <h1 className="text-2xl font-bold mb-6">Create a new story video</h1>
+
+      <form onSubmit={handleSubmit} noValidate>
+        {/* Mode selector */}
+        <fieldset className="mb-6">
+          <legend className="text-sm font-medium mb-2">
+            Mode <span aria-hidden="true">*</span>
+            <span className="sr-only">(required)</span>
+          </legend>
+          <div className="space-y-2">
+            {MODE_OPTIONS.map((option) => (
+              <label
+                key={option.value}
+                className="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 p-3 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 dark:border-gray-700 dark:has-[:checked]:border-blue-400 dark:has-[:checked]:bg-blue-950"
+              >
+                <input
+                  type="radio"
+                  name="mode"
+                  value={option.value}
+                  checked={mode === option.value}
+                  onChange={() => setMode(option.value)}
+                  className="mt-0.5 accent-blue-600 focus:ring-2 focus:ring-blue-500"
+                />
+                <div>
+                  <span className="font-medium">{option.label}</span>
+                  <span className="block text-sm text-gray-500">
+                    {option.description}
+                  </span>
+                </div>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {/* Source text */}
+        <div className="mb-6">
+          <label htmlFor="source-text" className="block text-sm font-medium mb-1">
+            {sourceTextLabel} <span aria-hidden="true">*</span>
+            <span className="sr-only">(required)</span>
+          </label>
+          <Textarea
+            id="source-text"
+            value={sourceText}
+            onChange={(e) => setSourceText(e.target.value)}
+            rows={8}
+            required
+            aria-required="true"
+            placeholder={
+              mode === "adapt"
+                ? "Paste the full text of your story here..."
+                : "Describe your story idea..."
+            }
+          />
+        </div>
+
+        {/* Autonomous toggle */}
+        <div className="mb-6">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autonomous}
+              onChange={(e) => setAutonomous(e.target.checked)}
+              className="rounded accent-blue-600 focus:ring-2 focus:ring-blue-500"
+            />
+            <span>
+              Run to completion{" "}
+              <span className="text-sm text-gray-500">
+                (skip review checkpoints)
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {/* Error display */}
+        {error && (
+          <div role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+            {error}
+          </div>
+        )}
+
+        {/* Submit */}
+        <Button
+          type="submit"
+          size="lg"
+          disabled={creating || !sourceText.trim()}
+        >
+          {creating ? "Creating..." : "Create Project"}
+        </Button>
+      </form>
+    </div>
+  );
+}
 
 export function UnifiedProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -116,7 +269,7 @@ export function UnifiedProjectPage() {
   // --- Render ---
 
   if (projectId === "new") {
-    return <div>Creation form placeholder</div>;
+    return <CreationForm />;
   }
 
   if (loading) {
