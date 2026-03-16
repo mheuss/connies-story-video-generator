@@ -398,6 +398,59 @@ class ProjectState:
         self._require_phase_in_progress()
         self._metadata.status = PhaseStatus.AWAITING_REVIEW
 
+    def invalidate_from(self, phase: PipelinePhase) -> None:
+        """Invalidate all phases downstream of the given phase.
+
+        The given phase remains COMPLETED (its artifacts were manually edited).
+        All subsequent phases in the sequence have their scene assets reset to
+        PENDING. Sets current_phase to the given phase and status to COMPLETED
+        so the orchestrator's _determine_start_phase() advances to the next
+        phase on resume.
+
+        Raises:
+            ValueError: If the phase is not completed or not in this mode's
+                phase sequence.
+        """
+        phases = self.get_phase_sequence()
+        if phase not in phases:
+            msg = f"{phase.value} not in {self._metadata.mode.value} phase sequence"
+            raise ValueError(msg)
+
+        # Find phase status by checking position relative to current_phase
+        phase_idx = phases.index(phase)
+        current_phase = self._metadata.current_phase
+        current_idx = (
+            phases.index(current_phase)
+            if current_phase is not None and current_phase in phases
+            else -1
+        )
+
+        # Phase must have been completed (it's before or at current_phase,
+        # and the project isn't failed/in_progress at that phase)
+        if phase_idx > current_idx:
+            msg = f"Phase {phase.value} not completed — cannot invalidate"
+            raise ValueError(msg)
+        if phase_idx == current_idx and self._metadata.status not in (
+            PhaseStatus.COMPLETED,
+            PhaseStatus.AWAITING_REVIEW,
+        ):
+            msg = f"Phase {phase.value} not completed — status is {self._metadata.status.value}"
+            raise ValueError(msg)
+
+        # Reset downstream scene assets to PENDING
+        downstream_phases = phases[phase_idx + 1 :]
+        for downstream_phase in downstream_phases:
+            asset_type = PHASE_ASSET_MAP.get(downstream_phase)
+            if asset_type is not None:
+                for scene in self._metadata.scenes:
+                    setattr(scene.asset_status, asset_type.value, SceneStatus.PENDING)
+
+        # Set current_phase and status so orchestrator resumes from next phase
+        self._metadata.current_phase = phase
+        self._metadata.status = PhaseStatus.COMPLETED
+
+        self.save()
+
     def _require_phase_in_progress(self) -> None:
         """Raise ValueError if no phase is currently in progress."""
         if self._metadata.current_phase is None:
