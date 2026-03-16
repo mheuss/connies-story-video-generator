@@ -12,6 +12,11 @@ const dirname =
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      "@": path.join(dirname, "src"),
+    },
+  },
   test: {
     projects: [
       // Unit tests (jsdom)
