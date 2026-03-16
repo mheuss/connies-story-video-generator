@@ -976,3 +976,19 @@ class TestInvalidateFrom:
         reloaded = ProjectState.load(state._project_dir)
         assert reloaded.metadata.current_phase == PipelinePhase.ANALYSIS
         assert reloaded.metadata.status == PhaseStatus.COMPLETED
+        # Verify downstream asset reset survived serialization
+        for scene in reloaded.metadata.scenes:
+            assert scene.asset_status.text == SceneStatus.PENDING
+
+    def test_invalidate_from_awaiting_review_phase(self, adapt_project_with_scenes: ProjectState):
+        """Can invalidate from a phase in AWAITING_REVIEW status."""
+        state = adapt_project_with_scenes
+        state.start_phase(PipelinePhase.ANALYSIS)
+        state.complete_phase()
+        state.start_phase(PipelinePhase.SCENE_SPLITTING)
+        state.await_review()
+
+        state.invalidate_from(PipelinePhase.SCENE_SPLITTING)
+
+        assert state.metadata.current_phase == PipelinePhase.SCENE_SPLITTING
+        assert state.metadata.status == PhaseStatus.COMPLETED
