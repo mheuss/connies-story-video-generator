@@ -3,7 +3,9 @@ import { useParams, useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
 import type { CreateProjectRequest, ProjectStatus } from "@/api/types";
 import { useProgressStream } from "@/hooks/useProgressStream";
+import { getPhaseSequence } from "@/data/phases";
 import ApiKeySetup from "@/components/ApiKeySetup";
+import { ArtifactViewer } from "@/components/ArtifactViewer";
 import { PhaseTimeline } from "@/components/PhaseTimeline";
 import { ProcessingModal } from "@/components/ProcessingModal";
 import { Button } from "@/components/ui/button";
@@ -260,6 +262,56 @@ export function UnifiedProjectPage() {
     [projectId, progress]
   );
 
+  // Track which phase was edited earliest
+  const handleArtifactEdited = useCallback(
+    (phase: string) => {
+      setStaleAfter((prev) => {
+        if (!prev) return phase;
+        const phases = getPhaseSequence(project!.mode);
+        return phases.indexOf(phase) < phases.indexOf(prev) ? phase : prev;
+      });
+    },
+    [project]
+  );
+
+  // Render content inside each PhaseCard
+  const renderPhaseContent = useCallback(
+    (phase: string, status: string) => {
+      if (status === "completed" || status === "checkpoint") {
+        return (
+          <>
+            <ArtifactViewer
+              projectId={project!.project_id}
+              phase={phase}
+              editable={status === "completed" || status === "checkpoint"}
+              onEdited={handleArtifactEdited}
+            />
+            {staleAfter === phase && (
+              <Button className="mt-4" onClick={() => handleRerunFrom(phase)}>
+                Re-run from here
+              </Button>
+            )}
+            {status === "checkpoint" && (
+              <div className="flex gap-2 mt-4">
+                <Button onClick={() => handleApprove()}>
+                  Approve & Continue
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleApprove(true)}
+                >
+                  Auto-approve remaining
+                </Button>
+              </div>
+            )}
+          </>
+        );
+      }
+      return null;
+    },
+    [project, staleAfter, handleArtifactEdited, handleRerunFrom, handleApprove]
+  );
+
   // Build status text for processing modal
   const modalStatusText =
     progress.scenesTotal > 0
@@ -337,6 +389,7 @@ export function UnifiedProjectPage() {
         currentPhase={project.current_phase}
         projectStatus={project.status}
         staleAfter={staleAfter}
+        renderPhaseContent={renderPhaseContent}
       />
 
       <ProcessingModal

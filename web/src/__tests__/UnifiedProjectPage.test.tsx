@@ -21,6 +21,9 @@ vi.mock("../api/client", () => ({
     startPipeline: vi.fn(),
     approvePipeline: vi.fn(),
     rerunFromPhase: vi.fn(),
+    listArtifacts: vi.fn().mockResolvedValue({ files: [] }),
+    getArtifactUrl: vi.fn().mockReturnValue("/mock-artifact-url"),
+    updateArtifact: vi.fn(),
   },
 }));
 
@@ -345,6 +348,181 @@ describe("UnifiedProjectPage - Creation mode", () => {
       // Required indicator on source text label
       const sourceLabel = screen.getByText(/story to adapt/i);
       expect(sourceLabel.closest("label")).toHaveTextContent(/\*/);
+    });
+  });
+});
+
+describe("UnifiedProjectPage - Edit and re-run", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows approve buttons on checkpoint phase", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "image_prompts",
+      scene_count: 5,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.listArtifacts).mockResolvedValue({ files: [] });
+
+    renderPage("test-1");
+
+    await waitFor(() => {
+      expect(screen.getByText("Image Prompts")).toBeInTheDocument();
+    });
+
+    // The checkpoint phase (image_prompts) should show approve buttons
+    expect(
+      screen.getByRole("button", { name: /approve & continue/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /auto-approve remaining/i })
+    ).toBeInTheDocument();
+  });
+
+  it("calls approvePipeline when approve button is clicked", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "image_prompts",
+      scene_count: 5,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.listArtifacts).mockResolvedValue({ files: [] });
+    vi.mocked(api.approvePipeline).mockResolvedValue({ status: "ok" });
+
+    const user = userEvent.setup();
+    renderPage("test-1");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /approve & continue/i })
+      ).toBeInTheDocument();
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /approve & continue/i })
+    );
+
+    await waitFor(() => {
+      expect(api.approvePipeline).toHaveBeenCalledWith("test-1", undefined);
+    });
+  });
+
+  it("calls approvePipeline with auto flag when auto-approve is clicked", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "image_prompts",
+      scene_count: 5,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.listArtifacts).mockResolvedValue({ files: [] });
+    vi.mocked(api.approvePipeline).mockResolvedValue({ status: "ok" });
+
+    const user = userEvent.setup();
+    renderPage("test-1");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /auto-approve remaining/i })
+      ).toBeInTheDocument();
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /auto-approve remaining/i })
+    );
+
+    await waitFor(() => {
+      expect(api.approvePipeline).toHaveBeenCalledWith("test-1", true);
+    });
+  });
+
+  it("does not show approve buttons on completed (non-checkpoint) phases", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "image_prompts",
+      scene_count: 5,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.listArtifacts).mockResolvedValue({ files: [] });
+
+    renderPage("test-1");
+
+    await waitFor(() => {
+      expect(screen.getByText("Image Prompts")).toBeInTheDocument();
+    });
+
+    // Only one set of approve buttons should exist (for the checkpoint phase)
+    const approveButtons = screen.getAllByRole("button", {
+      name: /approve & continue/i,
+    });
+    expect(approveButtons).toHaveLength(1);
+  });
+
+  it("loads artifacts for the checkpoint phase immediately", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "image_prompts",
+      scene_count: 5,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.listArtifacts).mockResolvedValue({ files: [] });
+
+    renderPage("test-1");
+
+    await waitFor(() => {
+      expect(screen.getByText("Image Prompts")).toBeInTheDocument();
+    });
+
+    // The checkpoint phase (image_prompts) is always expanded, so its
+    // ArtifactViewer mounts immediately and fetches artifacts
+    await waitFor(() => {
+      expect(api.listArtifacts).toHaveBeenCalledWith("test-1", "image_prompts");
+    });
+  });
+
+  it("loads artifacts for completed phase when expanded", async () => {
+    const { api } = await import("../api/client");
+    vi.mocked(api.getProject).mockResolvedValue({
+      project_id: "test-1",
+      mode: "adapt",
+      status: "awaiting_review",
+      current_phase: "image_prompts",
+      scene_count: 5,
+      created_at: "2026-03-16T10:00:00Z",
+    });
+    vi.mocked(api.listArtifacts).mockResolvedValue({ files: [] });
+
+    const user = userEvent.setup();
+    renderPage("test-1");
+
+    await waitFor(() => {
+      expect(screen.getByText("Analysis")).toBeInTheDocument();
+    });
+
+    // Completed phases are collapsed by default. Expand the Analysis phase.
+    await user.click(
+      screen.getByRole("button", { name: /analysis phase, completed/i })
+    );
+
+    // Now the ArtifactViewer inside Analysis should mount and fetch artifacts
+    await waitFor(() => {
+      expect(api.listArtifacts).toHaveBeenCalledWith("test-1", "analysis");
     });
   });
 });
