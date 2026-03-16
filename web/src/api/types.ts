@@ -89,3 +89,10 @@ export interface TtsScene {
 export interface TtsSceneList {
   scenes: TtsScene[];
 }
+
+/** Response from the rerun-from endpoint. */
+export interface RerunResponse {
+  status: string;
+  from_phase: string;
+  project_id: string;
+}
