@@ -1,4 +1,4 @@
-"""Pipeline control routes -- start, approve, and progress streaming."""
+"""Pipeline control routes -- start, approve, rerun-from, and progress streaming."""
 
 import asyncio
 import json
@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from story_video.models import PhaseStatus
+from story_video.models import PhaseStatus, PipelinePhase
 from story_video.web import pipeline_runner
 from story_video.web.progress import TERMINAL_EVENTS, ProgressBridge
 from story_video.web.routes_projects import _load_project, _resolve_project_dir
@@ -63,6 +63,37 @@ async def approve_checkpoint(project_id: str, body: ApproveRequest | None = None
 
     pipeline_runner.run_pipeline_in_thread(state)
     return {"status": "approved", "project_id": project_id}
+
+
+@router.post("/{project_id}/rerun-from/{phase}", status_code=202)
+async def rerun_from_phase(project_id: str, phase: str) -> dict:
+    """Invalidate downstream phases and restart pipeline from the next phase."""
+    _verify_project_exists(project_id)
+
+    if pipeline_runner.is_running():
+        raise HTTPException(
+            status_code=409,
+            detail="Pipeline is already running",
+        )
+
+    try:
+        pipeline_phase = PipelinePhase(phase)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown phase: {phase}",
+        )
+
+    state = _load_project(project_id)
+
+    try:
+        state.invalidate_from(pipeline_phase)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    pipeline_runner.run_pipeline_in_thread(state)
+
+    return {"status": "rerunning", "from_phase": phase, "project_id": project_id}
 
 
 @router.get("/{project_id}/progress")
