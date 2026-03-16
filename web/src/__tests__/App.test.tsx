@@ -7,11 +7,10 @@ import App from "../App";
 vi.mock("../pages/ProjectListPage", () => ({
   default: () => <div data-testid="project-list-page">ProjectListPage</div>,
 }));
-vi.mock("../pages/CreatePage", () => ({
-  default: () => <div data-testid="create-page">CreatePage</div>,
-}));
-vi.mock("../pages/ProjectPage", () => ({
-  default: () => <div data-testid="project-page">ProjectPage</div>,
+vi.mock("../pages/UnifiedProjectPage", () => ({
+  UnifiedProjectPage: () => (
+    <div data-testid="project-page">UnifiedProjectPage</div>
+  ),
 }));
 vi.mock("../pages/SettingsPage", () => ({
   default: () => <div data-testid="settings-page">SettingsPage</div>,
@@ -27,16 +26,17 @@ describe("App routing", () => {
     expect(screen.getByTestId("project-list-page")).toBeInTheDocument();
   });
 
-  it("renders CreatePage at /create", () => {
+  it("redirects /create to /project/new", () => {
     render(
       <MemoryRouter initialEntries={["/create"]}>
         <App />
       </MemoryRouter>,
     );
-    expect(screen.getByTestId("create-page")).toBeInTheDocument();
+    // /create redirects to /project/new, which renders UnifiedProjectPage
+    expect(screen.getByTestId("project-page")).toBeInTheDocument();
   });
 
-  it("renders ProjectPage at /project/:projectId", () => {
+  it("renders UnifiedProjectPage at /project/:projectId", () => {
     render(
       <MemoryRouter initialEntries={["/project/test-123"]}>
         <App />
