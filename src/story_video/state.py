@@ -445,6 +445,20 @@ class ProjectState:
                 for scene in self._metadata.scenes:
                     setattr(scene.asset_status, asset_type.value, SceneStatus.PENDING)
 
+        # Remove tracker files for invalidated phases so they re-run fully.
+        # These files tell phase functions to skip already-processed scenes,
+        # but after invalidation that skip logic is wrong — the status has
+        # been reset to PENDING.
+        _PHASE_TRACKER_FILES: dict[PipelinePhase, str] = {
+            PipelinePhase.NARRATION_PREP: "narration_prep_done.json",
+        }
+        for downstream_phase in downstream_phases:
+            tracker = _PHASE_TRACKER_FILES.get(downstream_phase)
+            if tracker:
+                tracker_path = self.project_dir / tracker
+                if tracker_path.exists():
+                    tracker_path.unlink()
+
         # Set current_phase and status so orchestrator resumes from next phase
         self._metadata.current_phase = phase
         self._metadata.status = PhaseStatus.COMPLETED

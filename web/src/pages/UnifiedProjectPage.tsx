@@ -191,23 +191,28 @@ export function UnifiedProjectPage() {
       .finally(() => setLoading(false));
   }, [projectId]);
 
-  // Update project state from SSE events
+  // Update project state from SSE events.
+  // Uses functional updates so batched calls don't overwrite each other.
   useEffect(() => {
-    if (progress.isComplete && project) {
-      setProject({ ...project, status: "completed" });
+    if (progress.isComplete) {
+      setProject((prev) => prev ? { ...prev, status: "completed" } : prev);
     }
-    if (progress.checkpoint && project) {
-      setProject({
-        ...project,
-        status: "awaiting_review",
-        current_phase: progress.checkpoint.phase,
-      });
+    if (progress.checkpoint) {
+      setProject((prev) =>
+        prev
+          ? { ...prev, status: "awaiting_review", current_phase: progress.checkpoint!.phase }
+          : prev
+      );
     }
-    if (progress.currentPhase && project && isRunning) {
-      setProject({ ...project, current_phase: progress.currentPhase });
+    if (progress.currentPhase) {
+      setProject((prev) =>
+        prev && prev.status === "in_progress"
+          ? { ...prev, current_phase: progress.currentPhase! }
+          : prev
+      );
     }
-    if (progress.error && project) {
-      setProject({ ...project, status: "failed" });
+    if (progress.error) {
+      setProject((prev) => prev ? { ...prev, status: "failed" } : prev);
     }
   }, [
     progress.isComplete,
@@ -219,6 +224,7 @@ export function UnifiedProjectPage() {
   const handleStartPipeline = useCallback(async () => {
     if (!projectId) return;
     try {
+      progress.reset();
       await api.startPipeline(projectId);
       setProject((prev) =>
         prev ? { ...prev, status: "in_progress" } : prev
@@ -228,12 +234,13 @@ export function UnifiedProjectPage() {
         err instanceof Error ? err.message : "Failed to start pipeline"
       );
     }
-  }, [projectId]);
+  }, [projectId, progress.reset]);
 
   const handleApprove = useCallback(
     async (auto?: boolean) => {
       if (!projectId) return;
       try {
+        progress.reset();
         await api.approvePipeline(projectId, auto);
         setProject((prev) =>
           prev ? { ...prev, status: "in_progress" } : prev
@@ -243,7 +250,7 @@ export function UnifiedProjectPage() {
         setError(err instanceof Error ? err.message : "Failed to approve");
       }
     },
-    [projectId]
+    [projectId, progress.reset]
   );
 
   const handleRerunFrom = useCallback(
@@ -351,7 +358,9 @@ export function UnifiedProjectPage() {
   // Build status text for processing modal
   const modalStatusText =
     progress.scenesTotal > 0
-      ? `Processing scene ${progress.scenesDone + 1} of ${progress.scenesTotal}`
+      ? progress.scenesDone >= progress.scenesTotal
+        ? `Finishing ${progress.scenesTotal} scenes...`
+        : `Processing scene ${progress.scenesDone + 1} of ${progress.scenesTotal}`
       : "Working...";
 
   // --- Render ---
@@ -429,12 +438,12 @@ export function UnifiedProjectPage() {
       />
 
       <ProcessingModal
-        open={isRunning}
+        open={isRunning || Boolean(progress.error)}
         phase={progress.currentPhase ?? project.current_phase ?? ""}
         statusText={modalStatusText}
         error={progress.error ?? undefined}
         onRetry={handleStartPipeline}
-        onClose={() => setError(null)}
+        onClose={() => progress.reset()}
       />
     </div>
   );

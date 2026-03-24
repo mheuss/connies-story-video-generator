@@ -980,6 +980,29 @@ class TestInvalidateFrom:
         for scene in reloaded.metadata.scenes:
             assert scene.asset_status.text == SceneStatus.PENDING
 
+    def test_invalidate_removes_tracker_files(self, adapt_project_with_scenes: ProjectState):
+        """invalidate_from() should remove tracker files for invalidated phases
+        so they re-run fully instead of skipping already-processed scenes."""
+        state = adapt_project_with_scenes
+        for phase in [
+            PipelinePhase.ANALYSIS,
+            PipelinePhase.SCENE_SPLITTING,
+            PipelinePhase.NARRATION_FLAGGING,
+            PipelinePhase.IMAGE_PROMPTS,
+            PipelinePhase.NARRATION_PREP,
+        ]:
+            state.start_phase(phase)
+            state.complete_phase()
+
+        # Simulate tracker file left by narration_prep
+        tracker = state.project_dir / "narration_prep_done.json"
+        tracker.write_text("[1, 2]")
+        assert tracker.exists()
+
+        state.invalidate_from(PipelinePhase.IMAGE_PROMPTS)
+
+        assert not tracker.exists()
+
     def test_invalidate_from_awaiting_review_phase(self, adapt_project_with_scenes: ProjectState):
         """Can invalidate from a phase in AWAITING_REVIEW status."""
         state = adapt_project_with_scenes
