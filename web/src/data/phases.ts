@@ -73,7 +73,17 @@ export function derivePhaseStatuses(
 ): Record<string, PhaseStatus> {
   const phases = getPhaseSequence(mode);
   const statuses: Record<string, PhaseStatus> = {};
-  const currentIdx = currentPhase ? phases.indexOf(currentPhase) : -1;
+
+  if (!currentPhase) {
+    const fallback: PhaseStatus =
+      projectStatus === "completed" ? "completed" : "pending";
+    for (const phase of phases) {
+      statuses[phase] = fallback;
+    }
+    return statuses;
+  }
+
+  const currentIdx = phases.indexOf(currentPhase);
 
   for (let i = 0; i < phases.length; i++) {
     if (currentIdx < 0) {

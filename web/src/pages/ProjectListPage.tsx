@@ -93,7 +93,7 @@ export default function ProjectListPage() {
               to={`/project/${project.project_id}`}
               className="block no-underline text-foreground"
             >
-              <Card className="transition-colors hover:ring-primary/40">
+              <Card className="transition-colors hover:ring-1 hover:ring-primary/40">
                 <CardContent>
                   <div className="flex justify-between items-center mb-2">
                     <div className="flex items-center gap-3">

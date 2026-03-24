@@ -87,9 +87,10 @@ export const api = {
     }),
 
   rerunFromPhase: (projectId: string, phase: string) =>
-    request<RerunResponse>(`/projects/${projectId}/rerun-from/${phase}`, {
-      method: "POST",
-    }),
+    request<RerunResponse>(
+      `/projects/${projectId}/rerun-from/${encodeURIComponent(phase)}`,
+      { method: "POST" },
+    ),
 
   // Artifacts
   listArtifacts: (projectId: string, phase: string) =>

@@ -273,9 +273,10 @@ export function UnifiedProjectPage() {
   // Track which phase was edited earliest
   const handleArtifactEdited = useCallback(
     (phase: string) => {
+      if (!project) return;
       setStaleAfter((prev) => {
         if (!prev) return phase;
-        const phases = getPhaseSequence(project!.mode);
+        const phases = getPhaseSequence(project.mode);
         return phases.indexOf(phase) < phases.indexOf(prev) ? phase : prev;
       });
     },

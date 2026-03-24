@@ -11,21 +11,25 @@ export interface ArtifactViewerProps {
   onEdited?: (phase: string) => void;
 }
 
+/** Strip parameters from MIME type (e.g. "application/json; charset=utf-8" → "application/json"). */
+function mimeBase(contentType: string): string {
+  return contentType.split(";", 1)[0].trim().toLowerCase();
+}
+
 /** Returns true for content types that support inline editing. */
 function isEditable(contentType: string): boolean {
-  return (
-    contentType.startsWith("text/") || contentType === "application/json"
-  );
+  const mime = mimeBase(contentType);
+  return mime.startsWith("text/") || mime === "application/json";
 }
 
 /** Returns true for image content types. */
 function isImage(contentType: string): boolean {
-  return contentType.startsWith("image/");
+  return mimeBase(contentType).startsWith("image/");
 }
 
 /** Returns true for audio content types. */
 function isAudio(contentType: string): boolean {
-  return contentType.startsWith("audio/");
+  return mimeBase(contentType).startsWith("audio/");
 }
 
 /** Formats a byte count into a human-readable size string. */
@@ -42,22 +46,27 @@ export function ArtifactViewer({
 }: ArtifactViewerProps) {
   const [files, setFiles] = useState<ArtifactFile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
+    setLoadError(null);
+    setActionError(null);
     api
       .listArtifacts(projectId, phase)
       .then((result) => setFiles(result.files))
       .catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed to load artifacts"),
+        setLoadError(err instanceof Error ? err.message : "Failed to load artifacts"),
       )
       .finally(() => setLoading(false));
   }, [projectId, phase]);
 
   const handleEdit = async (filename: string) => {
+    setActionError(null);
     try {
       const url = api.getArtifactUrl(projectId, phase, filename);
       const response = await fetch(url);
@@ -68,20 +77,21 @@ export function ArtifactViewer({
       setEditContent(text);
       setEditingFile(filename);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load file content");
+      setActionError(err instanceof Error ? err.message : "Failed to load file content");
     }
   };
 
   const handleSave = async () => {
     if (!editingFile) return;
     setSaving(true);
+    setActionError(null);
     try {
       await api.updateArtifact(projectId, phase, editingFile, editContent);
       setEditingFile(null);
       setEditContent("");
       onEdited?.(phase);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
+      setActionError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSaving(false);
     }
@@ -96,8 +106,8 @@ export function ArtifactViewer({
     return <p className="text-sm text-muted-foreground">Loading artifacts...</p>;
   }
 
-  if (error) {
-    return <p className="text-sm text-destructive">{error}</p>;
+  if (loadError) {
+    return <p className="text-sm text-destructive">{loadError}</p>;
   }
 
   if (files.length === 0) {
@@ -105,7 +115,11 @@ export function ArtifactViewer({
   }
 
   return (
-    <ul className="divide-y divide-border" role="list">
+    <>
+      {actionError && (
+        <p className="mb-2 text-sm text-destructive">{actionError}</p>
+      )}
+      <ul className="divide-y divide-border" role="list">
       {files.map((file) => (
         <li key={file.name} className="py-3 first:pt-0 last:pb-0">
           {editingFile === file.name ? (
@@ -190,5 +204,6 @@ export function ArtifactViewer({
         </li>
       ))}
     </ul>
+    </>
   );
 }

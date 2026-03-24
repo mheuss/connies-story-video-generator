@@ -82,14 +82,14 @@ async def rerun_from_phase(project_id: str, phase: str) -> dict:
         raise HTTPException(
             status_code=400,
             detail=f"Unknown phase: {phase}",
-        )
+        ) from None
 
     state = _load_project(project_id)
 
     try:
         state.invalidate_from(pipeline_phase)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     pipeline_runner.run_pipeline_in_thread(state)
 

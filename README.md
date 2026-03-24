@@ -73,7 +73,7 @@ Python 3.11+, Claude API (writing), OpenAI TTS or ElevenLabs v3 (narration), GPT
 
 ## Usage
 
-```
+```bash
 pip install -e ".[dev]"
 ```
 
