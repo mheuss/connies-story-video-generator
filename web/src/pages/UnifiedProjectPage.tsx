@@ -180,15 +180,23 @@ export function UnifiedProjectPage() {
   // Fetch project status on mount
   useEffect(() => {
     if (!projectId || projectId === "new") return;
+    let stale = false;
     setLoading(true);
     api
       .getProject(projectId)
       .then((data) => {
-        setProject(data);
-        setError(null);
+        if (!stale) {
+          setProject(data);
+          setError(null);
+        }
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!stale) setError(err.message);
+      })
+      .finally(() => {
+        if (!stale) setLoading(false);
+      });
+    return () => { stale = true; };
   }, [projectId]);
 
   // Update project state from SSE events.

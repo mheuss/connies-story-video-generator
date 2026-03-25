@@ -53,16 +53,23 @@ export function ArtifactViewer({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    let stale = false;
     setLoading(true);
     setLoadError(null);
     setActionError(null);
     api
       .listArtifacts(projectId, phase)
-      .then((result) => setFiles(result.files))
-      .catch((err) =>
-        setLoadError(err instanceof Error ? err.message : "Failed to load artifacts"),
-      )
-      .finally(() => setLoading(false));
+      .then((result) => {
+        if (!stale) setFiles(result.files);
+      })
+      .catch((err) => {
+        if (!stale)
+          setLoadError(err instanceof Error ? err.message : "Failed to load artifacts");
+      })
+      .finally(() => {
+        if (!stale) setLoading(false);
+      });
+    return () => { stale = true; };
   }, [projectId, phase]);
 
   const handleEdit = async (filename: string) => {

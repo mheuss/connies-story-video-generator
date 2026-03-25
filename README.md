@@ -9,7 +9,7 @@ My wife loves to listen to stories on YouTube. I thought it might be fun for her
 some of her own. And hey, good excuse for getting more reps in with Python.
 
 I'm not really worried about this being used for evil purposes, like flooding YouTube with narrated stories. That is
-happening without me doing a damn thing. All of this is to allow the love of my life make alien big-foot mafia boss romance 
+happening without me doing a damn thing. All of this is to allow the love of my life to make alien big-foot mafia boss romance 
 stories to her heart's content. Yep. Because those are all categories of narrated stories on YouTube. 
 
 ## How It Works
