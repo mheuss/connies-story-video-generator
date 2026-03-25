@@ -58,7 +58,7 @@ Python 3.11+, Claude API (writing), OpenAI TTS or ElevenLabs v3 (narration), GPT
 - **Background music** -- `**music:key**` tags trigger audio tracks defined in the YAML header. Supports volume, looping, fade in/out. Audio is mixed with narration using FFmpeg's amix filter, timed to caption word offsets.
 - **TTS audio preview** -- listen to generated narration per scene at checkpoints. Re-record individual scenes or edit narration text before continuing.
 - **Project browser** -- home screen lists all existing projects with status. Click one to open it in the timeline view.
-- **Re-run from any phase** -- edit an artifact in a completed phase and re-run the pipeline from that point. Downstream phases are marked stale and re-executed.
+- **Re-run from a completed phase** -- edit an artifact in a completed phase and re-run the pipeline from that point. Downstream phases are marked stale and re-executed.
 - **Resume from failure** -- pipeline saves state per phase and per scene, picks up where it left off
 - **Cost estimation** -- projected costs before starting, actual costs after completion
 - **Lead-in silence** -- configurable delay before narration starts, giving the opening image time to fade in from black
