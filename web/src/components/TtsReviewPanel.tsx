@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { TtsScene } from "../api/types";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader } from "./ui/card";
+import { Textarea } from "./ui/textarea";
 
 interface TtsReviewPanelProps {
   projectId: string;
+  onNarrationEdited?: () => void;
 }
 
-export default function TtsReviewPanel({ projectId }: TtsReviewPanelProps) {
+export default function TtsReviewPanel({
+  projectId,
+  onNarrationEdited,
+}: TtsReviewPanelProps) {
   const [scenes, setScenes] = useState<TtsScene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +80,7 @@ export default function TtsReviewPanel({ projectId }: TtsReviewPanelProps) {
         prev.map((s) => (s.scene_number === sceneNumber ? updated : s)),
       );
       cancelEditing(sceneNumber);
+      onNarrationEdited?.();
     } catch (err) {
       setSceneErrors((prev) =>
         new Map(prev).set(
@@ -120,12 +128,16 @@ export default function TtsReviewPanel({ projectId }: TtsReviewPanelProps) {
     }
   };
 
-  if (loading) return <p>Loading audio scenes...</p>;
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading audio scenes...</p>;
+  }
 
-  if (error) return <p style={{ color: "red" }}>{error}</p>;
+  if (error) {
+    return <p className="text-sm text-destructive">{error}</p>;
+  }
 
   return (
-    <div>
+    <div className="space-y-3">
       {scenes.map((scene) => {
         const isExpanded = expandedScenes.has(scene.scene_number);
         const isEditing = editingScenes.has(scene.scene_number);
@@ -133,90 +145,108 @@ export default function TtsReviewPanel({ projectId }: TtsReviewPanelProps) {
         const sceneError = sceneErrors.get(scene.scene_number);
 
         return (
-          <div
-            key={scene.scene_number}
-            style={{
-              padding: "0.75rem",
-              borderBottom: "1px solid #eee",
-              marginBottom: "0.5rem",
-            }}
-          >
-            <h3>
-              Scene {scene.scene_number}: {scene.title}
-            </h3>
+          <Card key={scene.scene_number} size="sm">
+            <CardHeader>
+              <h3 className="text-sm font-medium">
+                Scene {scene.scene_number}: {scene.title}
+              </h3>
+            </CardHeader>
 
-            {scene.has_audio ? (
-              <audio
-                controls
-                src={scene.audio_url}
-                style={{ width: "100%", marginTop: "0.5rem" }}
-              />
-            ) : (
-              <p>No audio generated</p>
-            )}
-
-            {isRegenerating && <p>Regenerating...</p>}
-
-            {sceneError && (
-              <p style={{ color: "red", fontSize: "0.85rem" }}>{sceneError}</p>
-            )}
-
-            <div style={{ marginTop: "0.5rem" }}>
-              <button onClick={() => toggleExpanded(scene.scene_number)}>
-                {isExpanded ? "Hide text" : "Show text"}
-              </button>
-              <button
-                onClick={() => handleRegenerate(scene.scene_number)}
-                disabled={isRegenerating}
-                style={{ marginLeft: "0.5rem" }}
-              >
-                Regenerate
-              </button>
-            </div>
-
-            {isExpanded && (
-              <div style={{ marginTop: "0.5rem" }}>
-                <textarea
-                  value={
-                    isEditing
-                      ? (editTexts.get(scene.scene_number) ?? "")
-                      : scene.narration_text
-                  }
-                  readOnly={!isEditing}
-                  onChange={(e) => {
-                    if (isEditing) {
-                      setEditTexts((prev) =>
-                        new Map(prev).set(scene.scene_number, e.target.value),
-                      );
-                    }
-                  }}
-                  rows={8}
-                  style={{
-                    width: "100%",
-                    fontFamily: "monospace",
-                    padding: "0.5rem",
-                  }}
+            <CardContent className="space-y-3">
+              {scene.has_audio ? (
+                <audio
+                  controls
+                  src={scene.audio_url}
+                  className="w-full"
+                  aria-label={`Audio for scene ${scene.scene_number}`}
                 />
-                <div style={{ marginTop: "0.5rem" }}>
-                  {isEditing ? (
-                    <>
-                      <button
-                        onClick={() => handleSave(scene.scene_number)}
-                        style={{ marginRight: "0.5rem" }}
-                      >
-                        Save
-                      </button>
-                      <button onClick={() => cancelEditing(scene.scene_number)}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <button onClick={() => startEditing(scene)}>Edit</button>
-                  )}
-                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No audio generated</p>
+              )}
+
+              {isRegenerating && (
+                <p className="text-sm text-muted-foreground">Regenerating...</p>
+              )}
+
+              {sceneError && (
+                <p className="text-sm text-destructive">{sceneError}</p>
+              )}
+
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => toggleExpanded(scene.scene_number)}
+                >
+                  {isExpanded ? "Hide text" : "Show text"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleRegenerate(scene.scene_number)}
+                  disabled={isRegenerating}
+                >
+                  Regenerate
+                </Button>
               </div>
-            )}
-          </div>
+
+              {isExpanded && (
+                <div className="space-y-2">
+                  <label
+                    htmlFor={`narration-${scene.scene_number}`}
+                    className="sr-only"
+                  >
+                    Narration text for scene {scene.scene_number}
+                  </label>
+                  <Textarea
+                    id={`narration-${scene.scene_number}`}
+                    value={
+                      isEditing
+                        ? (editTexts.get(scene.scene_number) ?? "")
+                        : scene.narration_text
+                    }
+                    readOnly={!isEditing}
+                    onChange={(e) => {
+                      if (isEditing) {
+                        setEditTexts((prev) =>
+                          new Map(prev).set(scene.scene_number, e.target.value),
+                        );
+                      }
+                    }}
+                    rows={8}
+                    className="font-mono text-sm"
+                  />
+                  <div className="flex gap-2">
+                    {isEditing ? (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => handleSave(scene.scene_number)}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => cancelEditing(scene.scene_number)}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startEditing(scene)}
+                      >
+                        Edit
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         );
       })}
     </div>

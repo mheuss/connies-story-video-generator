@@ -77,6 +77,14 @@ def project_with_scenes(project_state: ProjectState) -> ProjectState:
     return project_state
 
 
+@pytest.fixture()
+def adapt_project_with_scenes(adapt_project_state: ProjectState) -> ProjectState:
+    """An adapt-mode project with two scenes added."""
+    adapt_project_state.add_scene(1, "The Beginning", "Once upon a time...")
+    adapt_project_state.add_scene(2, "The Middle", "And then things happened...")
+    return adapt_project_state
+
+
 # ---------------------------------------------------------------------------
 # Mapping constant tests
 # ---------------------------------------------------------------------------
@@ -865,3 +873,145 @@ class TestScanProjectDirs:
         results = list(scan_project_dirs(tmp_path))
 
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# invalidate_from — phase invalidation for re-run support
+# ---------------------------------------------------------------------------
+
+
+class TestInvalidateFrom:
+    """Tests for invalidate_from() phase invalidation."""
+
+    def test_invalidate_resets_downstream_phases_to_pending(
+        self, adapt_project_with_scenes: ProjectState
+    ):
+        """After invalidating from scene_splitting, all downstream phases'
+        scene assets should be reset to PENDING."""
+        state = adapt_project_with_scenes
+        # Complete several phases to set up state
+        for phase in [
+            PipelinePhase.ANALYSIS,
+            PipelinePhase.SCENE_SPLITTING,
+            PipelinePhase.NARRATION_FLAGGING,
+            PipelinePhase.IMAGE_PROMPTS,
+        ]:
+            state.start_phase(phase)
+            asset_type = PHASE_ASSET_MAP.get(phase)
+            if asset_type is not None:
+                for scene in state.metadata.scenes:
+                    setattr(scene.asset_status, asset_type.value, SceneStatus.COMPLETED)
+            state.complete_phase()
+
+        state.invalidate_from(PipelinePhase.SCENE_SPLITTING)
+
+        # scene_splitting assets should still be COMPLETED (user edited these)
+        for scene in state.metadata.scenes:
+            assert scene.asset_status.text == SceneStatus.COMPLETED
+
+        # Downstream assets should be reset to PENDING
+        for scene in state.metadata.scenes:
+            assert scene.asset_status.narration_text == SceneStatus.PENDING
+            assert scene.asset_status.image_prompt == SceneStatus.PENDING
+
+    def test_invalidate_sets_current_phase_and_status(
+        self, adapt_project_with_scenes: ProjectState
+    ):
+        """After invalidation, current_phase should be the invalidated phase
+        and status should be COMPLETED so orchestrator advances to next."""
+        state = adapt_project_with_scenes
+        for phase in [
+            PipelinePhase.ANALYSIS,
+            PipelinePhase.SCENE_SPLITTING,
+            PipelinePhase.NARRATION_FLAGGING,
+        ]:
+            state.start_phase(phase)
+            state.complete_phase()
+
+        state.invalidate_from(PipelinePhase.SCENE_SPLITTING)
+
+        assert state.metadata.current_phase == PipelinePhase.SCENE_SPLITTING
+        assert state.metadata.status == PhaseStatus.COMPLETED
+
+    def test_invalidate_from_last_phase_is_noop(self, adapt_project_with_scenes: ProjectState):
+        """Invalidating from the last phase has no downstream to reset."""
+        state = adapt_project_with_scenes
+        # Complete all phases
+        for phase in state.get_phase_sequence():
+            state.start_phase(phase)
+            state.complete_phase()
+
+        state.invalidate_from(PipelinePhase.VIDEO_ASSEMBLY)
+
+        assert state.metadata.current_phase == PipelinePhase.VIDEO_ASSEMBLY
+        assert state.metadata.status == PhaseStatus.COMPLETED
+
+    def test_invalidate_rejects_uncompleted_phase(self, adapt_project_with_scenes: ProjectState):
+        """Cannot invalidate from a phase that hasn't been completed."""
+        state = adapt_project_with_scenes
+        state.start_phase(PipelinePhase.ANALYSIS)
+
+        with pytest.raises(ValueError, match="not completed"):
+            state.invalidate_from(PipelinePhase.ANALYSIS)
+
+    def test_invalidate_rejects_phase_not_in_sequence(
+        self, adapt_project_with_scenes: ProjectState
+    ):
+        """Cannot invalidate from a phase not in this mode's sequence."""
+        state = adapt_project_with_scenes  # adapt mode
+
+        with pytest.raises(ValueError, match="not in .* phase sequence"):
+            state.invalidate_from(PipelinePhase.STORY_BIBLE)
+
+    def test_invalidate_saves_state_to_disk(self, adapt_project_with_scenes: ProjectState):
+        """invalidate_from() should persist changes to disk."""
+        state = adapt_project_with_scenes
+        state.start_phase(PipelinePhase.ANALYSIS)
+        state.complete_phase()
+        state.start_phase(PipelinePhase.SCENE_SPLITTING)
+        state.complete_phase()
+
+        state.invalidate_from(PipelinePhase.ANALYSIS)
+
+        reloaded = ProjectState.load(state._project_dir)
+        assert reloaded.metadata.current_phase == PipelinePhase.ANALYSIS
+        assert reloaded.metadata.status == PhaseStatus.COMPLETED
+        # Verify downstream asset reset survived serialization
+        for scene in reloaded.metadata.scenes:
+            assert scene.asset_status.text == SceneStatus.PENDING
+
+    def test_invalidate_removes_tracker_files(self, adapt_project_with_scenes: ProjectState):
+        """invalidate_from() should remove tracker files for invalidated phases
+        so they re-run fully instead of skipping already-processed scenes."""
+        state = adapt_project_with_scenes
+        for phase in [
+            PipelinePhase.ANALYSIS,
+            PipelinePhase.SCENE_SPLITTING,
+            PipelinePhase.NARRATION_FLAGGING,
+            PipelinePhase.IMAGE_PROMPTS,
+            PipelinePhase.NARRATION_PREP,
+        ]:
+            state.start_phase(phase)
+            state.complete_phase()
+
+        # Simulate tracker file left by narration_prep
+        tracker = state.project_dir / "narration_prep_done.json"
+        tracker.write_text("[1, 2]")
+        assert tracker.exists()
+
+        state.invalidate_from(PipelinePhase.IMAGE_PROMPTS)
+
+        assert not tracker.exists()
+
+    def test_invalidate_from_awaiting_review_phase(self, adapt_project_with_scenes: ProjectState):
+        """Can invalidate from a phase in AWAITING_REVIEW status."""
+        state = adapt_project_with_scenes
+        state.start_phase(PipelinePhase.ANALYSIS)
+        state.complete_phase()
+        state.start_phase(PipelinePhase.SCENE_SPLITTING)
+        state.await_review()
+
+        state.invalidate_from(PipelinePhase.SCENE_SPLITTING)
+
+        assert state.metadata.current_phase == PipelinePhase.SCENE_SPLITTING
+        assert state.metadata.status == PhaseStatus.COMPLETED

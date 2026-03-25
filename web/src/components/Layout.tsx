@@ -2,25 +2,14 @@ import { Outlet, Link } from "react-router-dom";
 
 export default function Layout() {
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: "1rem" }}>
-      <header
-        style={{
-          borderBottom: "1px solid #eee",
-          marginBottom: "1rem",
-          paddingBottom: "0.5rem",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Link to="/" style={{ textDecoration: "none", color: "inherit" }}>
-          <h1 style={{ margin: 0 }}>Story Video</h1>
+    <div className="max-w-4xl mx-auto px-4">
+      <header className="flex items-center justify-between py-4 border-b border-border mb-8">
+        <Link to="/" className="text-xl font-bold text-foreground hover:text-foreground/80">
+          Story Video
         </Link>
-        <nav>
-          <Link to="/settings" style={{ fontSize: "0.9rem" }}>
-            Settings
-          </Link>
-        </nav>
+        <Link to="/settings" className="text-sm text-muted-foreground hover:text-foreground">
+          Settings
+        </Link>
       </header>
       <main>
         <Outlet />

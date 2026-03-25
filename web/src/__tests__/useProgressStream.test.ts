@@ -145,6 +145,29 @@ describe("useProgressStream", () => {
     expect(es.readyState).toBe(2); // CLOSED
   });
 
+  describe("conditional connection", () => {
+    it("does not connect SSE when enabled is false", () => {
+      renderHook(() => useProgressStream("test-project", { enabled: false }));
+      expect(MockEventSource.instances).toHaveLength(0);
+    });
+
+    it("connects SSE when enabled is true", () => {
+      renderHook(() => useProgressStream("test-project", { enabled: true }));
+      expect(MockEventSource.instances).toHaveLength(1);
+    });
+
+    it("connects when enabled transitions from false to true", () => {
+      const { rerender } = renderHook(
+        ({ enabled }) => useProgressStream("test-project", { enabled }),
+        { initialProps: { enabled: false } }
+      );
+      expect(MockEventSource.instances).toHaveLength(0);
+
+      rerender({ enabled: true });
+      expect(MockEventSource.instances).toHaveLength(1);
+    });
+  });
+
   describe("reconnection", () => {
     it("detects completed state via REST on reconnect", async () => {
       vi.mocked(api.getProject).mockResolvedValue({

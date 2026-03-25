@@ -447,6 +447,16 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
                 "Scene %d already prepped — skipping",
                 scene.scene_number,
             )
+            # Ensure status is COMPLETED even when skipping — invalidate_from()
+            # may have reset it to PENDING while the tracker file still lists
+            # the scene as done.
+            if scene.asset_status.narration_text != SceneStatus.COMPLETED:
+                state.update_scene_asset(
+                    scene.scene_number, AssetType.NARRATION_TEXT, SceneStatus.IN_PROGRESS
+                )
+                state.update_scene_asset(
+                    scene.scene_number, AssetType.NARRATION_TEXT, SceneStatus.COMPLETED
+                )
             continue
 
         text = scene.narration_text if scene.narration_text is not None else scene.prose

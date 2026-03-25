@@ -29,13 +29,21 @@ const INITIAL_STATE: ProgressState = {
   scenesTotal: 0,
 };
 
-export function useProgressStream(projectId: string | null): UseProgressStreamResult {
+interface UseProgressStreamOptions {
+  enabled?: boolean; // defaults to true for backward compatibility
+}
+
+export function useProgressStream(
+  projectId: string | null,
+  options: UseProgressStreamOptions = {}
+): UseProgressStreamResult {
+  const { enabled = true } = options;
   const [state, setState] = useState<ProgressState>(INITIAL_STATE);
   const esRef = useRef<EventSource | null>(null);
   const [resetCount, setResetCount] = useState(0);
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!enabled || !projectId) return;
 
     let retryCount = 0;
 
@@ -120,7 +128,7 @@ export function useProgressStream(projectId: string | null): UseProgressStreamRe
     return () => {
       esRef.current?.close();
     };
-  }, [projectId, resetCount]);
+  }, [projectId, enabled, resetCount]);
 
   const reset = useCallback(() => {
     esRef.current?.close();

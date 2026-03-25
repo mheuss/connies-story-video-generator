@@ -1,11 +1,16 @@
 # Story Video Generator
 
-Turn a story into a narrated video for YouTube. Give it text, get back a video with AI narration, timed captions, and illustrated scenes. Use the CLI for scripted workflows or the web UI for a guided experience.
+Turn a story into a narrated video. Give it text, get back a video with AI narration, timed captions, and 
+illustrated scenes. Use the CLI for scripted workflows or the web UI for a guided experience.
 
-## Why On Earth?
+## Why On Earth would I do such a thing?
 
 My wife loves to listen to stories on YouTube. I thought it might be fun for her to have a tool that'd help her create
 some of her own. And hey, good excuse for getting more reps in with Python.
+
+I'm not really worried about this being used for evil purposes, like flooding YouTube with narrated stories. That is
+happening without me doing a damn thing. All of this is to allow the love of my life to make alien big-foot mafia boss romance 
+stories to her heart's content. Yep. Because those are all categories of narrated stories on YouTube. 
 
 ## How It Works
 
@@ -40,7 +45,7 @@ Python 3.11+, Claude API (writing), OpenAI TTS or ElevenLabs v3 (narration), GPT
 - **Full adapt pipeline** -- 9 phases run sequentially: analysis, scene splitting, narration flagging, image prompts, narration prep, TTS, image generation, caption generation, video assembly
 - **Original creative flow** -- Provide a topic, premise, or detailed brief. The AI interprets your creative direction, builds characters and setting, outlines the story, writes prose, and revises it before handing off to the media pipeline.
 - **Inspired_by creative flow** -- 5 authoring phases: source analysis, story bible, outline, scene prose, critique/revision. Then into the shared media pipeline.
-- **Web UI** -- Browser-based interface for creating projects, monitoring progress with live updates, reviewing and editing artifacts at checkpoints, and downloading the finished video. Run `story-video serve` to start it.
+- **Web UI** -- Browser-based project manager with a vertical timeline showing every pipeline phase at a glance. Create projects, browse existing ones, watch progress in real time, expand completed phases to review artifacts, edit text in place, and re-run from any earlier phase. Run `story-video serve` to start it.
 - **CLI** -- Six commands: `create`, `resume`, `estimate`, `status`, `list`, `serve`
 - **Checkpoint review** -- Pipeline pauses at editorial phases so you can review and edit artifacts before continuing. Available in both CLI (semi-auto mode) and web UI. Or run in autonomous mode to skip checkpoints entirely.
 - **LLM-based narration prep** -- Claude API handles abbreviations, numbers, and punctuation contextually instead of brittle regex transforms. Produces a changelog of all modifications.
@@ -51,27 +56,27 @@ Python 3.11+, Claude API (writing), OpenAI TTS or ElevenLabs v3 (narration), GPT
 - **Two TTS providers** -- OpenAI (`gpt-4o-mini-tts`) and ElevenLabs (v3). Switch via config file.
 - **Inline image tags** -- `**image:key**` tags in your story text reference image prompts defined in the YAML header. Control exactly when images change within a scene, independent of scene boundaries.
 - **Background music** -- `**music:key**` tags trigger audio tracks defined in the YAML header. Supports volume, looping, fade in/out. Audio is mixed with narration using FFmpeg's amix filter, timed to caption word offsets.
+- **TTS audio preview** -- listen to generated narration per scene at checkpoints. Re-record individual scenes or edit narration text before continuing.
+- **Project browser** -- home screen lists all existing projects with status. Click one to open it in the timeline view.
+- **Re-run from a completed phase** -- edit an artifact in a completed phase and re-run the pipeline from that point. Downstream phases are marked stale and re-executed.
 - **Resume from failure** -- pipeline saves state per phase and per scene, picks up where it left off
 - **Cost estimation** -- projected costs before starting, actual costs after completion
 - **Lead-in silence** -- configurable delay before narration starts, giving the opening image time to fade in from black
-- **935+ tests** covering all modules (backend and frontend)
+- **1,150+ tests** covering all modules (backend and frontend)
 
 ### Pie in the Sky
 
 - Iterative critique/revision -- critic and author personas with multi-pass refinement
-- User-configurable story length -- `--target-words`, `--target-scenes` flags
+- User-configurable target duration -- control how long the resulting video will be
 - Story translation
-- TTS audio preview -- listen to narration per scene at checkpoints before committing to video assembly
-- Project browser -- list existing projects on the home screen, select one, and resume from any completed phase
-- Phase navigation -- go back to an earlier pipeline phase and re-run from there, enabling iterative refinement
 - File upload -- upload a story file instead of pasting text
 
 ## Usage
 
-```
+```bash
 pip install -e ".[dev]"
 ```
-+
+
 You'll need FFmpeg installed on your system and API keys in a `.env` file:
 
 ```
@@ -92,9 +97,11 @@ story-video serve
 Open `http://localhost:8033` in your browser. The web UI lets you:
 
 - Enter API keys on first run (saved to `.env`)
-- Create a new project by choosing a mode and pasting your story text
-- Watch progress in real time with animated progress bars
-- Review and edit artifacts at each checkpoint
+- Browse existing projects or create a new one
+- Watch pipeline progress in real time via a vertical timeline
+- Expand completed phases to inspect and edit artifacts in place
+- Listen to generated audio and re-record individual scenes
+- Re-run the pipeline from any earlier phase after making edits
 - Auto-approve remaining checkpoints with one click
 - Watch and download the finished video
 

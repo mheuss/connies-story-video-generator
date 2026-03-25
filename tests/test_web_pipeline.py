@@ -1,4 +1,4 @@
-"""Tests for story_video.web.routes_pipeline -- pipeline start/approve endpoints."""
+"""Tests for story_video.web.routes_pipeline -- pipeline start/approve/rerun-from endpoints."""
 
 from unittest.mock import patch
 
@@ -121,3 +121,52 @@ class TestApproveAutoFlag:
         assert response.status_code == 202
         state = ProjectState.load(output_dir / pid)
         assert state.metadata.config.pipeline.autonomous is False
+
+
+def _make_completed_project(client, output_dir):
+    """Helper: create an adapt project with analysis completed."""
+    resp = client.post(
+        "/api/v1/projects",
+        json={"mode": "adapt", "source_text": "A story about a lighthouse."},
+    )
+    pid = resp.json()["project_id"]
+    state = ProjectState.load(output_dir / pid)
+    state.start_phase(PipelinePhase.ANALYSIS)
+    state.complete_phase()
+    state.save()
+    return pid, state
+
+
+class TestRerunFromPhase:
+    """POST /api/v1/projects/{id}/rerun-from/{phase} invalidates and restarts."""
+
+    @patch("story_video.web.pipeline_runner.run_pipeline_in_thread")
+    def test_rerun_returns_202(self, mock_run, client, output_dir):
+        mock_run.return_value = None
+        pid, _ = _make_completed_project(client, output_dir)
+        response = client.post(f"/api/v1/projects/{pid}/rerun-from/analysis")
+        assert response.status_code == 202
+        body = response.json()
+        assert body["status"] == "rerunning"
+        assert body["from_phase"] == "analysis"
+        mock_run.assert_called_once()
+
+    def test_rerun_404_for_missing_project(self, client):
+        response = client.post("/api/v1/projects/nonexistent/rerun-from/analysis")
+        assert response.status_code == 404
+
+    @patch("story_video.web.pipeline_runner.run_pipeline_in_thread")
+    def test_rerun_400_for_invalid_phase(self, mock_run, client, output_dir):
+        mock_run.return_value = None
+        pid, _ = _make_completed_project(client, output_dir)
+        response = client.post(f"/api/v1/projects/{pid}/rerun-from/story_bible")
+        assert response.status_code == 400
+        mock_run.assert_not_called()
+
+    @patch("story_video.web.pipeline_runner.run_pipeline_in_thread")
+    @patch("story_video.web.pipeline_runner.is_running", return_value=True)
+    def test_rerun_409_if_pipeline_running(self, _mock_is_running, mock_run, client, output_dir):
+        pid, _ = _make_completed_project(client, output_dir)
+        response = client.post(f"/api/v1/projects/{pid}/rerun-from/analysis")
+        assert response.status_code == 409
+        mock_run.assert_not_called()

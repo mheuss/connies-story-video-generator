@@ -2,17 +2,19 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { ProjectSummary } from "../api/types";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
-/**
- * Status colors chosen to meet WCAG AA contrast ratio (4.5:1)
- * against a white (#fff) background.
- */
-const STATUS_COLORS: Record<string, string> = {
-  completed: "#15803d",
-  in_progress: "#a16207",
-  awaiting_review: "#a16207",
-  failed: "#dc2626",
-  pending: "#6b7280",
+/** Maps project status to a shadcn Badge variant for consistent styling. */
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  completed: "default",
+  in_progress: "secondary",
+  awaiting_review: "secondary",
+  failed: "destructive",
+  pending: "outline",
 };
 
 function formatDate(iso: string): string {
@@ -58,20 +60,12 @@ export default function ProjectListPage() {
 
   if (projects.length === 0) {
     return (
-      <div style={{ textAlign: "center", padding: "3rem 1rem" }}>
-        <h2>No projects yet</h2>
-        <p>Create your first project to get started.</p>
+      <div className="text-center py-12 px-4">
+        <h2 className="text-lg font-semibold mb-2">No projects yet</h2>
+        <p className="text-muted-foreground mb-6">Create your first project to get started.</p>
         <Link
           to="/create"
-          style={{
-            display: "inline-block",
-            padding: "0.75rem 1.5rem",
-            background: "#2563eb",
-            color: "#fff",
-            borderRadius: "6px",
-            textDecoration: "none",
-            fontWeight: 600,
-          }}
+          className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold no-underline hover:bg-primary/80"
         >
           Create Project
         </Link>
@@ -81,107 +75,55 @@ export default function ProjectListPage() {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Projects</h2>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-lg font-semibold">Projects</h2>
         <Link
           to="/create"
-          style={{
-            padding: "0.5rem 1rem",
-            background: "#2563eb",
-            color: "#fff",
-            borderRadius: "6px",
-            textDecoration: "none",
-            fontWeight: 600,
-            fontSize: "0.9rem",
-          }}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-semibold text-sm no-underline hover:bg-primary/80"
         >
           Create New
         </Link>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        {projects.map((project) => (
-          <Link
-            key={project.project_id}
-            to={`/project/${project.project_id}`}
-            style={{
-              display: "block",
-              padding: "1rem",
-              border: "1px solid #e5e7eb",
-              borderRadius: "8px",
-              textDecoration: "none",
-              color: "inherit",
-              transition: "border-color 0.15s",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.borderColor = "#2563eb")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.borderColor = "#e5e7eb")
-            }
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "0.5rem",
-              }}
+      <div className="flex flex-col gap-3">
+        {projects.map((project) => {
+          const badgeVariant = STATUS_VARIANT[project.status] || STATUS_VARIANT.pending;
+          return (
+            <Link
+              key={project.project_id}
+              to={`/project/${project.project_id}`}
+              className="block no-underline text-foreground"
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <span
-                  style={{
-                    padding: "0.2rem 0.5rem",
-                    background: "#f3f4f6",
-                    borderRadius: "4px",
-                    fontSize: "0.8rem",
-                    fontWeight: 600,
-                  }}
-                >
-                  {project.mode}
-                </span>
-                <span
-                  style={{
-                    color: STATUS_COLORS[project.status] || "#6b7280",
-                    fontSize: "0.85rem",
-                    fontWeight: 500,
-                  }}
-                >
-                  {project.status.replace(/_/g, " ")}
-                </span>
-              </div>
-              <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
-                {formatDate(project.created_at)}
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: "1rem", fontSize: "0.85rem", color: "#6b7280" }}>
-              {project.current_phase && (
-                <span>{formatPhase(project.current_phase)}</span>
-              )}
-              {project.scene_count > 0 && (
-                <span>{project.scene_count} scenes</span>
-              )}
-            </div>
-            {project.source_text_preview && (
-              <p
-                style={{
-                  margin: "0.5rem 0 0",
-                  fontSize: "0.85rem",
-                  color: "#6b7280",
-                  lineHeight: 1.4,
-                }}
-              >
-                {project.source_text_preview}
-              </p>
-            )}
-          </Link>
-        ))}
+              <Card className="transition-colors hover:ring-1 hover:ring-primary/40">
+                <CardContent>
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary">{project.mode}</Badge>
+                      <Badge variant={badgeVariant}>
+                        {project.status.replace(/_/g, " ")}
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDate(project.created_at)}
+                    </span>
+                  </div>
+                  <div className="flex gap-4 text-sm text-muted-foreground">
+                    {project.current_phase && (
+                      <span>{formatPhase(project.current_phase)}</span>
+                    )}
+                    {project.scene_count > 0 && (
+                      <span>{project.scene_count} scenes</span>
+                    )}
+                  </div>
+                  {project.source_text_preview && (
+                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                      {project.source_text_preview}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
