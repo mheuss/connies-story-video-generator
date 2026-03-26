@@ -33,7 +33,7 @@ function FileDropZone({
 
       const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
       if (!accept.includes(ext)) {
-        setError("Only .txt and .md files are supported");
+        setError(`Only ${accept.join(" and ")} files are supported`);
         return;
       }
 
@@ -69,13 +69,13 @@ function FileDropZone({
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setDragOver(true);
-  }, []);
+    if (!disabled) setDragOver(true);
+  }, [disabled]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setDragOver(true);
-  }, []);
+    if (!disabled) setDragOver(true);
+  }, [disabled]);
 
   const handleDragLeave = useCallback(() => {
     setDragOver(false);

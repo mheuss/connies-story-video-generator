@@ -150,6 +150,21 @@ describe("FileDropZone", () => {
     ).toBeDisabled();
   });
 
+  it("does not call onFileRead when file is dropped while disabled", () => {
+    render(<FileDropZone {...defaultProps} disabled />);
+    const dropZone = screen.getByText(/drop a text file here/i).closest("div")!;
+    const file = createFile("story.txt", "Content");
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file], types: ["Files"] } });
+    expect(defaultProps.onFileRead).not.toHaveBeenCalled();
+  });
+
+  it("does not show drag-over feedback when disabled", () => {
+    render(<FileDropZone {...defaultProps} disabled />);
+    const dropZone = screen.getByText(/drop a text file here/i).closest("div")!;
+    fireEvent.dragEnter(dropZone, { dataTransfer: { types: ["Files"] } });
+    expect(dropZone).not.toHaveClass("border-blue-500");
+  });
+
   it("marks error messages with role alert in drop zone state", () => {
     render(<FileDropZone {...defaultProps} error="Something went wrong" />);
     expect(screen.getByRole("alert")).toHaveTextContent("Something went wrong");
