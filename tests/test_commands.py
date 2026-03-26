@@ -350,19 +350,19 @@ class TestBuildConcatCommandFadeOut:
 
     def test_single_segment_fade_out_start(self):
         """Single segment: fade starts no earlier than when narration ends."""
-        config = VideoConfig()  # lead_in=2.0, fade_out=3.0, end_hold=2.0
+        config = VideoConfig()  # lead_in=3.0, fade_out=3.0, end_hold=2.0
         cmd = build_concat_command([Path("/a.mp4")], [10.0], Path("/out.mp4"), config)
         filter_str = cmd[cmd.index("-filter_complex") + 1]
         # effective_hold = max(2.0, 3.0) = 3.0
-        # total = 2.0 + 10.0 + 3.0 = 15.0; fade_out_start = 15.0 - 3.0 = 12.0
-        # 12.0 = lead_in(2) + duration(10) — fade starts exactly when narration ends
-        assert "fade=t=out:st=12.0:d=3.0" in filter_str
+        # total = 3.0 + 10.0 + 3.0 = 16.0; fade_out_start = 16.0 - 3.0 = 13.0
+        # 13.0 = lead_in(3) + duration(10) — fade starts exactly when narration ends
+        assert "fade=t=out:st=13.0:d=3.0" in filter_str
         assert "tpad=stop_mode=clone:stop_duration=3.0" in filter_str
         assert "apad=pad_dur=3.0" in filter_str
 
     def test_multi_segment_fade_out_accounts_for_transitions(self):
         """Multi-segment: fade uses lead_in + audio timeline + effective hold."""
-        # Defaults: lead_in=2.0, transition=1.5, audio_transition=0.05,
+        # Defaults: lead_in=3.0, transition=1.5, audio_transition=0.05,
         # fade_out=3.0, end_hold=2.0
         config = VideoConfig()
         cmd = build_concat_command(
@@ -373,9 +373,9 @@ class TestBuildConcatCommandFadeOut:
         )
         filter_str = cmd[cmd.index("-filter_complex") + 1]
         # effective_hold = max(2.0, 3.0) = 3.0
-        # audio_total = 10 + 10 - 0.05 = 19.95; total = 2.0 + 19.95 + 3.0 = 24.95
-        # fade_out_start = 24.95 - 3.0 = 21.95
-        assert "fade=t=out:st=21.95:d=3.0" in filter_str
+        # audio_total = 10 + 10 - 0.05 = 19.95; total = 3.0 + 19.95 + 3.0 = 25.95
+        # fade_out_start = 25.95 - 3.0 = 22.95
+        assert "fade=t=out:st=22.95:d=3.0" in filter_str
         # Video padded: audio_total - video_total + effective_hold
         #             = 19.95 - 18.5 + 3.0 = 4.45
         assert "tpad=stop_mode=clone:stop_duration=" in filter_str

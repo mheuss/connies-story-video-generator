@@ -201,6 +201,11 @@ class TestVideoConfig:
         with pytest.raises(ValidationError):
             VideoConfig(crf=-1)
 
+    def test_lead_in_exceeds_fade_in_by_default(self):
+        """Lead-in must exceed fade-in so viewers orient before narration starts."""
+        config = VideoConfig()
+        assert config.lead_in_duration > config.fade_in_duration
+
 
 class TestSubtitleConfig:
     """SubtitleConfig — subtitle rendering parameters."""
