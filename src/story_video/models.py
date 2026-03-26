@@ -486,7 +486,7 @@ class VideoConfig(BaseModel):
     fade_in_duration: float = Field(default=2.0, ge=0)
     fade_out_duration: float = Field(default=3.0, ge=0)
     end_hold_duration: float = Field(default=2.0, ge=0)
-    lead_in_duration: float = Field(default=2.0, ge=0)
+    lead_in_duration: float = Field(default=3.0, ge=0)
 
     @field_validator("resolution")
     @classmethod
