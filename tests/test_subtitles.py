@@ -393,6 +393,46 @@ class TestHexToAssColorValidation:
 
 
 # ---------------------------------------------------------------------------
+# Last event end time — extends to audio duration
+# ---------------------------------------------------------------------------
+
+
+class TestLastEventExtendsToAudioDuration:
+    """Last subtitle event stays visible until audio finishes."""
+
+    def test_last_event_end_time_uses_audio_duration(self):
+        """When audio duration exceeds last word end, last subtitle extends to audio duration."""
+        # Last word ends at 4.5s but audio continues to 5.2s
+        caption = CaptionResult(
+            segments=[CaptionSegment(text="The storm raged on.", start=0.0, end=4.5)],
+            words=[
+                CaptionWord(word="The", start=0.0, end=0.3),
+                CaptionWord(word="storm", start=0.4, end=0.8),
+                CaptionWord(word="raged", start=0.9, end=1.4),
+                CaptionWord(word="on.", start=1.5, end=4.5),
+            ],
+            language="en",
+            duration=5.2,
+        )
+        result = generate_ass_content(caption, _default_subtitle_config(), _default_video_config())
+        dialogue_lines = [ln for ln in result.split("\n") if ln.startswith("Dialogue:")]
+        last_line = dialogue_lines[-1]
+        # Last event's end time should be 5.2s (0:00:05.20), not 4.5s (0:00:04.50)
+        assert _format_ass_time(5.2) in last_line
+        assert _format_ass_time(4.5) not in last_line
+
+    def test_last_event_end_time_when_duration_equals_last_word(self):
+        """When audio duration equals last word end, no change in behavior."""
+        result = generate_ass_content(
+            _make_caption_result(), _default_subtitle_config(), _default_video_config()
+        )
+        dialogue_lines = [ln for ln in result.split("\n") if ln.startswith("Dialogue:")]
+        last_line = dialogue_lines[-1]
+        # duration=5.0 and last word end=5.0 — should still show 5.0
+        assert _format_ass_time(5.0) in last_line
+
+
+# ---------------------------------------------------------------------------
 # _group_words_into_events — direct unit tests for boundary cases
 # ---------------------------------------------------------------------------
 

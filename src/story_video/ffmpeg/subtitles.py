@@ -238,7 +238,7 @@ def generate_ass_content(
         subtitle_config.max_lines,
     )
 
-    for event_lines in events:
+    for idx, event_lines in enumerate(events):
         # Flatten to get first and last word for timing
         all_words_in_event = [w for line in event_lines for w in line]
         # Defensive: events should never be empty because generate_ass_content
@@ -249,7 +249,14 @@ def generate_ass_content(
             logger.warning("Skipping empty subtitle event")
             continue
         start_time = _format_ass_time(all_words_in_event[0].start)
-        end_time = _format_ass_time(all_words_in_event[-1].end)
+        # Extend the last event to the full audio duration so the final caption
+        # stays visible until narration finishes (Whisper word-level timestamps
+        # can end before the audio stream does).
+        if idx == len(events) - 1:
+            end_seconds = max(all_words_in_event[-1].end, caption_result.duration)
+        else:
+            end_seconds = all_words_in_event[-1].end
+        end_time = _format_ass_time(end_seconds)
 
         # Build text with \N line breaks
         text_lines = [" ".join(w.word for w in line) for line in event_lines]
