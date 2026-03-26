@@ -353,6 +353,172 @@ describe("UnifiedProjectPage - Creation mode", () => {
       expect(sourceLabel.closest("label")).toHaveTextContent(/\*/);
     });
   });
+
+  it("shows file drop zone in adapt mode", async () => {
+    await setupApiKeysMock();
+    renderPage("new");
+    await waitFor(() => {
+      expect(screen.getByText(/drop a text file here/i)).toBeInTheDocument();
+    });
+  });
+
+  it("does not show file drop zone in original mode", async () => {
+    await setupApiKeysMock();
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/adapt.*narrate/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText(/original/i));
+    expect(
+      screen.queryByText(/drop a text file here/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show file drop zone in inspired_by mode", async () => {
+    await setupApiKeysMock();
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/adapt.*narrate/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText(/inspired by/i));
+    expect(
+      screen.queryByText(/drop a text file here/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("populates textarea when file is loaded via drop zone", async () => {
+    await setupApiKeysMock();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/story to adapt/i)).toBeInTheDocument();
+    });
+
+    // Simulate file selection via the hidden input
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    const file = new File(["A tale of two cities"], "tale.txt", {
+      type: "text/plain",
+    });
+    await userEvent.upload(input, file);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/story to adapt/i)).toHaveValue(
+        "A tale of two cities"
+      );
+    });
+    // Filename should be shown
+    expect(screen.getByText("tale.txt")).toBeInTheDocument();
+  });
+
+  it("clears textarea and filename when remove is clicked", async () => {
+    await setupApiKeysMock();
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/story to adapt/i)).toBeInTheDocument();
+    });
+
+    // Load a file
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    const file = new File(["Story content"], "story.txt", {
+      type: "text/plain",
+    });
+    await userEvent.upload(input, file);
+
+    await waitFor(() => {
+      expect(screen.getByText("story.txt")).toBeInTheDocument();
+    });
+
+    // Click remove
+    await user.click(screen.getByRole("button", { name: /remove/i }));
+
+    // Textarea should be empty and drop zone should reappear
+    expect(screen.getByLabelText(/story to adapt/i)).toHaveValue("");
+    expect(screen.getByText(/drop a text file here/i)).toBeInTheDocument();
+  });
+
+  it("clears filename when switching away from adapt mode", async () => {
+    await setupApiKeysMock();
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/story to adapt/i)).toBeInTheDocument();
+    });
+
+    // Load a file in adapt mode
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    const file = new File(["Story content"], "story.txt", {
+      type: "text/plain",
+    });
+    await userEvent.upload(input, file);
+
+    await waitFor(() => {
+      expect(screen.getByText("story.txt")).toBeInTheDocument();
+    });
+
+    // Switch to original mode
+    await user.click(screen.getByLabelText(/original.*write/i));
+
+    // Switch back to adapt mode
+    await user.click(screen.getByLabelText(/adapt.*narrate/i));
+
+    // Drop zone should appear (not the filename badge)
+    expect(screen.getByText(/drop a text file here/i)).toBeInTheDocument();
+    expect(screen.queryByText("story.txt")).not.toBeInTheDocument();
+  });
+
+  it("submits file content via existing API call", async () => {
+    const api = await setupApiKeysMock();
+    vi.mocked(api.createProject).mockResolvedValue({
+      project_id: "adapt-2026-03-25",
+      mode: "adapt",
+      project_dir: "/tmp/adapt-2026-03-25",
+    });
+
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/story to adapt/i)).toBeInTheDocument();
+    });
+
+    // Load a file
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    const file = new File(["File story content"], "story.txt", {
+      type: "text/plain",
+    });
+    await userEvent.upload(input, file);
+
+    await waitFor(() => {
+      expect(screen.getByText("story.txt")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /create project/i }));
+
+    await waitFor(() => {
+      expect(api.createProject).toHaveBeenCalledWith({
+        mode: "adapt",
+        source_text: "File story content",
+        autonomous: false,
+      });
+    });
+  });
 });
 
 describe("UnifiedProjectPage - Edit and re-run", () => {

@@ -10,6 +10,7 @@ import { PhaseTimeline } from "@/components/PhaseTimeline";
 import { ProcessingModal } from "@/components/ProcessingModal";
 import TtsReviewPanel from "@/components/TtsReviewPanel";
 import { Button } from "@/components/ui/button";
+import { FileDropZone } from "@/components/ui/FileDropZone";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
@@ -30,11 +31,22 @@ function CreationForm() {
   const [keysReady, setKeysReady] = useState(false);
   const [mode, setMode] = useState<Mode>("adapt");
   const [sourceText, setSourceText] = useState("");
+  const [filename, setFilename] = useState<string | undefined>();
   const [autonomous, setAutonomous] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const handleKeysComplete = useCallback(() => setKeysReady(true), []);
+
+  const handleFileRead = useCallback((content: string, name: string) => {
+    setSourceText(content);
+    setFilename(name);
+  }, []);
+
+  const handleFileClear = useCallback(() => {
+    setSourceText("");
+    setFilename(undefined);
+  }, []);
 
   const sourceTextLabel =
     mode === "adapt" ? "Story to adapt" : "Topic or idea";
@@ -91,7 +103,10 @@ function CreationForm() {
                   name="mode"
                   value={option.value}
                   checked={mode === option.value}
-                  onChange={() => setMode(option.value)}
+                  onChange={() => {
+                    setMode(option.value);
+                    if (option.value !== "adapt") setFilename(undefined);
+                  }}
                   className="mt-0.5 accent-blue-600 focus:ring-2 focus:ring-blue-500"
                 />
                 <div>
@@ -111,10 +126,23 @@ function CreationForm() {
             {sourceTextLabel} <span aria-hidden="true">*</span>
             <span className="sr-only">(required)</span>
           </label>
+          {mode === "adapt" && (
+            <FileDropZone
+              accept={[".txt", ".md"]}
+              maxSizeBytes={10 * 1024 * 1024}
+              onFileRead={handleFileRead}
+              onClear={handleFileClear}
+              filename={filename}
+              disabled={creating}
+            />
+          )}
           <Textarea
             id="source-text"
             value={sourceText}
-            onChange={(e) => setSourceText(e.target.value)}
+            onChange={(e) => {
+              setSourceText(e.target.value);
+              if (filename) setFilename(undefined);
+            }}
             rows={8}
             required
             aria-required="true"
