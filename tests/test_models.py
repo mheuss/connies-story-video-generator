@@ -79,6 +79,7 @@ class TestPhaseSequences:
             PipelinePhase.OUTLINE,
             PipelinePhase.SCENE_PROSE,
             PipelinePhase.CRITIQUE_REVISION,
+            PipelinePhase.VISUAL_REFERENCE,
             PipelinePhase.IMAGE_PROMPTS,
             PipelinePhase.NARRATION_PREP,
             PipelinePhase.TTS_GENERATION,
@@ -94,6 +95,7 @@ class TestPhaseSequences:
             PipelinePhase.ANALYSIS,
             PipelinePhase.SCENE_SPLITTING,
             PipelinePhase.NARRATION_FLAGGING,
+            PipelinePhase.VISUAL_REFERENCE,
             PipelinePhase.IMAGE_PROMPTS,
             PipelinePhase.NARRATION_PREP,
             PipelinePhase.TTS_GENERATION,
@@ -105,8 +107,8 @@ class TestPhaseSequences:
 
     def test_shared_phases_are_shared(self):
         """The trailing shared phases are the same in both flows."""
-        shared_in_creative = CREATIVE_FLOW_PHASES[-6:]
-        shared_in_adapt = ADAPT_FLOW_PHASES[-6:]
+        shared_in_creative = CREATIVE_FLOW_PHASES[-7:]
+        shared_in_adapt = ADAPT_FLOW_PHASES[-7:]
         assert shared_in_creative == shared_in_adapt
 
 

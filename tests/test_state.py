@@ -761,7 +761,7 @@ class TestResumeWorkflow:
         resumed = ProjectState.load(state.project_dir)
         assert resumed.metadata.status == PhaseStatus.COMPLETED
         assert resumed.metadata.current_phase == PipelinePhase.NARRATION_FLAGGING
-        assert resumed.get_next_phase() == PipelinePhase.IMAGE_PROMPTS
+        assert resumed.get_next_phase() == PipelinePhase.VISUAL_REFERENCE
 
         scene = resumed.metadata.scenes[0]
         assert scene.asset_status.text == SceneStatus.COMPLETED

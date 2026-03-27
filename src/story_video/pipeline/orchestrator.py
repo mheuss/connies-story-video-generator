@@ -270,6 +270,10 @@ def _dispatch_phase(
             raise ValueError(msg)
         claude_handlers[phase](state, claude_client)
 
+    elif phase == PipelinePhase.VISUAL_REFERENCE:
+        # Placeholder — implementation added in a later task (HEU-159).
+        logger.info("VISUAL_REFERENCE phase: no-op (not yet implemented)")
+
     elif phase == PipelinePhase.IMAGE_PROMPTS:
         if claude_client is None:
             msg = "claude_client is required for IMAGE_PROMPTS phase"
