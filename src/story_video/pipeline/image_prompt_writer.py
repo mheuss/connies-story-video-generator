@@ -78,8 +78,14 @@ def _load_visual_reference(state: ProjectState) -> tuple[list[dict], str | None]
     except json.JSONDecodeError:
         logger.warning("Malformed visual_reference.json; skipping visual reference")
         return [], None
+    if not isinstance(ref, dict):
+        logger.warning("Unexpected visual_reference.json shape; skipping visual reference")
+        return [], None
     characters = ref.get("characters", [])
-    setting_summary = ref.get("setting", {}).get("visual_summary")
+    if not isinstance(characters, list):
+        characters = []
+    setting = ref.get("setting")
+    setting_summary = setting.get("visual_summary") if isinstance(setting, dict) else None
     return characters, setting_summary
 
 
