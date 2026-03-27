@@ -215,16 +215,16 @@ class TestGenerateImagePromptsSceneMissingFromResponse:
 
 
 # ---------------------------------------------------------------------------
-# Character reference from analysis.json
+# Visual reference from visual_reference.json
 # ---------------------------------------------------------------------------
 
 
 class TestGenerateImagePromptsCharacterReference:
-    """generate_image_prompts() includes character reference from analysis.json."""
+    """generate_image_prompts() includes visual reference from visual_reference.json."""
 
     def test_character_reference_in_user_message(self, state_with_scenes, mock_client):
-        """Character descriptions from analysis.json are prepended to user message."""
-        analysis = {
+        """Character descriptions from visual_reference.json are prepended to user message."""
+        visual_ref = {
             "characters": [
                 {
                     "name": "Elara",
@@ -234,10 +234,11 @@ class TestGenerateImagePromptsCharacterReference:
                     "name": "Borin",
                     "visual_description": "A stocky dwarf with a braided red beard.",
                 },
-            ]
+            ],
+            "setting": {"visual_summary": "A misty mountain valley with ancient stone ruins."},
         }
-        analysis_path = state_with_scenes.project_dir / "analysis.json"
-        analysis_path.write_text(json.dumps(analysis), encoding="utf-8")
+        ref_path = state_with_scenes.project_dir / "visual_reference.json"
+        ref_path.write_text(json.dumps(visual_ref), encoding="utf-8")
 
         generate_image_prompts(state_with_scenes, mock_client)
 
@@ -249,16 +250,17 @@ class TestGenerateImagePromptsCharacterReference:
 
     def test_character_reference_before_scenes(self, state_with_scenes, mock_client):
         """Character reference block appears before the first scene."""
-        analysis = {
+        visual_ref = {
             "characters": [
                 {
                     "name": "Elara",
                     "visual_description": "A tall woman with silver hair.",
                 },
-            ]
+            ],
+            "setting": {"visual_summary": "A misty mountain valley."},
         }
-        analysis_path = state_with_scenes.project_dir / "analysis.json"
-        analysis_path.write_text(json.dumps(analysis), encoding="utf-8")
+        ref_path = state_with_scenes.project_dir / "visual_reference.json"
+        ref_path.write_text(json.dumps(visual_ref), encoding="utf-8")
 
         generate_image_prompts(state_with_scenes, mock_client)
 
@@ -268,22 +270,38 @@ class TestGenerateImagePromptsCharacterReference:
         scene_pos = user_msg.index("=== Scene 1:")
         assert char_pos < scene_pos
 
+    def test_setting_reference_in_user_message(self, state_with_scenes, mock_client):
+        """Setting visual summary from visual_reference.json appears in user message."""
+        visual_ref = {
+            "characters": [],
+            "setting": {"visual_summary": "A misty mountain valley with ancient stone ruins."},
+        }
+        ref_path = state_with_scenes.project_dir / "visual_reference.json"
+        ref_path.write_text(json.dumps(visual_ref), encoding="utf-8")
+
+        generate_image_prompts(state_with_scenes, mock_client)
+
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+        assert "=== Visual Setting ===" in user_msg
+        assert "misty mountain valley" in user_msg
+
     @pytest.mark.parametrize(
-        "analysis_content",
+        "visual_ref_content",
         [
             None,
-            {"characters": []},
-            {"craft_notes": {}, "thematic_brief": {}, "source_stats": {}},
+            {"characters": [], "setting": {"visual_summary": ""}},
+            {"setting": {"visual_summary": ""}},
         ],
-        ids=["no_file", "empty_array", "no_characters_key"],
+        ids=["no_file", "empty_characters", "no_characters_key"],
     )
     def test_no_character_reference_in_message(
-        self, state_with_scenes, mock_client, analysis_content
+        self, state_with_scenes, mock_client, visual_ref_content
     ):
-        """No character block when analysis is absent, empty, or lacks characters key."""
-        if analysis_content is not None:
-            analysis_path = state_with_scenes.project_dir / "analysis.json"
-            analysis_path.write_text(json.dumps(analysis_content), encoding="utf-8")
+        """No character block when visual reference is absent, empty, or lacks characters key."""
+        if visual_ref_content is not None:
+            ref_path = state_with_scenes.project_dir / "visual_reference.json"
+            ref_path.write_text(json.dumps(visual_ref_content), encoding="utf-8")
 
         generate_image_prompts(state_with_scenes, mock_client)
 
@@ -292,10 +310,10 @@ class TestGenerateImagePromptsCharacterReference:
         assert "Character Reference" not in user_msg
         assert "=== Scene 1:" in user_msg
 
-    def test_malformed_analysis_json_skipped(self, state_with_scenes, mock_client, caplog):
-        """Malformed analysis.json is silently skipped with a warning."""
-        analysis_path = state_with_scenes.project_dir / "analysis.json"
-        analysis_path.write_text("{broken json", encoding="utf-8")
+    def test_malformed_visual_reference_skipped(self, state_with_scenes, mock_client, caplog):
+        """Malformed visual_reference.json is silently skipped with a warning."""
+        ref_path = state_with_scenes.project_dir / "visual_reference.json"
+        ref_path.write_text("{broken json", encoding="utf-8")
 
         with caplog.at_level(logging.WARNING):
             generate_image_prompts(state_with_scenes, mock_client)

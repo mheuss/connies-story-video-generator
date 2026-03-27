@@ -1314,7 +1314,6 @@ class TestVisualReferencePhaseOrder:
 class TestVisualReferenceDownstream:
     """image_prompt_writer reads visual_reference.json produced by visual_reference_writer."""
 
-    @pytest.mark.skip(reason="Requires Task 5: image_prompt_writer update")
     def test_image_prompts_use_visual_reference(self, tmp_path):
         """Run visual_reference then image_prompts — image prompts include character data."""
         import json
