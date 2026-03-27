@@ -11,6 +11,7 @@ import pytest
 from story_video.models import AppConfig, InputMode
 from story_video.pipeline.visual_reference_writer import (
     ADAPT_SYSTEM,
+    CREATIVE_SYSTEM,
     VISUAL_REF_SCHEMA,
     generate_visual_reference,
 )
@@ -185,6 +186,27 @@ class TestVisualReferenceCreativeMode:
         analysis_path.write_text(json.dumps(ANALYSIS_WITH_CHARACTERS), encoding="utf-8")
 
         with pytest.raises(FileNotFoundError, match="story_bible.json"):
+            generate_visual_reference(state, mock_client)
+
+    def test_uses_creative_system_prompt(self, creative_state, mock_client):
+        """Creative mode uses the CREATIVE_SYSTEM prompt, not ADAPT_SYSTEM."""
+        generate_visual_reference(creative_state, mock_client)
+
+        call_kwargs = mock_client.generate_structured.call_args.kwargs
+        assert call_kwargs["system"] == CREATIVE_SYSTEM
+
+    def test_missing_analysis_raises(self, tmp_path, mock_client):
+        """FileNotFoundError when analysis.json is missing in creative mode."""
+        state = ProjectState.create(
+            project_id="no-analysis-creative",
+            mode=InputMode.ORIGINAL,
+            config=AppConfig(),
+            output_dir=tmp_path,
+        )
+        bible_path = state.project_dir / "story_bible.json"
+        bible_path.write_text(json.dumps(STORY_BIBLE_CHARACTERS), encoding="utf-8")
+
+        with pytest.raises(FileNotFoundError, match="analysis.json"):
             generate_visual_reference(state, mock_client)
 
     def test_malformed_story_bible_raises(self, tmp_path, mock_client):

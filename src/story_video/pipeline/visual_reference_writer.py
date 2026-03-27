@@ -7,12 +7,14 @@ invents from analysis.json + source material.
 
 import json
 import logging
+from pathlib import Path
 
 from story_video.models import InputMode
 from story_video.pipeline.claude_client import ClaudeClient
+from story_video.pipeline.story_writer import _load_json_artifact
 from story_video.state import ProjectState
 
-__all__ = ["VISUAL_REF_SCHEMA", "generate_visual_reference"]
+__all__ = ["ADAPT_SYSTEM", "CREATIVE_SYSTEM", "VISUAL_REF_SCHEMA", "generate_visual_reference"]
 
 logger = logging.getLogger(__name__)
 
@@ -105,32 +107,7 @@ ADAPT_SYSTEM = (
 # ---------------------------------------------------------------------------
 
 
-def _load_json_artifact(project_dir, filename):
-    """Load and parse a JSON artifact file from the project directory.
-
-    Args:
-        project_dir: Path to the project directory.
-        filename: Name of the JSON file.
-
-    Returns:
-        Parsed dict from the JSON file.
-
-    Raises:
-        FileNotFoundError: If the file does not exist.
-        ValueError: If the file contains malformed JSON.
-    """
-    path = project_dir / filename
-    if not path.exists():
-        msg = f"{filename} not found in {project_dir}"
-        raise FileNotFoundError(msg)
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        msg = f"Malformed JSON in {path}: {exc}"
-        raise ValueError(msg) from exc
-
-
-def _build_creative_message(project_dir):
+def _build_creative_message(project_dir: Path) -> str:
     """Build user message for creative modes from story_bible.json + analysis.json.
 
     Args:
@@ -166,7 +143,7 @@ def _build_creative_message(project_dir):
 
     # Setting section
     setting = bible.get("setting", {})
-    if setting:
+    if isinstance(setting, dict):
         parts.append("## Setting\n")
         for key in ("place", "time_period", "atmosphere"):
             value = setting.get(key)
@@ -177,7 +154,7 @@ def _build_creative_message(project_dir):
     return "\n".join(parts)
 
 
-def _build_adapt_message(project_dir):
+def _build_adapt_message(project_dir: Path) -> str:
     """Build user message for adapt mode from analysis.json + source material.
 
     Args:
