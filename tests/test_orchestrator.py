@@ -345,7 +345,8 @@ class TestRunPipelineSemiAutoCheckpoints:
         mock_prompts.assert_not_called()
 
     @patch("story_video.pipeline.orchestrator.generate_image_prompts")
-    def test_pauses_after_image_prompts(self, mock_prompts, tmp_path):
+    @patch("story_video.pipeline.orchestrator.generate_visual_reference")
+    def test_pauses_after_image_prompts(self, mock_vr, mock_prompts, tmp_path):
         """Semi-auto resumes at IMAGE_PROMPTS, pauses after it."""
         state = _make_adapt_state(tmp_path, autonomous=False)
         _set_phase_state(state, PipelinePhase.NARRATION_FLAGGING, PhaseStatus.AWAITING_REVIEW)
@@ -470,6 +471,7 @@ class TestRunPipelineAutonomous:
         },
     )
     @patch("story_video.pipeline.orchestrator.generate_image_prompts")
+    @patch("story_video.pipeline.orchestrator.generate_visual_reference")
     @patch("story_video.pipeline.orchestrator.flag_narration")
     @patch("story_video.pipeline.orchestrator.split_scenes")
     @patch("story_video.pipeline.orchestrator.analyze_source")
@@ -478,6 +480,7 @@ class TestRunPipelineAutonomous:
         mock_analyze,
         mock_split,
         mock_flag,
+        mock_vr,
         mock_prompts,
         mock_prep,
         mock_audio,
@@ -487,7 +490,7 @@ class TestRunPipelineAutonomous:
         mock_assemble_video,
         tmp_path,
     ):
-        """Autonomous mode runs all 9 phases without pausing."""
+        """Autonomous mode runs all phases without pausing."""
         state = _make_adapt_state(tmp_path, autonomous=True)
         # Add scenes so per-scene phases have something to process
         _add_scenes_with_assets(state, count=2, up_to_asset=AssetType.TEXT)
@@ -504,6 +507,7 @@ class TestRunPipelineAutonomous:
         mock_analyze.assert_called_once()
         mock_split.assert_called_once()
         mock_flag.assert_called_once()
+        mock_vr.assert_called_once()
         mock_prompts.assert_called_once()
         # assemble_video called once at end
         mock_assemble_video.assert_called_once()
@@ -901,7 +905,8 @@ class TestRunPipelineDispatch:
         mock_flag.assert_called_once_with(state, client)
 
     @patch("story_video.pipeline.orchestrator.generate_image_prompts")
-    def test_image_prompts_calls_generate_image_prompts(self, mock_prompts, tmp_path):
+    @patch("story_video.pipeline.orchestrator.generate_visual_reference")
+    def test_image_prompts_calls_generate_image_prompts(self, mock_vr, mock_prompts, tmp_path):
         """IMAGE_PROMPTS dispatches to generate_image_prompts(state, client)."""
         state = _make_adapt_state(tmp_path, autonomous=False)
         _set_phase_state(state, PipelinePhase.NARRATION_FLAGGING, PhaseStatus.AWAITING_REVIEW)
@@ -1186,6 +1191,7 @@ class TestDispatchPhaseProviderGuards:
         [
             (PipelinePhase.SCENE_SPLITTING, "claude_client"),
             (PipelinePhase.NARRATION_FLAGGING, "claude_client"),
+            (PipelinePhase.VISUAL_REFERENCE, "claude_client"),
             (PipelinePhase.IMAGE_PROMPTS, "claude_client"),
             (PipelinePhase.TTS_GENERATION, "tts_provider"),
             (PipelinePhase.IMAGE_GENERATION, "image_provider"),
@@ -1242,6 +1248,119 @@ class TestDispatchCreativePhases:
             caption_provider=None,
         )
         mock_fn.assert_called_once_with(state, client)
+
+
+# ---------------------------------------------------------------------------
+# TestDispatchVisualReference — VISUAL_REFERENCE dispatch routing
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchVisualReference:
+    """_dispatch_phase dispatches VISUAL_REFERENCE to generate_visual_reference."""
+
+    def test_dispatches_visual_reference(self, tmp_path):
+        """VISUAL_REFERENCE phase calls generate_visual_reference(state, client)."""
+        state = _make_adapt_state(tmp_path)
+        mock_claude = MagicMock()
+
+        with patch("story_video.pipeline.orchestrator.generate_visual_reference") as mock_fn:
+            _dispatch_phase(
+                state=state,
+                phase=PipelinePhase.VISUAL_REFERENCE,
+                claude_client=mock_claude,
+                tts_provider=None,
+                image_provider=None,
+                caption_provider=None,
+                story_header=None,
+            )
+
+        mock_fn.assert_called_once_with(state, mock_claude)
+
+
+# ---------------------------------------------------------------------------
+# TestVisualReferencePhaseOrder — VISUAL_REFERENCE position in phase sequences
+# ---------------------------------------------------------------------------
+
+
+class TestVisualReferencePhaseOrder:
+    """VISUAL_REFERENCE phase appears in the correct position in both flows."""
+
+    def test_creative_flow_order(self):
+        """VISUAL_REFERENCE comes after CRITIQUE_REVISION and before IMAGE_PROMPTS."""
+        from story_video.models import CREATIVE_FLOW_PHASES, PipelinePhase
+
+        phases = list(CREATIVE_FLOW_PHASES)
+        vr_idx = phases.index(PipelinePhase.VISUAL_REFERENCE)
+        cr_idx = phases.index(PipelinePhase.CRITIQUE_REVISION)
+        ip_idx = phases.index(PipelinePhase.IMAGE_PROMPTS)
+        assert cr_idx < vr_idx < ip_idx
+
+    def test_adapt_flow_order(self):
+        """VISUAL_REFERENCE comes after NARRATION_FLAGGING and before IMAGE_PROMPTS."""
+        from story_video.models import ADAPT_FLOW_PHASES, PipelinePhase
+
+        phases = list(ADAPT_FLOW_PHASES)
+        vr_idx = phases.index(PipelinePhase.VISUAL_REFERENCE)
+        nf_idx = phases.index(PipelinePhase.NARRATION_FLAGGING)
+        ip_idx = phases.index(PipelinePhase.IMAGE_PROMPTS)
+        assert nf_idx < vr_idx < ip_idx
+
+
+# ---------------------------------------------------------------------------
+# TestVisualReferenceDownstream — visual_reference feeds into image_prompt_writer
+# ---------------------------------------------------------------------------
+
+
+class TestVisualReferenceDownstream:
+    """image_prompt_writer reads visual_reference.json produced by visual_reference_writer."""
+
+    @pytest.mark.skip(reason="Requires Task 5: image_prompt_writer update")
+    def test_image_prompts_use_visual_reference(self, tmp_path):
+        """Run visual_reference then image_prompts — image prompts include character data."""
+        import json
+        from unittest.mock import MagicMock
+
+        from story_video.models import AppConfig, AssetType, InputMode, SceneStatus
+        from story_video.pipeline.image_prompt_writer import generate_image_prompts
+        from story_video.pipeline.visual_reference_writer import generate_visual_reference
+
+        state = ProjectState.create("integ-test", InputMode.ADAPT, AppConfig(), tmp_path)
+        state.add_scene(1, "The Forest", "Sim ran through the dark forest.")
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.IN_PROGRESS)
+        state.update_scene_asset(1, AssetType.TEXT, SceneStatus.COMPLETED)
+
+        # Write analysis.json for visual_reference_writer
+        analysis = {
+            "craft_notes": {"tone": "Dark"},
+            "thematic_brief": {"themes": ["Survival"]},
+            "source_stats": {"word_count": 100, "scene_count_estimate": 1},
+            "characters": [{"name": "Sim", "visual_description": "A teenage girl."}],
+        }
+        (state.project_dir / "analysis.json").write_text(json.dumps(analysis), encoding="utf-8")
+
+        # Mock Claude for visual reference generation
+        vr_client = MagicMock()
+        vr_client.generate_structured.return_value = {
+            "characters": [
+                {"name": "Sim", "visual_description": "15-year-old girl with dark braids."}
+            ],
+            "setting": {"visual_summary": "Post-apocalyptic suburban ruins."},
+        }
+        generate_visual_reference(state, vr_client)
+
+        # Mock Claude for image prompt generation
+        ip_client = MagicMock()
+        ip_client.generate_structured.return_value = {
+            "prompts": [{"scene_number": 1, "image_prompt": "A girl runs through a forest."}]
+        }
+        generate_image_prompts(state, ip_client)
+
+        # Verify image prompt writer received the visual reference data
+        call_kwargs = ip_client.generate_structured.call_args.kwargs
+        user_msg = call_kwargs["user_message"]
+        assert "Sim" in user_msg
+        assert "dark braids" in user_msg
+        assert "Post-apocalyptic" in user_msg
 
 
 # ---------------------------------------------------------------------------
@@ -1479,6 +1598,17 @@ class TestPipelineIntegration:
                 ],
             },
             "flag_narration_issues": {"flags": []},
+            "generate_visual_reference": {
+                "characters": [
+                    {
+                        "name": "The Keeper",
+                        "visual_description": (
+                            "A weathered man in his sixties, grey stubble, navy peacoat."
+                        ),
+                    },
+                ],
+                "setting": {"visual_summary": "A lonely lighthouse on a rocky coast."},
+            },
             "generate_image_prompts": {
                 "prompts": [
                     {
@@ -1570,8 +1700,8 @@ class TestPipelineIntegration:
         assert (pd / "analysis.json").exists()
 
         # --- Verify external APIs were called ---
-        # 4 calls (analysis + split + flag + prompts) + 2 narration prep (one per scene)
-        assert mock_claude.generate_structured.call_count == 6
+        # 5 calls (analysis + split + flag + visual_ref + prompts) + 2 narration prep
+        assert mock_claude.generate_structured.call_count == 7
         assert mock_tts.synthesize.call_count == 2
         assert mock_image.generate.call_count == 2
         assert mock_caption.transcribe.call_count == 2
@@ -1653,6 +1783,17 @@ class TestPipelineIntegration:
                 ],
             },
             "flag_narration_issues": {"flags": []},
+            "generate_visual_reference": {
+                "characters": [
+                    {
+                        "name": "The Keeper",
+                        "visual_description": (
+                            "A weathered man in his sixties, grey stubble, navy peacoat."
+                        ),
+                    },
+                ],
+                "setting": {"visual_summary": "A lonely lighthouse on a rocky coast."},
+            },
             # Claude only generates prompts for untagged scenes — scene 2 has
             # one image tag, so it's tagged. Scene 1 also has a tag.
             # But generate_image_prompts sends untagged scenes to Claude.
@@ -1747,7 +1888,7 @@ class TestPipelineIntegration:
 
         # --- Verify Claude was NOT called for image prompts ---
         # Both scenes have image tags, so generate_image_prompts should
-        # skip Claude entirely. Calls: analysis + split + flag + 2x narration_prep = 5
+        # skip Claude entirely. Calls: analysis + split + flag + visual_ref + 2x narration_prep = 6
         prompt_calls = [
             c
             for c in mock_claude.generate_structured.call_args_list
@@ -1836,6 +1977,15 @@ class TestPipelineIntegration:
                 ],
             },
             "flag_narration_issues": {"flags": []},
+            "generate_visual_reference": {
+                "characters": [
+                    {
+                        "name": "The Keeper",
+                        "visual_description": "A weathered man in navy peacoat.",
+                    },
+                ],
+                "setting": {"visual_summary": "A lonely lighthouse on a rocky coast."},
+            },
             "generate_image_prompts": {
                 "prompts": [
                     {
@@ -1958,7 +2108,11 @@ class TestPipelineIntegration:
             },
             "create_story_bible": {
                 "characters": [{"name": "The Old Woman", "role": "protagonist"}],
-                "setting": "An abandoned theater",
+                "setting": {
+                    "place": "An abandoned theater",
+                    "time_period": "Modern",
+                    "atmosphere": "Eerie",
+                },
                 "world_rules": [],
             },
             "create_outline": {
@@ -1976,6 +2130,15 @@ class TestPipelineIntegration:
                         "target_words": 100,
                     },
                 ]
+            },
+            "generate_visual_reference": {
+                "characters": [
+                    {
+                        "name": "The Old Woman",
+                        "visual_description": "An elderly woman in a worn shawl.",
+                    },
+                ],
+                "setting": {"visual_summary": "An abandoned theater."},
             },
             "generate_image_prompts": {
                 "prompts": [
@@ -2070,8 +2233,9 @@ class TestPipelineIntegration:
         assert (pd / "final.mp4").exists()
 
         # --- Verify external APIs were called ---
-        # analyze + bible + outline + 2 prose + 2 critique + prompts + 2 narration prep = 10
-        assert mock_claude.generate_structured.call_count == 10
+        # analyze + bible + outline + 2 prose + 2 critique
+        # + visual_ref + prompts + 2 narration prep = 11
+        assert mock_claude.generate_structured.call_count == 11
         assert mock_tts.synthesize.call_count == 2
         assert mock_image.generate.call_count == 2
         assert mock_caption.transcribe.call_count == 2
@@ -2097,7 +2261,11 @@ class TestPipelineIntegration:
             },
             "create_story_bible": {
                 "characters": [{"name": "The Old Woman", "role": "protagonist"}],
-                "setting": "An abandoned theater",
+                "setting": {
+                    "place": "An abandoned theater",
+                    "time_period": "Modern",
+                    "atmosphere": "Eerie",
+                },
                 "world_rules": [],
             },
             "create_outline": {
@@ -2115,6 +2283,15 @@ class TestPipelineIntegration:
                         "target_words": 100,
                     },
                 ]
+            },
+            "generate_visual_reference": {
+                "characters": [
+                    {
+                        "name": "The Old Woman",
+                        "visual_description": "An elderly woman in a worn shawl.",
+                    },
+                ],
+                "setting": {"visual_summary": "An abandoned theater."},
             },
             "generate_image_prompts": {
                 "prompts": [
@@ -2212,8 +2389,9 @@ class TestPipelineIntegration:
         assert (pd / "final.mp4").exists()
 
         # --- Verify external APIs were called ---
-        # analyze + bible + outline + 2 prose + 2 critique + prompts + 2 narration prep = 10
-        assert mock_claude.generate_structured.call_count == 10
+        # analyze + bible + outline + 2 prose + 2 critique
+        # + visual_ref + prompts + 2 narration prep = 11
+        assert mock_claude.generate_structured.call_count == 11
         assert mock_tts.synthesize.call_count == 2
         assert mock_image.generate.call_count == 2
         assert mock_caption.transcribe.call_count == 2
