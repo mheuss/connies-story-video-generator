@@ -11,7 +11,7 @@ from pathlib import Path
 
 from story_video.models import InputMode
 from story_video.pipeline.claude_client import ClaudeClient
-from story_video.pipeline.story_writer import _load_json_artifact
+from story_video.pipeline.story_writer import load_json_artifact
 from story_video.state import ProjectState
 
 __all__ = ["ADAPT_SYSTEM", "CREATIVE_SYSTEM", "VISUAL_REF_SCHEMA", "generate_visual_reference"]
@@ -116,8 +116,8 @@ def _build_creative_message(project_dir: Path) -> str:
     Returns:
         User message string with craft notes, character, and setting data.
     """
-    bible = _load_json_artifact(project_dir, "story_bible.json")
-    analysis = _load_json_artifact(project_dir, "analysis.json")
+    bible = load_json_artifact(project_dir, "story_bible.json")
+    analysis = load_json_artifact(project_dir, "analysis.json")
 
     parts = []
 
@@ -163,7 +163,7 @@ def _build_adapt_message(project_dir: Path) -> str:
     Returns:
         User message string with character data and source text.
     """
-    analysis = _load_json_artifact(project_dir, "analysis.json")
+    analysis = load_json_artifact(project_dir, "analysis.json")
 
     parts = []
 
