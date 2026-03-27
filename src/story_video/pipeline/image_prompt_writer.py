@@ -81,11 +81,15 @@ def _load_visual_reference(state: ProjectState) -> tuple[list[dict], str | None]
     if not isinstance(ref, dict):
         logger.warning("Unexpected visual_reference.json shape; skipping visual reference")
         return [], None
-    characters = ref.get("characters", [])
-    if not isinstance(characters, list):
-        characters = []
+    raw_characters = ref.get("characters", [])
+    characters = (
+        [c for c in raw_characters if isinstance(c, dict)]
+        if isinstance(raw_characters, list)
+        else []
+    )
     setting = ref.get("setting")
-    setting_summary = setting.get("visual_summary") if isinstance(setting, dict) else None
+    summary = setting.get("visual_summary") if isinstance(setting, dict) else None
+    setting_summary = summary if isinstance(summary, str) and summary.strip() else None
     return characters, setting_summary
 
 
