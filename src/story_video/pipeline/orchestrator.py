@@ -45,6 +45,7 @@ from story_video.pipeline.story_writer import (
 )
 from story_video.pipeline.tts_generator import TTSProvider, generate_audio
 from story_video.pipeline.video_assembler import assemble_scene, assemble_video
+from story_video.pipeline.visual_reference_writer import generate_visual_reference
 from story_video.state import ProjectState
 from story_video.utils.narration_tags import (
     extract_image_tags_stripped,
@@ -256,6 +257,7 @@ def _dispatch_phase(
         PipelinePhase.CRITIQUE_REVISION: critique_and_revise,
         PipelinePhase.SCENE_SPLITTING: split_scenes,
         PipelinePhase.NARRATION_FLAGGING: flag_narration,
+        PipelinePhase.VISUAL_REFERENCE: generate_visual_reference,
         # IMAGE_PROMPTS handled explicitly below (needs image tag extraction first)
         PipelinePhase.NARRATION_PREP: _run_narration_prep,
     }

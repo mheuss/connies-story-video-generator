@@ -29,6 +29,8 @@ IMAGE_PROMPT_SYSTEM = (
     "- Character-consistent: use the character reference (when provided) to"
     " describe characters accurately. Include visual details in every prompt"
     " — image models have no memory between images\n"
+    "- Setting-aware: use the visual setting reference (when provided) to ground"
+    " scenes in consistent architecture, lighting, and atmosphere\n"
     "- Cinematic: frame it like a movie still or painting\n"
     "- 1-3 sentences long\n\n"
     "Do NOT include text overlays, watermarks, or UI elements in prompts.\n\n"
@@ -61,23 +63,34 @@ IMAGE_PROMPT_SCHEMA = {
 # ---------------------------------------------------------------------------
 
 
-def _load_characters(state: ProjectState) -> list[dict]:
-    """Load character descriptions from analysis.json if available.
+def _load_visual_reference(state: ProjectState) -> tuple[list[dict], str | None]:
+    """Load character descriptions and setting from visual_reference.json.
 
-    Returns an empty list if analysis.json doesn't exist, contains
-    malformed JSON, or has no characters key. This provides backward
-    compatibility with projects created before character extraction
-    was added.
+    Returns a tuple of (characters, setting_summary). Characters is an empty
+    list and setting_summary is None if visual_reference.json doesn't exist,
+    contains malformed JSON, or lacks the relevant keys.
     """
-    analysis_path = state.project_dir / "analysis.json"
-    if not analysis_path.exists():
-        return []
+    ref_path = state.project_dir / "visual_reference.json"
+    if not ref_path.exists():
+        return [], None
     try:
-        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        ref = json.loads(ref_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        logger.warning("Malformed analysis.json; skipping character reference")
-        return []
-    return analysis.get("characters", [])
+        logger.warning("Malformed visual_reference.json; skipping visual reference")
+        return [], None
+    if not isinstance(ref, dict):
+        logger.warning("Unexpected visual_reference.json shape; skipping visual reference")
+        return [], None
+    raw_characters = ref.get("characters", [])
+    characters = (
+        [c for c in raw_characters if isinstance(c, dict)]
+        if isinstance(raw_characters, list)
+        else []
+    )
+    setting = ref.get("setting")
+    summary = setting.get("visual_summary") if isinstance(setting, dict) else None
+    setting_summary = summary if isinstance(summary, str) and summary.strip() else None
+    return characters, setting_summary
 
 
 def _format_character_reference(characters: list[dict]) -> str:
@@ -98,6 +111,18 @@ def _format_character_reference(characters: list[dict]) -> str:
         lines.append(f"{name}: {desc}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _format_setting_reference(visual_summary: str) -> str:
+    """Format setting summary into a text block for the image prompt context.
+
+    Args:
+        visual_summary: A description of the story's visual setting.
+
+    Returns:
+        A labeled text block with the setting summary.
+    """
+    return f"=== Visual Setting ===\n{visual_summary}\n"
 
 
 # ---------------------------------------------------------------------------
@@ -135,14 +160,16 @@ def generate_image_prompts(state: ProjectState, client: ClaudeClient) -> None:
         state.update_scene_asset(scene_num, AssetType.IMAGE_PROMPT, SceneStatus.COMPLETED)
 
     if untagged_scenes:
-        # Load character descriptions from analysis (if available)
-        characters = _load_characters(state)
+        # Load visual reference (characters + setting) if available
+        characters, setting_summary = _load_visual_reference(state)
 
-        # Build user message with optional character reference and numbered scenes.
+        # Build user message with optional visual reference and numbered scenes.
         # NOTE: All scenes are sent in a single Claude call. For very large stories
         # (25+ scenes), this could approach context limits. Acceptable for typical
         # use (5-15 scenes). If this becomes an issue, batch scenes into groups.
         parts = []
+        if setting_summary:
+            parts.append(_format_setting_reference(setting_summary))
         if characters:
             parts.append(_format_character_reference(characters))
         for scene in untagged_scenes:

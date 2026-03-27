@@ -121,12 +121,12 @@ class PipelinePhase(str, Enum):
 
     Creative flow (original/inspired_by):
         analysis -> story_bible -> outline -> scene_prose -> critique_revision
-        -> image_prompts -> narration_prep -> tts_generation -> image_generation
-        -> caption_generation -> video_assembly
+        -> visual_reference -> image_prompts -> narration_prep -> tts_generation
+        -> image_generation -> caption_generation -> video_assembly
 
     Adaptation flow (adapt):
-        analysis -> scene_splitting -> narration_flagging -> image_prompts
-        -> narration_prep -> tts_generation -> image_generation
+        analysis -> scene_splitting -> narration_flagging -> visual_reference
+        -> image_prompts -> narration_prep -> tts_generation -> image_generation
         -> caption_generation -> video_assembly
     """
 
@@ -142,6 +142,7 @@ class PipelinePhase(str, Enum):
     NARRATION_FLAGGING = "narration_flagging"
 
     # Shared phases (both flows)
+    VISUAL_REFERENCE = "visual_reference"
     IMAGE_PROMPTS = "image_prompts"
     NARRATION_PREP = "narration_prep"
     TTS_GENERATION = "tts_generation"
@@ -161,6 +162,7 @@ CREATIVE_FLOW_PHASES: tuple[PipelinePhase, ...] = (
     PipelinePhase.OUTLINE,
     PipelinePhase.SCENE_PROSE,
     PipelinePhase.CRITIQUE_REVISION,
+    PipelinePhase.VISUAL_REFERENCE,
     PipelinePhase.IMAGE_PROMPTS,
     PipelinePhase.NARRATION_PREP,
     PipelinePhase.TTS_GENERATION,
@@ -174,6 +176,7 @@ ADAPT_FLOW_PHASES: tuple[PipelinePhase, ...] = (
     PipelinePhase.ANALYSIS,
     PipelinePhase.SCENE_SPLITTING,
     PipelinePhase.NARRATION_FLAGGING,
+    PipelinePhase.VISUAL_REFERENCE,
     PipelinePhase.IMAGE_PROMPTS,
     PipelinePhase.NARRATION_PREP,
     PipelinePhase.TTS_GENERATION,

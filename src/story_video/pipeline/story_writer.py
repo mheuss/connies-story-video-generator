@@ -20,6 +20,7 @@ __all__ = [
     "create_story_bible",
     "critique_and_revise",
     "flag_narration",
+    "load_json_artifact",
     "split_scenes",
     "write_scene_prose",
 ]
@@ -723,7 +724,7 @@ def create_story_bible(state: ProjectState, client: ClaudeClient) -> None:
     Raises:
         FileNotFoundError: If analysis.json doesn't exist.
     """
-    analysis = _load_json_artifact(state.project_dir, "analysis.json")
+    analysis = load_json_artifact(state.project_dir, "analysis.json")
 
     # Build user message
     parts = [
@@ -769,8 +770,8 @@ def create_outline(state: ProjectState, client: ClaudeClient) -> None:
     Raises:
         FileNotFoundError: If analysis.json or story_bible.json is missing.
     """
-    analysis = _load_json_artifact(state.project_dir, "analysis.json")
-    bible = _load_json_artifact(state.project_dir, "story_bible.json")
+    analysis = load_json_artifact(state.project_dir, "analysis.json")
+    bible = load_json_artifact(state.project_dir, "story_bible.json")
 
     source_stats = analysis.get("source_stats", {})
     if not source_stats:
@@ -829,9 +830,9 @@ def write_scene_prose(state: ProjectState, client: ClaudeClient) -> None:
     Raises:
         FileNotFoundError: If required artifact files are missing.
     """
-    analysis = _load_json_artifact(state.project_dir, "analysis.json")
-    bible = _load_json_artifact(state.project_dir, "story_bible.json")
-    outline = _load_json_artifact(state.project_dir, "outline.json")
+    analysis = load_json_artifact(state.project_dir, "analysis.json")
+    bible = load_json_artifact(state.project_dir, "story_bible.json")
+    outline = load_json_artifact(state.project_dir, "outline.json")
 
     # Resume strategy: scene metadata check.
     # Scenes already in state.metadata.scenes are skipped. This works because
@@ -923,7 +924,7 @@ def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
         FileNotFoundError: If analysis.json is missing.
         ValueError: If no scenes exist.
     """
-    analysis = _load_json_artifact(state.project_dir, "analysis.json")
+    analysis = load_json_artifact(state.project_dir, "analysis.json")
 
     scenes = state.metadata.scenes
     if not scenes:
@@ -998,7 +999,7 @@ def critique_and_revise(state: ProjectState, client: ClaudeClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _load_json_artifact(project_dir: Path, filename: str) -> dict:
+def load_json_artifact(project_dir: Path, filename: str) -> dict:
     """Load and parse a JSON artifact file from the project directory.
 
     Args:

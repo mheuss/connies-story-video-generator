@@ -17,13 +17,13 @@ from story_video.pipeline.story_writer import (
     SCENE_SPLIT_SCHEMA,
     SCENE_SPLIT_SYSTEM,
     _check_preservation,
-    _load_json_artifact,
     _split_by_scene_tags,
     analyze_source,
     create_outline,
     create_story_bible,
     critique_and_revise,
     flag_narration,
+    load_json_artifact,
     split_scenes,
     write_scene_prose,
 )
@@ -1990,15 +1990,15 @@ class TestInspiredByIntegration:
 
 
 # ---------------------------------------------------------------------------
-# _load_json_artifact — malformed JSON
+# load_json_artifact — malformed JSON
 # ---------------------------------------------------------------------------
 
 
 class TestLoadJsonArtifactMalformed:
-    """_load_json_artifact raises ValueError for malformed JSON."""
+    """load_json_artifact raises ValueError for malformed JSON."""
 
     def test_malformed_json_raises(self, tmp_path):
         """Corrupt JSON file raises ValueError with descriptive message."""
         (tmp_path / "bad.json").write_text("{broken", encoding="utf-8")
         with pytest.raises(ValueError, match="Malformed JSON"):
-            _load_json_artifact(tmp_path, "bad.json")
+            load_json_artifact(tmp_path, "bad.json")
