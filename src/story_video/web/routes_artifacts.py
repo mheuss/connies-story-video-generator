@@ -31,6 +31,7 @@ _PHASE_DIRS: dict[str, str] = {
     "analysis": "",
     "story_bible": "",
     "outline": "",
+    "visual_reference": "",
     "scene_prose": "scenes",
     "critique_revision": "scenes",
     "scene_splitting": "scenes",
@@ -49,6 +50,7 @@ _PHASE_FILE_FILTER: dict[str, set[str]] = {
     "analysis": {"analysis.json"},
     "story_bible": {"story_bible.json"},
     "outline": {"outline.json"},
+    "visual_reference": {"visual_reference.json"},
     "video_assembly": {"final.mp4"},
 }
 
