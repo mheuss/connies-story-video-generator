@@ -337,7 +337,38 @@ class TestCreateCommand:
         call_state = mock_run.call_args[0][0]
         assert call_state.metadata.config.tts.voice == "alloy"
         assert call_state.metadata.config.story.target_duration_minutes == 45
+        assert call_state.metadata.config.story.target_duration_override is True
         assert call_state.metadata.config.pipeline.autonomous is True
+
+    @patch("story_video.cli.run_pipeline")
+    @patch("story_video.cli.OpenAIWhisperProvider")
+    @patch("story_video.cli.OpenAIImageProvider")
+    @patch("story_video.cli.OpenAITTSProvider")
+    @patch("story_video.cli.ClaudeClient")
+    def test_create_duration_sets_override_flag(
+        self, mock_claude, mock_tts, mock_image, mock_whisper, mock_run, tmp_path
+    ):
+        """--duration sets both target_duration_minutes and target_duration_override."""
+        source_file = tmp_path / "story.txt"
+        source_file.write_text("Story.", encoding="utf-8")
+        result = runner.invoke(
+            app,
+            [
+                "create",
+                "--mode",
+                "adapt",
+                "--input",
+                str(source_file),
+                "--output-dir",
+                str(tmp_path / "output"),
+                "--duration",
+                "10",
+            ],
+        )
+        assert result.exit_code == 0
+        call_state = mock_run.call_args[0][0]
+        assert call_state.metadata.config.story.target_duration_minutes == 10
+        assert call_state.metadata.config.story.target_duration_override is True
 
     @patch("story_video.cli.run_pipeline")
     @patch("story_video.cli.OpenAIWhisperProvider")

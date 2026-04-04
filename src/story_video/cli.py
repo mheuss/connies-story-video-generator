@@ -297,6 +297,7 @@ def create(
         cli_overrides["tts.voice"] = voice
     if duration is not None:
         cli_overrides["story.target_duration_minutes"] = duration
+        cli_overrides["story.target_duration_override"] = True
     if autonomous:
         cli_overrides["pipeline.autonomous"] = True
 
