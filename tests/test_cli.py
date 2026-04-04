@@ -396,6 +396,7 @@ class TestCreateCommand:
         assert (call_state.project_dir / "source_story.txt").read_text(
             encoding="utf-8"
         ) == "Once upon a time in a land far away..."
+        assert call_state.metadata.config.story.target_duration_override is False
 
     @patch("story_video.cli.run_pipeline", side_effect=RuntimeError("API failed"))
     @patch("story_video.cli.OpenAIWhisperProvider")

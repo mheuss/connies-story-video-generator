@@ -58,6 +58,14 @@ function CreationForm() {
     e.preventDefault();
     if (!sourceText.trim()) return;
 
+    if (duration) {
+      const parsed = parseInt(duration, 10);
+      if (isNaN(parsed) || parsed < 1 || parsed > 120) {
+        setError("Duration must be between 1 and 120 minutes");
+        return;
+      }
+    }
+
     setError(null);
     setCreating(true);
 
