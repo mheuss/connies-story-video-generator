@@ -481,6 +481,97 @@ describe("UnifiedProjectPage - Creation mode", () => {
     expect(screen.queryByText("story.txt")).not.toBeInTheDocument();
   });
 
+  it("shows duration input for original mode", async () => {
+    await setupApiKeysMock();
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/adapt.*narrate/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText(/original/i));
+    expect(screen.getByLabelText(/target duration/i)).toBeInTheDocument();
+  });
+
+  it("shows duration input for inspired_by mode", async () => {
+    await setupApiKeysMock();
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/adapt.*narrate/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText(/inspired/i));
+    expect(screen.getByLabelText(/target duration/i)).toBeInTheDocument();
+  });
+
+  it("hides duration input for adapt mode", async () => {
+    await setupApiKeysMock();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/story to adapt/i)).toBeInTheDocument();
+    });
+
+    expect(screen.queryByLabelText(/target duration/i)).not.toBeInTheDocument();
+  });
+
+  it("sends duration in create request when provided", async () => {
+    const api = await setupApiKeysMock();
+    vi.mocked(api.createProject).mockResolvedValue({
+      project_id: "original-2026-04-03",
+      mode: "original",
+      project_dir: "/tmp/original-2026-04-03",
+    });
+
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/adapt.*narrate/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText(/original/i));
+    await user.type(screen.getByLabelText(/topic or idea/i), "A test story");
+    await user.type(screen.getByLabelText(/target duration/i), "15");
+    await user.click(screen.getByRole("button", { name: /create project/i }));
+
+    await waitFor(() => {
+      expect(api.createProject).toHaveBeenCalledWith(
+        expect.objectContaining({ target_duration_minutes: 15 })
+      );
+    });
+  });
+
+  it("omits duration from request when left empty", async () => {
+    const api = await setupApiKeysMock();
+    vi.mocked(api.createProject).mockResolvedValue({
+      project_id: "original-2026-04-03",
+      mode: "original",
+      project_dir: "/tmp/original-2026-04-03",
+    });
+
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/adapt.*narrate/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText(/original/i));
+    await user.type(screen.getByLabelText(/topic or idea/i), "A test story");
+    await user.click(screen.getByRole("button", { name: /create project/i }));
+
+    await waitFor(() => {
+      expect(api.createProject).toHaveBeenCalled();
+    });
+
+    const callArg = vi.mocked(api.createProject).mock.calls[0][0];
+    expect(callArg).not.toHaveProperty("target_duration_minutes");
+  });
+
   it("submits file content via existing API call", async () => {
     const api = await setupApiKeysMock();
     vi.mocked(api.createProject).mockResolvedValue({

@@ -17,6 +17,7 @@ export interface CreateProjectRequest {
   mode: "original" | "inspired_by" | "adapt";
   source_text: string;
   autonomous?: boolean;
+  target_duration_minutes?: number;
 }
 
 /** Response from creating a project. */
