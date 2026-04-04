@@ -10,7 +10,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from story_video.models import AppConfig, AssetType, InputMode, PipelineConfig, SceneStatus
+from story_video.models import (
+    AppConfig,
+    AssetType,
+    InputMode,
+    PipelineConfig,
+    SceneStatus,
+    StoryConfig,
+)
 from story_video.pipeline.story_writer import (
     NARRATION_FLAGS_SCHEMA,
     NARRATION_FLAGS_SYSTEM,
@@ -1234,6 +1241,41 @@ class TestAnalyzeSourceOriginalMode:
         # -> word_count = 30 * 150 = 4500, scene_count = 4500 / 600 = 7
         assert analysis["source_stats"]["word_count"] == 4500
         assert analysis["source_stats"]["scene_count_estimate"] == 7
+
+
+class TestAnalyzeSourceInspiredByDurationOverride:
+    """analyze_source() in INSPIRED_BY mode overrides source_stats when duration is set."""
+
+    def test_override_replaces_claude_source_stats(self, tmp_path, analysis_client):
+        """When target_duration_override is True, source_stats come from config, not Claude."""
+        config = AppConfig(
+            story=StoryConfig(target_duration_minutes=10, target_duration_override=True),
+        )
+        state = ProjectState.create(
+            project_id="inspired-duration-test",
+            mode=InputMode.INSPIRED_BY,
+            config=config,
+            output_dir=tmp_path,
+        )
+        source = tmp_path / "inspired-duration-test" / "source_story.txt"
+        source.write_text(SOURCE_TEXT, encoding="utf-8")
+
+        analyze_source(state, analysis_client)
+
+        analysis_path = state.project_dir / "analysis.json"
+        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        # 10 min * 150 wpm = 1500 words, 1500 / 600 = 2 scenes (max(2, 2))
+        assert analysis["source_stats"]["word_count"] == 1500
+        assert analysis["source_stats"]["scene_count_estimate"] == 2
+
+    def test_no_override_uses_claude_source_stats(self, inspired_state, analysis_client):
+        """When target_duration_override is False, source_stats come from Claude."""
+        analyze_source(inspired_state, analysis_client)
+
+        analysis_path = inspired_state.project_dir / "analysis.json"
+        analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        # Claude's mock returns source_stats with word_count=90 — preserved, not overridden
+        assert analysis["source_stats"]["word_count"] == 90
 
 
 @pytest.fixture()

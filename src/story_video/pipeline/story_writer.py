@@ -650,9 +650,10 @@ def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
     For ADAPT mode: reads a complete story being adapted for visual illustration.
     All produce the same analysis.json output shape.
 
-    In ORIGINAL mode, source_stats (word_count, scene_count_estimate) are computed
-    from StoryConfig rather than extracted by Claude, since a brief has no
-    meaningful word count to match.
+    In ORIGINAL mode, source_stats (word_count, scene_count_estimate) are always
+    computed from StoryConfig rather than extracted by Claude, since a brief has
+    no meaningful word count to match.  In INSPIRED_BY mode, source_stats are
+    also computed from config when target_duration_override is True.
 
     Args:
         state: Project state.
@@ -690,12 +691,14 @@ def analyze_source(state: ProjectState, client: ClaudeClient) -> None:
         tool_schema=ANALYSIS_SCHEMA,
     )
 
-    # For ORIGINAL mode, compute source_stats from config instead of trusting
-    # Claude's response (a brief has no meaningful word count to match).
-    # Shallow-copy so we can override source_stats without mutating the original.
-    if is_original:
+    # For ORIGINAL mode, always compute source_stats from config (a brief has
+    # no meaningful word count to match).  For INSPIRED_BY mode, override only
+    # when the user explicitly requested a target duration.
+    story_config = state.metadata.config.story
+    use_duration_override = is_original or (story_config.target_duration_override and not is_adapt)
+
+    if use_duration_override:
         result = dict(result)
-        story_config = state.metadata.config.story
         word_count = story_config.target_duration_minutes * story_config.words_per_minute
         scene_count = max(2, word_count // WORDS_PER_SCENE_ESTIMATE)
         result["source_stats"] = {
