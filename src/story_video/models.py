@@ -203,6 +203,8 @@ class StoryConfig(BaseModel):
         scene_word_target: Ideal word count per scene.
         scene_word_min: Minimum acceptable word count per scene.
         scene_word_max: Maximum acceptable word count per scene.
+        target_duration_override: True when the user explicitly set
+            target_duration_minutes (vs. using the default).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -212,6 +214,7 @@ class StoryConfig(BaseModel):
     scene_word_target: int = Field(default=1800, gt=0)
     scene_word_min: int = Field(default=500, gt=0)
     scene_word_max: int = Field(default=3000, gt=0)
+    target_duration_override: bool = Field(default=False)
 
     @model_validator(mode="after")
     def _validate_word_count_bounds(self) -> "StoryConfig":

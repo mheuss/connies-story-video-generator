@@ -128,6 +128,14 @@ class TestStoryConfig:
         with pytest.raises(ValidationError):
             StoryConfig(words_per_minute=0)
 
+    def test_target_duration_override_defaults_false(self):
+        config = StoryConfig()
+        assert config.target_duration_override is False
+
+    def test_target_duration_override_accepts_true(self):
+        config = StoryConfig(target_duration_override=True)
+        assert config.target_duration_override is True
+
 
 class TestStoryConfigWordCountValidation:
     """StoryConfig enforces min <= target <= max for scene word counts."""
