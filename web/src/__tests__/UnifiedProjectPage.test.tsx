@@ -572,6 +572,27 @@ describe("UnifiedProjectPage - Creation mode", () => {
     expect(callArg).not.toHaveProperty("target_duration_minutes");
   });
 
+  it("shows error for duration outside valid range", async () => {
+    const api = await setupApiKeysMock();
+
+    const user = userEvent.setup();
+    renderPage("new");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/adapt.*narrate/i)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText(/original.*write/i));
+    await user.type(screen.getByLabelText(/topic or idea/i), "A story");
+    await user.type(screen.getByLabelText(/target duration/i), "200");
+    await user.click(screen.getByRole("button", { name: /create project/i }));
+
+    expect(
+      screen.getByText(/duration must be between 1 and 120/i)
+    ).toBeInTheDocument();
+    expect(api.createProject).not.toHaveBeenCalled();
+  });
+
   it("submits file content via existing API call", async () => {
     const api = await setupApiKeysMock();
     vi.mocked(api.createProject).mockResolvedValue({
