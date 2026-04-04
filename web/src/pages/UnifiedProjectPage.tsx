@@ -58,10 +58,13 @@ function CreationForm() {
     e.preventDefault();
     if (!sourceText.trim()) return;
 
-    if (duration) {
-      const parsed = parseInt(duration, 10);
-      if (isNaN(parsed) || parsed < 1 || parsed > 120) {
-        setError("Duration must be between 1 and 120 minutes");
+    const trimmedDuration = duration.trim();
+    const parsedDuration =
+      trimmedDuration === "" ? undefined : Number(trimmedDuration);
+
+    if (parsedDuration !== undefined) {
+      if (!Number.isInteger(parsedDuration) || parsedDuration < 1 || parsedDuration > 120) {
+        setError("Duration must be a whole number between 1 and 120 minutes");
         return;
       }
     }
@@ -74,7 +77,9 @@ function CreationForm() {
         mode,
         source_text: sourceText,
         autonomous,
-        ...(duration ? { target_duration_minutes: parseInt(duration, 10) } : {}),
+        ...(parsedDuration !== undefined
+          ? { target_duration_minutes: parsedDuration }
+          : {}),
       });
       navigate(`/project/${project.project_id}`, { replace: true });
     } catch (err) {

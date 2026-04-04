@@ -588,7 +588,7 @@ describe("UnifiedProjectPage - Creation mode", () => {
     await user.click(screen.getByRole("button", { name: /create project/i }));
 
     expect(
-      screen.getByText(/duration must be between 1 and 120/i)
+      screen.getByText(/duration must be.*between 1 and 120/i)
     ).toBeInTheDocument();
     expect(api.createProject).not.toHaveBeenCalled();
   });
