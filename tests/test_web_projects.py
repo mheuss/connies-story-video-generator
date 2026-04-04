@@ -110,6 +110,58 @@ class TestCreateProjectAutonomous:
         assert state.metadata.config.pipeline.autonomous is False
 
 
+class TestCreateProjectDuration:
+    """POST /api/v1/projects respects target_duration_minutes."""
+
+    def test_duration_sets_config_override(self, client, output_dir):
+        """Passing target_duration_minutes sets both the value and the override flag."""
+        response = client.post(
+            "/api/v1/projects",
+            json={
+                "mode": "inspired_by",
+                "source_text": "An inspiring tale.",
+                "target_duration_minutes": 10,
+            },
+        )
+        assert response.status_code == 201
+        project_id = response.json()["project_id"]
+        state = ProjectState.load(output_dir / project_id)
+        assert state.metadata.config.story.target_duration_minutes == 10
+        assert state.metadata.config.story.target_duration_override is True
+
+    def test_omitted_duration_leaves_default(self, client, output_dir):
+        """Not passing target_duration_minutes keeps defaults and override=False."""
+        response = client.post(
+            "/api/v1/projects",
+            json={"mode": "inspired_by", "source_text": "An inspiring tale."},
+        )
+        assert response.status_code == 201
+        project_id = response.json()["project_id"]
+        state = ProjectState.load(output_dir / project_id)
+        assert state.metadata.config.story.target_duration_minutes == 30  # default
+        assert state.metadata.config.story.target_duration_override is False
+
+    def test_rejects_zero_duration(self, client):
+        """Duration must be > 0."""
+        response = client.post(
+            "/api/v1/projects",
+            json={"mode": "inspired_by", "source_text": "A tale.", "target_duration_minutes": 0},
+        )
+        assert response.status_code == 422
+
+    def test_rejects_duration_over_120(self, client):
+        """Duration must be <= 120."""
+        response = client.post(
+            "/api/v1/projects",
+            json={
+                "mode": "inspired_by",
+                "source_text": "A tale.",
+                "target_duration_minutes": 121,
+            },
+        )
+        assert response.status_code == 422
+
+
 class TestGetProject:
     """GET /api/v1/projects/{id} returns project status."""
 

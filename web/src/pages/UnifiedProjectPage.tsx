@@ -33,6 +33,7 @@ function CreationForm() {
   const [sourceText, setSourceText] = useState("");
   const [filename, setFilename] = useState<string | undefined>();
   const [autonomous, setAutonomous] = useState(false);
+  const [duration, setDuration] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -48,12 +49,25 @@ function CreationForm() {
     setFilename(undefined);
   }, []);
 
+  const showDuration = mode === "original" || mode === "inspired_by";
+
   const sourceTextLabel =
     mode === "adapt" ? "Story to adapt" : "Topic or idea";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sourceText.trim()) return;
+
+    const trimmedDuration = duration.trim();
+    const parsedDuration =
+      trimmedDuration === "" ? undefined : Number(trimmedDuration);
+
+    if (parsedDuration !== undefined) {
+      if (!Number.isInteger(parsedDuration) || parsedDuration < 1 || parsedDuration > 120) {
+        setError("Duration must be a whole number between 1 and 120 minutes");
+        return;
+      }
+    }
 
     setError(null);
     setCreating(true);
@@ -63,6 +77,9 @@ function CreationForm() {
         mode,
         source_text: sourceText,
         autonomous,
+        ...(parsedDuration !== undefined
+          ? { target_duration_minutes: parsedDuration }
+          : {}),
       });
       navigate(`/project/${project.project_id}`, { replace: true });
     } catch (err) {
@@ -106,6 +123,7 @@ function CreationForm() {
                   onChange={() => {
                     setMode(option.value);
                     if (option.value !== "adapt") setFilename(undefined);
+                    if (option.value === "adapt") setDuration("");
                   }}
                   className="mt-0.5 accent-blue-600 focus:ring-2 focus:ring-blue-500"
                 />
@@ -153,6 +171,31 @@ function CreationForm() {
             }
           />
         </div>
+
+        {/* Duration */}
+        {showDuration && (
+          <div className="mb-6">
+            <label htmlFor="duration" className="block text-sm font-medium mb-1">
+              Target duration (minutes)
+            </label>
+            <input
+              id="duration"
+              type="number"
+              min={1}
+              max={120}
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
+              placeholder={mode === "inspired_by" ? "Match source length" : "30"}
+              disabled={creating}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              {mode === "inspired_by"
+                ? "Leave empty to match source story length"
+                : "Leave empty for default (30 minutes)"}
+            </p>
+          </div>
+        )}
 
         {/* Autonomous toggle */}
         <div className="mb-6">
