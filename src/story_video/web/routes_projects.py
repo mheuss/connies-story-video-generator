@@ -6,9 +6,10 @@ All state is managed through ProjectState (project.json on disk).
 
 import shutil
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from story_video.config import load_config
 from story_video.models import InputMode
@@ -73,6 +74,7 @@ class CreateProjectRequest(BaseModel):
     mode: str
     source_text: str
     autonomous: bool = False
+    target_duration_minutes: int | None = Field(default=None, gt=0, le=120)
 
     @field_validator("mode")
     @classmethod
@@ -103,9 +105,18 @@ async def create_project(body: CreateProjectRequest) -> dict:
     """Create a new story video project."""
     mode = InputMode(body.mode)
     config = load_config(None)
-    config = config.model_copy(
-        update={"pipeline": config.pipeline.model_copy(update={"autonomous": body.autonomous})}
-    )
+
+    updates: dict[str, Any] = {
+        "pipeline": config.pipeline.model_copy(update={"autonomous": body.autonomous}),
+    }
+    if body.target_duration_minutes is not None:
+        updates["story"] = config.story.model_copy(
+            update={
+                "target_duration_minutes": body.target_duration_minutes,
+                "target_duration_override": True,
+            }
+        )
+    config = config.model_copy(update=updates)
 
     try:
         project_id = generate_project_id(body.mode, _output_dir)
