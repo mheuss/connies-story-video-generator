@@ -145,6 +145,27 @@ describe("useProgressStream", () => {
     expect(es.readyState).toBe(2); // CLOSED
   });
 
+  it("removes all event listeners on unmount", () => {
+    const removeSpy = vi.spyOn(MockEventSource.prototype, "removeEventListener");
+    const { unmount } = renderHook(() => useProgressStream("test-project"));
+    const es = MockEventSource.instances[0];
+
+    // Verify listeners were registered
+    const registeredTypes = Object.keys(es.listeners);
+    expect(registeredTypes).toContain("phase_started");
+    expect(registeredTypes).toContain("completed");
+
+    unmount();
+
+    // Verify removeEventListener was called for each registered event type
+    const removedTypes = removeSpy.mock.calls.map((call) => call[0]);
+    for (const type of ["phase_started", "scene_progress", "checkpoint", "completed", "error"]) {
+      expect(removedTypes).toContain(type);
+    }
+
+    removeSpy.mockRestore();
+  });
+
   describe("conditional connection", () => {
     it("does not connect SSE when enabled is false", () => {
       renderHook(() => useProgressStream("test-project", { enabled: false }));
