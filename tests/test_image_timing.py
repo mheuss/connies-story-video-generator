@@ -76,9 +76,9 @@ class TestCharPositionToTimestamp:
         assert char_position_to_timestamp(0, captions, offsets) == 0.0
 
     def test_raises_on_empty_offsets(self):
-        """Empty word_char_offsets raises ValueError."""
+        """Empty word_char_offsets raises ValueError with diagnostic hint."""
         captions = CaptionResult(duration=1.0, words=[], segments=[], language="en")
-        with pytest.raises(ValueError, match="word_char_offsets must not be empty"):
+        with pytest.raises(ValueError, match="captions may contain no words"):
             char_position_to_timestamp(0, captions, [])
 
 

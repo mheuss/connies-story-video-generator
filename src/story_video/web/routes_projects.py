@@ -4,6 +4,7 @@ Handles project creation, status queries, and deletion.
 All state is managed through ProjectState (project.json on disk).
 """
 
+import logging
 import shutil
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ from pydantic import BaseModel, Field, field_validator
 from story_video.config import load_config
 from story_video.models import InputMode
 from story_video.state import ProjectState, generate_project_id, scan_project_dirs
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["router"]
 
@@ -47,8 +50,8 @@ async def list_projects() -> dict:
                     preview = raw[:_SOURCE_PREVIEW_LENGTH] + "..."
                 else:
                     preview = raw
-        except OSError:
-            pass
+        except (OSError, UnicodeDecodeError):
+            logger.warning("Failed to read source preview for %s", source_path, exc_info=True)
 
         projects.append(
             {

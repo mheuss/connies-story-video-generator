@@ -85,6 +85,13 @@ class OpenAIWhisperProvider:
                 timestamp_granularities=["word", "segment"],
             )
 
+        if not response.words or not response.segments:
+            msg = (
+                f"Whisper returned no transcription data for {audio_path.name} "
+                f"— audio may be silent or invalid"
+            )
+            raise ValueError(msg)
+
         return CaptionResult(
             segments=[
                 CaptionSegment(text=seg.text, start=seg.start, end=seg.end)

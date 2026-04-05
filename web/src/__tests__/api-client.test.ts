@@ -1,12 +1,17 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { api } from "../api/client";
 
-// Mock fetch globally
 const mockFetch = vi.fn();
-globalThis.fetch = mockFetch;
+let originalFetch: typeof globalThis.fetch;
 
 beforeEach(() => {
+  originalFetch = globalThis.fetch;
+  globalThis.fetch = mockFetch;
   mockFetch.mockReset();
+});
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
 });
 
 describe("api.getHealth", () => {

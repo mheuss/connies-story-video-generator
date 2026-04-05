@@ -311,3 +311,27 @@ class TestListProjects:
         response = client.get("/api/v1/projects")
         preview = response.json()["projects"][0]["source_text_preview"]
         assert preview == ""
+
+    def test_list_logs_warning_on_source_read_error(self, client, output_dir, caplog):
+        """OSError reading source_story.txt logs a warning, preview stays empty."""
+        import logging
+
+        client.post(
+            "/api/v1/projects",
+            json={"mode": "adapt", "source_text": "A story."},
+        )
+        project_id = client.get("/api/v1/projects").json()["projects"][0]["project_id"]
+
+        # Make the source file unreadable by replacing it with a directory
+        # (reading a directory raises OSError/IsADirectoryError)
+        source_path = output_dir / project_id / "source_story.txt"
+        source_path.unlink()
+        source_path.mkdir()
+
+        with caplog.at_level(logging.WARNING, logger="story_video.web.routes_projects"):
+            response = client.get("/api/v1/projects")
+
+        assert response.status_code == 200
+        preview = response.json()["projects"][0]["source_text_preview"]
+        assert preview == ""
+        assert "Failed to read source preview" in caplog.text
