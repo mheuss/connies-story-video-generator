@@ -46,6 +46,7 @@ export function useProgressStream(
     if (!enabled || !projectId) return;
 
     let retryCount = 0;
+    let activeHandlers: Array<[string, (event: MessageEvent) => void]> = [];
 
     const connect = () => {
       const es = new EventSource(`/api/v1/projects/${projectId}/progress`);
@@ -84,8 +85,11 @@ export function useProgressStream(
         }
       };
 
+      activeHandlers = [];
       for (const type of SSE_EVENT_TYPES) {
-        es.addEventListener(type, handleEvent(type));
+        const handler = handleEvent(type);
+        activeHandlers.push([type, handler]);
+        es.addEventListener(type, handler);
       }
 
       es.onerror = () => {
@@ -126,7 +130,13 @@ export function useProgressStream(
     connect();
 
     return () => {
-      esRef.current?.close();
+      const es = esRef.current;
+      if (es) {
+        for (const [type, handler] of activeHandlers) {
+          es.removeEventListener(type, handler);
+        }
+        es.close();
+      }
     };
   }, [projectId, enabled, resetCount]);
 

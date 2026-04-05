@@ -4,6 +4,16 @@ import { api } from "../api/client";
 import type { ProjectSummary } from "../api/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Trash2 } from "lucide-react";
 
 /** Maps project status to a shadcn Badge variant for consistent styling. */
 const STATUS_VARIANT: Record<
@@ -41,14 +51,35 @@ export default function ProjectListPage() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
+  const loadProjects = () => {
     api
       .listProjects()
       .then((res) => setProjects(res.projects))
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadProjects();
   }, []);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.deleteProject(deleteTarget.project_id);
+      setDeleteTarget(null);
+      loadProjects();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete project");
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (loading) {
     return <p>Loading projects...</p>;
@@ -102,9 +133,23 @@ export default function ProjectListPage() {
                         {project.status.replace(/_/g, " ")}
                       </Badge>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDate(project.created_at)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {formatDate(project.created_at)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDeleteTarget(project);
+                        }}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
                   </div>
                   <div className="flex gap-4 text-sm text-muted-foreground">
                     {project.current_phase && (
@@ -125,6 +170,31 @@ export default function ProjectListPage() {
           );
         })}
       </div>
+
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete project?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete this project and all its generated files.
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
