@@ -427,6 +427,63 @@ class TestGenerateCaptionsMultiDigitScene:
 
 
 # ---------------------------------------------------------------------------
+# OpenAIWhisperProvider — validates Whisper API response
+# ---------------------------------------------------------------------------
+
+
+class TestTranscribeValidatesResponse:
+    """OpenAIWhisperProvider.transcribe() rejects empty Whisper responses."""
+
+    def test_raises_on_empty_words(self, mock_openai, tmp_path):
+        """transcribe() raises ValueError when Whisper returns no words."""
+        response = MagicMock()
+        response.segments = [MagicMock(text="Hello", start=0.0, end=1.0)]
+        response.words = []
+        response.language = "en"
+        response.duration = 1.0
+        mock_openai.audio.transcriptions.create.return_value = response
+
+        audio_file = tmp_path / "silent.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        provider = OpenAIWhisperProvider()
+        with pytest.raises(ValueError, match="no transcription data"):
+            provider.transcribe(audio_file)
+
+    def test_raises_on_empty_segments(self, mock_openai, tmp_path):
+        """transcribe() raises ValueError when Whisper returns no segments."""
+        response = MagicMock()
+        response.segments = []
+        response.words = [MagicMock(word="Hello", start=0.0, end=1.0)]
+        response.language = "en"
+        response.duration = 1.0
+        mock_openai.audio.transcriptions.create.return_value = response
+
+        audio_file = tmp_path / "silent.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        provider = OpenAIWhisperProvider()
+        with pytest.raises(ValueError, match="no transcription data"):
+            provider.transcribe(audio_file)
+
+    def test_raises_on_both_empty(self, mock_openai, tmp_path):
+        """transcribe() raises ValueError when Whisper returns nothing."""
+        response = MagicMock()
+        response.segments = []
+        response.words = []
+        response.language = "en"
+        response.duration = 0.0
+        mock_openai.audio.transcriptions.create.return_value = response
+
+        audio_file = tmp_path / "silent.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        provider = OpenAIWhisperProvider()
+        with pytest.raises(ValueError, match="no transcription data"):
+            provider.transcribe(audio_file)
+
+
+# ---------------------------------------------------------------------------
 # _reconcile_punctuation — restores punctuation from segments to words
 # ---------------------------------------------------------------------------
 
