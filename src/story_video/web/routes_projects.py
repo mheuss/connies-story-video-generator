@@ -50,7 +50,7 @@ async def list_projects() -> dict:
                     preview = raw[:_SOURCE_PREVIEW_LENGTH] + "..."
                 else:
                     preview = raw
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             logger.warning("Failed to read source preview for %s", source_path, exc_info=True)
 
         projects.append(

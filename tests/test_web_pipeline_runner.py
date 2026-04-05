@@ -162,7 +162,9 @@ class TestErrorEventContent:
 
             mock_run.side_effect = RuntimeError("something broke")
             run_pipeline_in_thread(mock_state)
-            runner._active_thread.join(timeout=5)
+            thread = runner._active_thread
+            if thread is not None:
+                thread.join(timeout=5)
 
         error_events = [e for e in pushed_events if e.event == "error"]
         assert len(error_events) == 1
