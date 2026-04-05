@@ -5,28 +5,24 @@ import { ArtifactViewer } from "../components/ArtifactViewer";
 
 const mockListArtifacts = vi.fn();
 const mockGetArtifactUrl = vi.fn();
+const mockGetArtifactText = vi.fn();
 const mockUpdateArtifact = vi.fn();
 
 vi.mock("../api/client", () => ({
   api: {
     listArtifacts: (...args: unknown[]) => mockListArtifacts(...args),
     getArtifactUrl: (...args: unknown[]) => mockGetArtifactUrl(...args),
+    getArtifactText: (...args: unknown[]) => mockGetArtifactText(...args),
     updateArtifact: (...args: unknown[]) => mockUpdateArtifact(...args),
   },
 }));
 
 describe("ArtifactViewer", () => {
-  let originalFetch: typeof globalThis.fetch;
-
   beforeEach(() => {
     mockListArtifacts.mockReset();
     mockGetArtifactUrl.mockReset();
+    mockGetArtifactText.mockReset();
     mockUpdateArtifact.mockReset();
-    originalFetch = globalThis.fetch;
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
   });
 
   it("fetches and displays artifact filenames", async () => {
@@ -163,11 +159,7 @@ describe("ArtifactViewer", () => {
       status: "updated",
       filename: "analysis.json",
     });
-
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      text: () => Promise.resolve("original content"),
-    }) as unknown as typeof fetch;
+    mockGetArtifactText.mockResolvedValue("original content");
 
     const user = userEvent.setup();
     render(
@@ -186,6 +178,14 @@ describe("ArtifactViewer", () => {
     });
 
     await user.click(screen.getByRole("button", { name: /edit/i }));
+
+    await waitFor(() => {
+      expect(mockGetArtifactText).toHaveBeenCalledWith(
+        "test",
+        "analysis",
+        "analysis.json",
+      );
+    });
 
     const textarea = screen.getByRole("textbox");
     await user.clear(textarea);

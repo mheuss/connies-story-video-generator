@@ -24,13 +24,22 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error("Network error — is the backend running?");
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const body = await response
@@ -97,6 +106,27 @@ export const api = {
     request<ArtifactList>(`/projects/${projectId}/artifacts/${phase}`, {
       method: "GET",
     }),
+
+  getArtifactText: async (projectId: string, phase: string, filename: string) => {
+    let response: Response;
+
+    try {
+      response = await fetch(
+        `${BASE}/projects/${projectId}/artifacts/${phase}/${filename}`,
+      );
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new Error("Network error — is the backend running?");
+      }
+      throw error;
+    }
+
+    if (!response.ok) {
+      throw new ApiError(response.status, `Failed to fetch ${filename}`);
+    }
+
+    return response.text();
+  },
 
   getArtifactUrl: (projectId: string, phase: string, filename: string) =>
     `${BASE}/projects/${projectId}/artifacts/${phase}/${filename}`,

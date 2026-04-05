@@ -75,12 +75,7 @@ export function ArtifactViewer({
   const handleEdit = async (filename: string) => {
     setActionError(null);
     try {
-      const url = api.getArtifactUrl(projectId, phase, filename);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ${filename}`);
-      }
-      const text = await response.text();
+      const text = await api.getArtifactText(projectId, phase, filename);
       setEditContent(text);
       setEditingFile(filename);
     } catch (err) {

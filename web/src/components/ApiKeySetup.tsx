@@ -18,6 +18,9 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
   const [anthropicConfigured, setAnthropicConfigured] = useState(false);
   const [openaiConfigured, setOpenaiConfigured] = useState(false);
   const [elevenlabsConfigured, setElevenlabsConfigured] = useState(false);
+  const hasRequiredKeys =
+    (anthropicConfigured || anthropicKey.trim() !== "") &&
+    (openaiConfigured || openaiKey.trim() !== "");
 
   useEffect(() => {
     api
@@ -120,7 +123,7 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
 
           <Button
             type="submit"
-            disabled={saving || (!anthropicKey && !openaiKey && !elevenlabsKey)}
+            disabled={saving || !hasRequiredKeys}
           >
             {saving ? "Saving..." : "Save Keys"}
           </Button>

@@ -12,6 +12,7 @@ export default function App() {
         <Route path="/create" element={<Navigate to="/project/new" replace />} />
         <Route path="/project/:projectId" element={<UnifiedProjectPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   );
