@@ -76,7 +76,10 @@ def char_position_to_timestamp(
         ValueError: If *word_char_offsets* is empty.
     """
     if not word_char_offsets:
-        msg = "word_char_offsets must not be empty"
+        msg = (
+            "word_char_offsets must not be empty — captions may contain "
+            "no words (silent or invalid audio)"
+        )
         raise ValueError(msg)
     idx = bisect_left(word_char_offsets, position)
     if idx >= len(word_char_offsets):
