@@ -136,3 +136,35 @@ class TestIsRunning:
             runner._active_thread = dead_thread
 
         assert not is_running()
+
+
+class TestErrorEventContent:
+    """Error event pushed to the bridge includes actionable exception details."""
+
+    def test_error_event_includes_exception_details(self):
+        """Error event pushed to bridge includes exception type and message."""
+        mock_state = MagicMock()
+        mock_state.metadata.config.tts.provider = "openai"
+        mock_state.metadata.project_id = "test-project"
+
+        pushed_events = []
+
+        with (
+            patch.object(runner, "run_pipeline") as mock_run,
+            patch.object(runner, "ClaudeClient"),
+            patch.object(runner, "OpenAIImageProvider"),
+            patch.object(runner, "OpenAIWhisperProvider"),
+            patch.object(runner, "_make_tts_provider"),
+            patch("story_video.web.pipeline_runner.ProgressBridge") as MockBridge,
+        ):
+            mock_bridge_instance = MockBridge.return_value
+            mock_bridge_instance.push.side_effect = lambda evt: pushed_events.append(evt)
+
+            mock_run.side_effect = RuntimeError("something broke")
+            run_pipeline_in_thread(mock_state)
+            runner._active_thread.join(timeout=5)
+
+        error_events = [e for e in pushed_events if e.event == "error"]
+        assert len(error_events) == 1
+        assert "RuntimeError" in error_events[0].data["message"]
+        assert "something broke" in error_events[0].data["message"]

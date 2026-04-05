@@ -120,12 +120,15 @@ def _run_pipeline_safe(state: ProjectState, bridge: ProgressBridge) -> None:
             )
         else:
             bridge.push(ProgressEvent(event="completed", data={}))
-    except Exception:
+    except Exception as e:
         logger.exception("Pipeline failed for project %s", state.metadata.project_id)
         bridge.push(
             ProgressEvent(
                 event="error",
-                data={"message": f"Pipeline failed for project {state.metadata.project_id}"},
+                data={
+                    "message": f"Pipeline failed for project {state.metadata.project_id}: "
+                    f"{type(e).__name__}: {e}",
+                },
             )
         )
     finally:
