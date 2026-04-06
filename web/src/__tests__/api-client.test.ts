@@ -182,15 +182,14 @@ describe("api.approvePipeline", () => {
     expect(body.auto).toBe(true);
   });
 
-  it("sends empty body when auto is not specified", async () => {
+  it("omits body when auto is not specified", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ status: "approved" }),
     });
 
     await api.approvePipeline("test-project");
-    const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
-    expect(body.auto).toBeUndefined();
+    expect(mockFetch.mock.calls[0][1]?.body).toBeUndefined();
   });
 });
 

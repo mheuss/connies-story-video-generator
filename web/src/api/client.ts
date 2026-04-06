@@ -94,7 +94,7 @@ export const api = {
   approvePipeline: (projectId: string, auto?: boolean) =>
     request<{ status: string }>(`/projects/${projectId}/approve`, {
       method: "POST",
-      body: JSON.stringify(auto ? { auto: true } : {}),
+      ...(auto !== undefined ? { body: JSON.stringify({ auto }) } : {}),
     }),
 
   rerunFromPhase: (projectId: string, phase: string) =>
