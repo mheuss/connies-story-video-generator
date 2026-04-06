@@ -36,7 +36,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     });
   } catch (error) {
     if (error instanceof TypeError) {
-      throw new Error("Network error — is the backend running?");
+      throw new Error("Network error — is the backend running?", {
+        cause: error,
+      });
     }
     throw error;
   }
@@ -117,7 +119,9 @@ export const api = {
       );
     } catch (error) {
       if (error instanceof TypeError) {
-        throw new Error("Network error — is the backend running?");
+        throw new Error("Network error — is the backend running?", {
+          cause: error,
+        });
       }
       throw error;
     }

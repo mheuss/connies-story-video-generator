@@ -50,9 +50,9 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
 
     try {
       await api.setApiKeys({
-        anthropic_api_key: anthropicKey || undefined,
-        openai_api_key: openaiKey || undefined,
-        elevenlabs_api_key: elevenlabsKey || undefined,
+        anthropic_api_key: anthropicKey.trim() || undefined,
+        openai_api_key: openaiKey.trim() || undefined,
+        elevenlabs_api_key: elevenlabsKey.trim() || undefined,
       });
       onComplete();
     } catch (err) {
