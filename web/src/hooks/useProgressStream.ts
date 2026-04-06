@@ -46,6 +46,7 @@ export function useProgressStream(
     if (!enabled || !projectId) return;
 
     let retryCount = 0;
+    let reconnecting = false;
     let activeHandlers: Array<[string, (event: MessageEvent) => void]> = [];
 
     const connect = () => {
@@ -94,8 +95,10 @@ export function useProgressStream(
 
       es.onerror = () => {
         es.close();
+        if (reconnecting) return;
         if (retryCount < 5) {
           retryCount++;
+          reconnecting = true;
           setTimeout(async () => {
             // Check project status before reconnecting — the pipeline may
             // have reached a terminal state while we were disconnected.
@@ -103,10 +106,12 @@ export function useProgressStream(
               const status = await api.getProject(projectId);
               if (status.status === "completed") {
                 setState((prev) => ({ ...prev, isComplete: true }));
+                reconnecting = false;
                 return;
               }
               if (status.status === "failed") {
                 setState((prev) => ({ ...prev, error: "Pipeline failed" }));
+                reconnecting = false;
                 return;
               }
               if (status.status === "awaiting_review" && status.current_phase) {
@@ -114,11 +119,13 @@ export function useProgressStream(
                   ...prev,
                   checkpoint: { phase: status.current_phase!, project_id: status.project_id },
                 }));
+                reconnecting = false;
                 return;
               }
             } catch {
               // REST check failed too — fall through to SSE reconnect
             }
+            reconnecting = false;
             connect();
           }, 1000 * retryCount);
         } else {
