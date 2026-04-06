@@ -211,4 +211,35 @@ describe("ArtifactViewer", () => {
     );
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
+
+  it("shows a validation error returned during save", async () => {
+    mockListArtifacts.mockResolvedValue({
+      files: [
+        { name: "analysis.json", size: 256, content_type: "application/json" },
+      ],
+    });
+    mockGetArtifactText.mockResolvedValue('{"craft_notes":"original"}');
+    mockUpdateArtifact.mockRejectedValue(new Error("Content must be valid JSON"));
+
+    const user = userEvent.setup();
+    render(
+      <ArtifactViewer projectId="test" phase="analysis" editable={true} />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /edit/i }));
+
+    const textarea = await screen.findByRole("textbox");
+    await user.clear(textarea);
+    await user.click(textarea);
+    await user.paste('{"craft_notes":"broken"');
+    await user.click(screen.getByRole("button", { name: /save/i }));
+
+    expect(await screen.findByText("Content must be valid JSON")).toBeInTheDocument();
+    expect(mockUpdateArtifact).toHaveBeenCalledWith(
+      "test",
+      "analysis",
+      "analysis.json",
+      '{"craft_notes":"broken"',
+    );
+  });
 });

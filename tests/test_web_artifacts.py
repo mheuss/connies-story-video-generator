@@ -130,6 +130,20 @@ class TestUpdateArtifact:
         )
         assert response.status_code == 422
 
+    def test_update_rejects_invalid_json_content(self, client, project_with_artifacts):
+        original = (project_with_artifacts.project_dir / "analysis.json").read_text(
+            encoding="utf-8"
+        )
+        response = client.put(
+            "/api/v1/projects/test-project/artifacts/analysis/analysis.json",
+            json={"content": '{"craft_notes": "broken"'},
+        )
+        assert response.status_code == 422
+        assert "valid JSON" in response.json()["detail"]
+        assert (project_with_artifacts.project_dir / "analysis.json").read_text(
+            encoding="utf-8"
+        ) == original
+
 
 class TestExportImagePrompts:
     """_export_image_prompts writes scene prompts as editable JSON files."""

@@ -53,6 +53,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function validateArtifactContent(filename: string, content: string): void {
+  if (!filename.toLowerCase().endsWith(".json")) return;
+
+  try {
+    JSON.parse(content);
+  } catch {
+    throw new Error("Content must be valid JSON");
+  }
+}
+
 export const api = {
   // Health
   getHealth: () => request<{ status: string }>("/health", { method: "GET" }),
@@ -145,19 +155,21 @@ export const api = {
   getArtifactUrl: (projectId: string, phase: string, filename: string) =>
     `${BASE}/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}/${encodeURIComponent(filename)}`,
 
-  updateArtifact: (
+  updateArtifact: async (
     projectId: string,
     phase: string,
     filename: string,
     content: string,
-  ) =>
-    request<{ status: string; filename: string }>(
+  ) => {
+    validateArtifactContent(filename, content);
+    return request<{ status: string; filename: string }>(
       `/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}/${encodeURIComponent(filename)}`,
       {
         method: "PUT",
         body: JSON.stringify({ content }),
       },
-    ),
+    );
+  },
 
   // TTS Review
   getTtsScenes: (projectId: string) =>

@@ -64,3 +64,16 @@ class TestProgressBridge:
         assert bridge.try_get(timeout=0.1) is first
         assert bridge.try_get(timeout=0.1) is second
         assert bridge.try_get(timeout=0.1) is third
+
+    def test_terminal_event_does_not_reorder_pending_events(self):
+        """A terminal event marks completion without jumping ahead in the queue."""
+        bridge = ProgressBridge()
+        first = ProgressEvent(event="phase_started", data={"phase": "analysis"})
+        second = ProgressEvent(event="completed")
+
+        bridge.push(first)
+        bridge.push(second)
+
+        assert bridge.is_done is True
+        assert bridge.try_get(timeout=0.1) is first
+        assert bridge.try_get(timeout=0.1) is second

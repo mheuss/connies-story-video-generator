@@ -245,15 +245,27 @@ describe("api.updateArtifact", () => {
       "adapt-2026-02-25",
       "analysis",
       "analysis.json",
-      "new content",
+      '{"craft_notes":"new content"}',
     );
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/v1/projects/adapt-2026-02-25/artifacts/analysis/analysis.json",
       expect.objectContaining({
         method: "PUT",
-        body: JSON.stringify({ content: "new content" }),
+        body: JSON.stringify({ content: '{"craft_notes":"new content"}' }),
       }),
     );
+  });
+
+  it("rejects invalid JSON content before making the request", async () => {
+    await expect(
+      api.updateArtifact(
+        "adapt-2026-02-25",
+        "analysis",
+        "analysis.json",
+        '{"craft_notes": "broken"',
+      ),
+    ).rejects.toThrow("Content must be valid JSON");
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 
