@@ -7,6 +7,8 @@ import pytest
 
 from story_video.utils.retry import with_retry
 
+pytestmark = pytest.mark.usefixtures("patch_sleep")
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -30,6 +30,8 @@ from tests.error_factories import (
     make_openai_server_error,
 )
 
+pytestmark = pytest.mark.usefixtures("patch_sleep")
+
 # ---------------------------------------------------------------------------
 # Test data
 # ---------------------------------------------------------------------------

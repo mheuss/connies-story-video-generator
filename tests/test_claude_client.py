@@ -10,6 +10,8 @@ import pytest
 
 from story_video.pipeline.claude_client import ClaudeClient
 
+pytestmark = pytest.mark.usefixtures("patch_sleep")
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
