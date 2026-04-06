@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import App from "../App";
+
+/** Renders the current pathname so tests can assert on redirect targets. */
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-path">{location.pathname}</div>;
+}
 
 // Mock the page components to keep tests focused on routing
 vi.mock("../pages/ProjectListPage", () => ({
@@ -30,10 +36,12 @@ describe("App routing", () => {
     render(
       <MemoryRouter initialEntries={["/create"]}>
         <App />
+        <LocationProbe />
       </MemoryRouter>,
     );
     // /create redirects to /project/new, which renders UnifiedProjectPage
     expect(await screen.findByTestId("project-page")).toBeInTheDocument();
+    expect(screen.getByTestId("location-path")).toHaveTextContent("/project/new");
   });
 
   it("renders UnifiedProjectPage at /project/:projectId", async () => {
@@ -58,8 +66,10 @@ describe("App routing", () => {
     render(
       <MemoryRouter initialEntries={["/does-not-exist"]}>
         <App />
+        <LocationProbe />
       </MemoryRouter>,
     );
     expect(await screen.findByTestId("project-list-page")).toBeInTheDocument();
+    expect(screen.getByTestId("location-path")).toHaveTextContent("/");
   });
 });
