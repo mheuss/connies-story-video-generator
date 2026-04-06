@@ -228,8 +228,12 @@ def parse_story_header(text: str) -> tuple[StoryHeader | None, str]:
     if not stripped.startswith("---"):
         return None, text
 
-    # Find closing delimiter
-    # Known limitation: does not handle --- inside YAML values
+    # Find closing delimiter.
+    # PyYAML treats --- at column 0 as a document separator in ALL
+    # contexts (block scalars, flow mappings, quoted strings).  This
+    # means our naive find("\n---") is consistent with how PyYAML would
+    # parse the same boundary.  Values containing literal --- must use
+    # indented block scalars (    ---) or inline quoting ("a --- b").
     rest = stripped[3:].lstrip("\n")
     closing_idx = rest.find("\n---")
     if closing_idx == -1:
