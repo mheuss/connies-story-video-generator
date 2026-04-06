@@ -874,6 +874,65 @@ class TestRunPipelineNarrationPrepCorruptDoneFile:
         assert "Corrupt narration_prep_done.json" in caplog.text
 
 
+class TestRunPipelineNarrationPrepAtomicTracker:
+    """_run_narration_prep writes tracker file atomically."""
+
+    @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
+    def test_tracker_preserved_on_write_failure(self, mock_prep, tmp_path):
+        """If writing the tracker fails mid-scene, the previous tracker is preserved."""
+        call_count = 0
+
+        def prep_side_effect(text, *args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise RuntimeError("Simulated LLM failure on scene 2")
+            return {
+                "modified_text": "prepped",
+                "changes": [],
+                "pronunciation_guide_additions": [],
+            }
+
+        mock_prep.side_effect = prep_side_effect
+
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=3, up_to_asset=AssetType.TEXT)
+
+        for scene in state.metadata.scenes:
+            scene.narration_text = scene.prose
+
+        done_path = state.project_dir / "narration_prep_done.json"
+
+        # Scene 2 will fail; scene 1's tracker entry should be preserved
+        with pytest.raises(RuntimeError, match="Simulated LLM failure"):
+            _run_narration_prep(state, MagicMock())
+
+        # Tracker should contain scene 1 (written atomically before scene 2 failed)
+        assert done_path.exists()
+        done_scenes = json.loads(done_path.read_text(encoding="utf-8"))
+        assert done_scenes == [1]
+
+    @patch("story_video.pipeline.orchestrator.prepare_narration_llm")
+    def test_no_temp_files_left_after_tracker_write(self, mock_prep, tmp_path):
+        """Atomic write pattern leaves no temp files in the project directory."""
+        mock_prep.return_value = {
+            "modified_text": "prepped",
+            "changes": [],
+            "pronunciation_guide_additions": [],
+        }
+
+        state = _make_adapt_state(tmp_path, autonomous=True)
+        _add_scenes_with_assets(state, count=2, up_to_asset=AssetType.TEXT)
+        for scene in state.metadata.scenes:
+            scene.narration_text = scene.prose
+
+        _run_narration_prep(state, MagicMock())
+
+        # No .tmp files should remain in the project directory
+        tmp_files = list(state.project_dir.glob("*.tmp"))
+        assert tmp_files == [], f"Leftover temp files: {tmp_files}"
+
+
 # ---------------------------------------------------------------------------
 # TestRunPipelineDispatch — phase dispatch routing
 # ---------------------------------------------------------------------------
