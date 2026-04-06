@@ -6,9 +6,13 @@ from fastapi.testclient import TestClient
 from story_video.web.app import create_app
 
 
-@pytest.fixture(autouse=True)
-def _patch_sleep(monkeypatch):
-    """Eliminate retry delays so tests run instantly."""
+@pytest.fixture()
+def patch_sleep(monkeypatch):
+    """Patch time.sleep to eliminate tenacity retry delays.
+
+    Not autouse — only tests that exercise retry paths should use this.
+    Apply via @pytest.mark.usefixtures("patch_sleep") or request it directly.
+    """
     monkeypatch.setattr("time.sleep", lambda _: None)
 
 
