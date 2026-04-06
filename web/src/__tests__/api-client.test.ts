@@ -258,6 +258,16 @@ describe("api.updateArtifact", () => {
   });
 });
 
+describe("api network errors", () => {
+  it("surfaces a specific message when fetch fails before a response", async () => {
+    mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await expect(api.getHealth()).rejects.toMatchObject({
+      message: "Network error — is the backend running?",
+    });
+  });
+});
+
 describe("api.listProjects", () => {
   it("calls GET /api/v1/projects and returns project list", async () => {
     const mockResponse = {

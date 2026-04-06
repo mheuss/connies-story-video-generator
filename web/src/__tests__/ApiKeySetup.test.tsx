@@ -74,4 +74,43 @@ describe("ApiKeySetup", () => {
       expect(onComplete).toHaveBeenCalled();
     });
   });
+
+  it("keeps submit disabled until both required keys are available", async () => {
+    mockGetStatus.mockResolvedValueOnce({
+      anthropic_configured: false,
+      openai_configured: false,
+      elevenlabs_configured: false,
+    });
+    const user = userEvent.setup();
+
+    render(<ApiKeySetup onComplete={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+    });
+
+    await user.type(screen.getByLabelText(/anthropic/i), "sk-ant-test");
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/openai/i), "sk-openai-test");
+    expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
+  });
+
+  it("allows submit when one required key is already configured and the other is entered", async () => {
+    mockGetStatus.mockResolvedValueOnce({
+      anthropic_configured: true,
+      openai_configured: false,
+      elevenlabs_configured: false,
+    });
+    const user = userEvent.setup();
+
+    render(<ApiKeySetup onComplete={vi.fn()} forceShow />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+    });
+
+    await user.type(screen.getByLabelText(/openai/i), "sk-openai-test");
+    expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
+  });
 });

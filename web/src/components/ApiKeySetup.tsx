@@ -18,6 +18,9 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
   const [anthropicConfigured, setAnthropicConfigured] = useState(false);
   const [openaiConfigured, setOpenaiConfigured] = useState(false);
   const [elevenlabsConfigured, setElevenlabsConfigured] = useState(false);
+  const hasRequiredKeys =
+    (anthropicConfigured || anthropicKey.trim() !== "") &&
+    (openaiConfigured || openaiKey.trim() !== "");
 
   useEffect(() => {
     api
@@ -47,9 +50,9 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
 
     try {
       await api.setApiKeys({
-        anthropic_api_key: anthropicKey || undefined,
-        openai_api_key: openaiKey || undefined,
-        elevenlabs_api_key: elevenlabsKey || undefined,
+        anthropic_api_key: anthropicKey.trim() || undefined,
+        openai_api_key: openaiKey.trim() || undefined,
+        elevenlabs_api_key: elevenlabsKey.trim() || undefined,
       });
       onComplete();
     } catch (err) {
@@ -120,7 +123,7 @@ export default function ApiKeySetup({ onComplete, forceShow }: Props) {
 
           <Button
             type="submit"
-            disabled={saving || (!anthropicKey && !openaiKey && !elevenlabsKey)}
+            disabled={saving || !hasRequiredKeys}
           >
             {saving ? "Saving..." : "Save Keys"}
           </Button>

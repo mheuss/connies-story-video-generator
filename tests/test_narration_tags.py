@@ -106,6 +106,111 @@ class TestParseStoryHeader:
             parse_story_header(text)
 
 
+class TestParseStoryHeaderYamlDelimiter:
+    """parse_story_header handles --- appearing inside YAML values.
+
+    The closing --- delimiter must not be confused with --- that appears
+    as part of a YAML value (e.g., in a multi-line quoted string or
+    block scalar). These tests verify that values containing --- are
+    preserved and that no data is silently lost.
+    """
+
+    def test_dashes_in_quoted_string_same_line(self):
+        """--- inside a quoted string on the same line is not a delimiter."""
+        text = (
+            "---\nvoices:\n  narrator: nova\n"
+            'images:\n  divider: "A scene showing --- between worlds"\n'
+            "---\nBody text."
+        )
+        header, body = parse_story_header(text)
+        assert header is not None
+        assert header.images["divider"] == "A scene showing --- between worlds"
+        assert body == "Body text."
+
+    def test_block_scalar_dashes_at_column_zero_terminates_header(self):
+        """--- at column 0 terminates a block scalar and the header.
+
+        PyYAML treats --- at column 0 as a document separator in all
+        contexts.  In a block scalar, this truncates the value and ends
+        the front matter.  Any YAML keys after the --- are lost.  Authors
+        must use indented --- (inside block scalars) or inline ---
+        (inside quoted strings) to include literal dashes in values.
+        """
+        text = (
+            "---\nvoices:\n  narrator: nova\nimages:\n  scene: |\n    text before\n---\nBody text."
+        )
+        header, body = parse_story_header(text)
+        assert header is not None
+        # Block scalar value is truncated at the --- document boundary
+        assert "text before" in header.images["scene"]
+        assert "---" not in header.images["scene"]
+        assert body == "Body text."
+
+    def test_dashes_in_block_scalar_indented(self):
+        """--- indented inside a block scalar is not a delimiter."""
+        text = (
+            "---\n"
+            "voices:\n"
+            "  narrator: nova\n"
+            "images:\n"
+            "  transition: |\n"
+            "    A horizontal divider\n"
+            "    ---\n"
+            "    separating two worlds\n"
+            '  lighthouse: "A lighthouse at dawn"\n'
+            "---\n"
+            "Body text."
+        )
+        header, body = parse_story_header(text)
+        assert header is not None
+        assert "transition" in header.images
+        assert "lighthouse" in header.images
+        assert "---" in header.images["transition"]
+        assert body == "Body text."
+
+    def test_body_starting_with_dashes_not_confused(self):
+        """--- in the body text (e.g., markdown HR) does not affect parsing."""
+        text = "---\nvoices:\n  narrator: nova\n---\n---\nThe story begins."
+        header, body = parse_story_header(text)
+        assert header is not None
+        assert header.voices == {"narrator": "nova"}
+        assert body.startswith("---")
+
+
+class TestParseStoryHeaderNonAscii:
+    """parse_story_header handles non-ASCII characters in voice labels and values."""
+
+    def test_non_ascii_voice_labels(self):
+        """Unicode voice labels (e.g., CJK, accented) parse correctly."""
+        text = "---\nvoices:\n  旁白: nova\n  María: shimmer\ndefault_voice: 旁白\n---\nBody text."
+        header, body = parse_story_header(text)
+        assert header is not None
+        assert header.voices == {"旁白": "nova", "María": "shimmer"}
+        assert header.default_voice == "旁白"
+        assert body == "Body text."
+
+    def test_non_ascii_voice_ids(self):
+        """Unicode characters in voice ID values parse correctly."""
+        text = "---\nvoices:\n  narrator: ナレーター\n---\nBody text."
+        header, body = parse_story_header(text)
+        assert header is not None
+        assert header.voices["narrator"] == "ナレーター"
+
+    def test_non_ascii_image_keys_and_prompts(self):
+        """Unicode in image keys and prompt values parse correctly."""
+        text = '---\nvoices:\n  narrator: nova\nimages:\n  灯台: "夜明けの灯台"\n---\nBody text.'
+        header, body = parse_story_header(text)
+        assert header is not None
+        assert header.images["灯台"] == "夜明けの灯台"
+
+    def test_emoji_in_voice_label(self):
+        """Emoji characters in voice labels parse correctly."""
+        text = "---\nvoices:\n  narrator_🎙️: nova\ndefault_voice: narrator_🎙️\n---\nBody text."
+        header, body = parse_story_header(text)
+        assert header is not None
+        assert "narrator_🎙️" in header.voices
+
+
 class TestParseNarrationSegments:
     """parse_narration_segments splits tagged text into segments."""
 

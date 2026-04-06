@@ -24,13 +24,24 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error("Network error — is the backend running?", {
+        cause: error,
+      });
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const body = await response
@@ -88,18 +99,42 @@ export const api = {
 
   rerunFromPhase: (projectId: string, phase: string) =>
     request<RerunResponse>(
-      `/projects/${projectId}/rerun-from/${encodeURIComponent(phase)}`,
+      `/projects/${encodeURIComponent(projectId)}/rerun-from/${encodeURIComponent(phase)}`,
       { method: "POST" },
     ),
 
   // Artifacts
   listArtifacts: (projectId: string, phase: string) =>
-    request<ArtifactList>(`/projects/${projectId}/artifacts/${phase}`, {
-      method: "GET",
-    }),
+    request<ArtifactList>(
+      `/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}`,
+      { method: "GET" },
+    ),
+
+  getArtifactText: async (projectId: string, phase: string, filename: string) => {
+    let response: Response;
+
+    try {
+      response = await fetch(
+        `${BASE}/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}/${encodeURIComponent(filename)}`,
+      );
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new Error("Network error — is the backend running?", {
+          cause: error,
+        });
+      }
+      throw error;
+    }
+
+    if (!response.ok) {
+      throw new ApiError(response.status, `Failed to fetch ${filename}`);
+    }
+
+    return response.text();
+  },
 
   getArtifactUrl: (projectId: string, phase: string, filename: string) =>
-    `${BASE}/projects/${projectId}/artifacts/${phase}/${filename}`,
+    `${BASE}/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}/${encodeURIComponent(filename)}`,
 
   updateArtifact: (
     projectId: string,
@@ -108,7 +143,7 @@ export const api = {
     content: string,
   ) =>
     request<{ status: string; filename: string }>(
-      `/projects/${projectId}/artifacts/${phase}/${filename}`,
+      `/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}/${encodeURIComponent(filename)}`,
       {
         method: "PUT",
         body: JSON.stringify({ content }),

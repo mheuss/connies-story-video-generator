@@ -49,3 +49,18 @@ class TestProgressBridge:
         bridge.push(ProgressEvent(event="phase_started"))
         bridge.push(ProgressEvent(event="scene_progress"))
         assert bridge.is_done is False
+
+    def test_events_are_delivered_in_fifo_order(self):
+        """Events are retrieved in the same order they were pushed."""
+        bridge = ProgressBridge()
+        first = ProgressEvent(event="phase_started", data={"phase": "analysis"})
+        second = ProgressEvent(event="scene_progress", data={"scene": 1})
+        third = ProgressEvent(event="completed")
+
+        bridge.push(first)
+        bridge.push(second)
+        bridge.push(third)
+
+        assert bridge.try_get(timeout=0.1) is first
+        assert bridge.try_get(timeout=0.1) is second
+        assert bridge.try_get(timeout=0.1) is third
