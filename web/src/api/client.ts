@@ -111,6 +111,8 @@ export const api = {
     ),
 
   getArtifactText: async (projectId: string, phase: string, filename: string) => {
+    const MAX_EDIT_SIZE = 1_048_576; // 1 MB
+
     let response: Response;
 
     try {
@@ -128,6 +130,13 @@ export const api = {
 
     if (!response.ok) {
       throw new ApiError(response.status, `Failed to fetch ${filename}`);
+    }
+
+    const contentLength = response.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_EDIT_SIZE) {
+      throw new Error(
+        `File is too large to edit in the browser (${(parseInt(contentLength, 10) / 1_048_576).toFixed(1)} MB). Max: 1 MB.`,
+      );
     }
 
     return response.text();

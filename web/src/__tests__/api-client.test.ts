@@ -324,6 +324,55 @@ describe("error handling", () => {
   });
 });
 
+describe("api.getArtifactText", () => {
+  it("returns text content for small files", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({ "content-length": "100" }),
+      text: () => Promise.resolve("file content"),
+    });
+
+    const result = await api.getArtifactText("proj-1", "analysis", "data.json");
+    expect(result).toBe("file content");
+  });
+
+  it("rejects files over 1 MB", async () => {
+    const overLimit = (1_048_576 + 1).toString();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({ "content-length": overLimit }),
+      text: () => Promise.resolve("x".repeat(100)),
+    });
+
+    await expect(
+      api.getArtifactText("proj-1", "analysis", "huge.json"),
+    ).rejects.toThrow(/too large to edit/i);
+  });
+
+  it("allows files at exactly 1 MB", async () => {
+    const exactLimit = "1048576";
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({ "content-length": exactLimit }),
+      text: () => Promise.resolve("ok"),
+    });
+
+    const result = await api.getArtifactText("proj-1", "analysis", "big.json");
+    expect(result).toBe("ok");
+  });
+
+  it("allows files when Content-Length header is missing", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      headers: new Headers({}),
+      text: () => Promise.resolve("no header"),
+    });
+
+    const result = await api.getArtifactText("proj-1", "analysis", "unknown.json");
+    expect(result).toBe("no header");
+  });
+});
+
 describe("api.rerunFromPhase", () => {
   it("calls POST /api/v1/projects/{id}/rerun-from/{phase}", async () => {
     mockFetch.mockResolvedValueOnce({
