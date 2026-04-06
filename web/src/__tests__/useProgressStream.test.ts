@@ -290,6 +290,84 @@ describe("useProgressStream", () => {
       expect(MockEventSource.instances).toHaveLength(2);
     });
 
+    it("does not double-connect on rapid consecutive errors", async () => {
+      vi.mocked(api.getProject).mockResolvedValue({
+        project_id: "test-project",
+        mode: "adapt",
+        status: "in_progress",
+        current_phase: "analysis",
+        scene_count: 2,
+        created_at: "2026-01-01",
+      });
+
+      renderHook(() => useProgressStream("test-project"));
+      const es = MockEventSource.instances[0];
+
+      // Fire two errors rapidly before any timeout resolves
+      act(() => {
+        es.onerror?.(new Event("error"));
+        es.onerror?.(new Event("error"));
+      });
+
+      // Advance past both potential timeouts
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+
+      // Should have only one reconnection (2 total: initial + 1 reconnect)
+      expect(MockEventSource.instances).toHaveLength(2);
+    });
+
+    it("resets retry count after successful reconnection message", async () => {
+      vi.mocked(api.getProject).mockResolvedValue({
+        project_id: "test-project",
+        mode: "adapt",
+        status: "in_progress",
+        current_phase: "analysis",
+        scene_count: 2,
+        created_at: "2026-01-01",
+      });
+
+      const { result } = renderHook(() => useProgressStream("test-project"));
+
+      // Burn through 4 retries (leaving 1 remaining)
+      for (let i = 0; i < 4; i++) {
+        const es = MockEventSource.instances[MockEventSource.instances.length - 1];
+        act(() => {
+          es.onerror?.(new Event("error"));
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync((i + 1) * 1000 + 500);
+        });
+      }
+
+      // Now get a successful message on the reconnected EventSource
+      const reconnectedEs = MockEventSource.instances[MockEventSource.instances.length - 1];
+      act(() => {
+        reconnectedEs.emit("phase_started", JSON.stringify({ phase: "analysis" }));
+      });
+
+      // Retry count should be reset — 5 more errors should be tolerable
+      for (let i = 0; i < 5; i++) {
+        const es = MockEventSource.instances[MockEventSource.instances.length - 1];
+        act(() => {
+          es.onerror?.(new Event("error"));
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync((i + 1) * 1000 + 500);
+        });
+      }
+
+      // Should NOT have hit the "Connection lost" error yet
+      // (6th error exhausts retries)
+      const lastEs = MockEventSource.instances[MockEventSource.instances.length - 1];
+      act(() => {
+        lastEs.onerror?.(new Event("error"));
+      });
+
+      expect(result.current.error).toBe("Connection lost after multiple retries");
+    });
+
     it("shows error after exhausting all retries", async () => {
       vi.mocked(api.getProject).mockResolvedValue({
         project_id: "test-project",
