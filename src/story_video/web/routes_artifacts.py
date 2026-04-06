@@ -90,8 +90,14 @@ def _resolve_artifact_dir(project_id: str, phase: str) -> Path:
 
 
 def _guard_path_traversal(base_dir: Path, filename: str) -> Path:
-    """Resolve filename within base_dir, rejecting path traversal."""
+    """Resolve filename within base_dir, rejecting path traversal.
+
+    Validates against both ``base_dir`` (correctness) and the module-level
+    ``_output_dir`` (defense-in-depth safety net).
+    """
     resolved = (base_dir / filename).resolve()
+    if not resolved.is_relative_to(_output_dir.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid filename (path traversal)")
     if not resolved.is_relative_to(base_dir.resolve()):
         raise HTTPException(status_code=400, detail="Invalid filename (path traversal)")
     return resolved
