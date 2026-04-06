@@ -195,6 +195,35 @@ describe("TtsReviewPanel", () => {
     });
   });
 
+  it("busts audio cache with proper URL parameter after regenerate", async () => {
+    mockGetTtsScenes.mockResolvedValueOnce(mockScenes);
+
+    const updatedScene = {
+      ...mockScenes.scenes[0],
+      audio_url: "/api/v1/projects/test-project/artifacts/tts_generation/scene_001.mp3?token=abc",
+    };
+    mockRegenerateTtsScene.mockResolvedValueOnce(updatedScene);
+
+    const user = userEvent.setup();
+    render(<TtsReviewPanel projectId="test-project" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Scene 1: The Storm")).toBeInTheDocument();
+    });
+
+    const regenerateButtons = screen.getAllByText("Regenerate");
+    await user.click(regenerateButtons[0]);
+
+    await waitFor(() => {
+      const audio = document.querySelector("audio") as HTMLAudioElement;
+      expect(audio).toBeTruthy();
+      const url = new URL(audio.src, window.location.origin);
+      // Should have both the original token param AND the cache-bust param
+      expect(url.searchParams.get("token")).toBe("abc");
+      expect(url.searchParams.has("t")).toBe(true);
+    });
+  });
+
   it("shows 'No audio generated' and no audio element for scene without audio", async () => {
     // Render with only the scene that has no audio
     mockGetTtsScenes.mockResolvedValueOnce({

@@ -103,10 +103,10 @@ export default function TtsReviewPanel({
 
     try {
       const updated = await api.regenerateTtsScene(projectId, sceneNumber);
-      // Bust audio cache by appending timestamp
-      const bustedUrl = updated.audio_url.includes("?")
-        ? `${updated.audio_url}&t=${Date.now()}`
-        : `${updated.audio_url}?t=${Date.now()}`;
+      // Bust audio cache by appending timestamp via URL API
+      const url = new URL(updated.audio_url, window.location.origin);
+      url.searchParams.set("t", String(Date.now()));
+      const bustedUrl = url.pathname + url.search;
       setScenes((prev) =>
         prev.map((s) =>
           s.scene_number === sceneNumber ? { ...updated, audio_url: bustedUrl } : s,
