@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import App from "../App";
@@ -13,24 +13,20 @@ vi.mock("../api/client", () => ({
 
 describe("Layout", () => {
   it("renders the app title", async () => {
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <App />
-        </MemoryRouter>,
-      );
-    });
-    expect(screen.getByText("Story Video")).toBeInTheDocument();
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("Story Video")).toBeInTheDocument();
   });
 
   it("shows project list page at root route", async () => {
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <App />
-        </MemoryRouter>,
-      );
-    });
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
     await waitFor(() => {
       expect(screen.getByText("No projects yet")).toBeInTheDocument();
     });

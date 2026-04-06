@@ -655,6 +655,16 @@ class TestExtractImageTagsStripped:
         # Second image tag at position 7 ("middle " = 7 chars)
         assert tags[1].position == 7
 
+    def test_positions_stay_aligned_with_multiline_whitespace_between_tags(self):
+        """Image positions are measured from the fully stripped prefix text."""
+        text = "**voice:narrator**\n  Before\n  **mood:dry**\n  **image:lighthouse** After"
+        tags = extract_image_tags_stripped(text)
+        stripped_text = strip_narration_tags(text)
+
+        assert stripped_text == "Before\n  After"
+        assert tags[0].position == len("Before\n  ")
+        assert stripped_text[tags[0].position :] == "After"
+
 
 # ---------------------------------------------------------------------------
 # Extract music tags

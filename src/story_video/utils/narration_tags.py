@@ -118,6 +118,11 @@ def strip_music_tags(text: str) -> str:
     return _MUSIC_STRIP_PATTERN.sub("", text)
 
 
+def _stripped_position(text: str, raw_position: int) -> int:
+    """Map a raw tag offset onto the fully stripped-text coordinate system."""
+    return len(strip_narration_tags(text[:raw_position]))
+
+
 def extract_music_tags_stripped(text: str) -> list[MusicTag]:
     """Extract music tags with positions relative to the all-tags-stripped text.
 
@@ -125,16 +130,10 @@ def extract_music_tags_stripped(text: str) -> list[MusicTag]:
     pause, image, music) are stripped, matching the coordinate system
     of the Whisper transcript.
     """
-    all_stripped = list(_STRIP_PATTERN.finditer(text))
-    music_matches = list(_MUSIC_TAG_PATTERN.finditer(text))
-
-    result = []
-    for m in music_matches:
-        chars_removed = sum(len(s.group(0)) for s in all_stripped if s.start() < m.start())
-        stripped_pos = m.start() - chars_removed
-        result.append(MusicTag(key=m.group(1).strip(), position=stripped_pos))
-
-    return result
+    return [
+        MusicTag(key=m.group(1).strip(), position=_stripped_position(text, m.start()))
+        for m in _MUSIC_TAG_PATTERN.finditer(text)
+    ]
 
 
 def validate_music_tags(tags: list[MusicTag], audio_map: dict[str, object]) -> None:
@@ -164,16 +163,10 @@ def extract_image_tags_stripped(text: str) -> list[ImageTag]:
     pause, image) are stripped, matching the coordinate system of the Whisper
     transcript.
     """
-    all_stripped = list(_STRIP_PATTERN.finditer(text))
-    image_matches = list(_IMAGE_TAG_PATTERN.finditer(text))
-
-    result = []
-    for img in image_matches:
-        chars_removed = sum(len(m.group(0)) for m in all_stripped if m.start() < img.start())
-        stripped_pos = img.start() - chars_removed
-        result.append(ImageTag(key=img.group(1).strip(), position=stripped_pos))
-
-    return result
+    return [
+        ImageTag(key=img.group(1).strip(), position=_stripped_position(text, img.start()))
+        for img in _IMAGE_TAG_PATTERN.finditer(text)
+    ]
 
 
 def validate_image_tags(tags: list[ImageTag], images: dict[str, str]) -> None:

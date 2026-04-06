@@ -183,6 +183,18 @@ class UpdateArtifactRequest(BaseModel):
         return v
 
 
+def _validate_artifact_content(filename: str, content: str) -> None:
+    """Reject malformed editable content before writing it to disk."""
+    if not filename.lower().endswith(".json"):
+        return
+    try:
+        json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"Content must be valid JSON: {exc.msg}"
+        ) from exc
+
+
 @router.put("/{project_id}/artifacts/{phase}/{filename}")
 async def update_artifact(
     project_id: str, phase: str, filename: str, body: UpdateArtifactRequest
@@ -192,5 +204,6 @@ async def update_artifact(
     file_path = _guard_path_traversal(artifact_dir, filename)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+    _validate_artifact_content(filename, body.content)
     file_path.write_text(body.content, encoding="utf-8")
     return {"status": "updated", "filename": filename}

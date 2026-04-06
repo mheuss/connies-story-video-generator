@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import App from "../App";
 
@@ -18,58 +18,48 @@ vi.mock("../pages/SettingsPage", () => ({
 
 describe("App routing", () => {
   it("renders ProjectListPage at /", async () => {
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={["/"]}>
-          <App />
-        </MemoryRouter>,
-      );
-    });
-    expect(screen.getByTestId("project-list-page")).toBeInTheDocument();
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("project-list-page")).toBeInTheDocument();
   });
 
   it("redirects /create to /project/new", async () => {
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={["/create"]}>
-          <App />
-        </MemoryRouter>,
-      );
-    });
+    render(
+      <MemoryRouter initialEntries={["/create"]}>
+        <App />
+      </MemoryRouter>,
+    );
     // /create redirects to /project/new, which renders UnifiedProjectPage
-    expect(screen.getByTestId("project-page")).toBeInTheDocument();
+    expect(await screen.findByTestId("project-page")).toBeInTheDocument();
   });
 
   it("renders UnifiedProjectPage at /project/:projectId", async () => {
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={["/project/test-123"]}>
-          <App />
-        </MemoryRouter>,
-      );
-    });
-    expect(screen.getByTestId("project-page")).toBeInTheDocument();
+    render(
+      <MemoryRouter initialEntries={["/project/test-123"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("project-page")).toBeInTheDocument();
   });
 
   it("renders SettingsPage at /settings", async () => {
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={["/settings"]}>
-          <App />
-        </MemoryRouter>,
-      );
-    });
-    expect(screen.getByTestId("settings-page")).toBeInTheDocument();
+    render(
+      <MemoryRouter initialEntries={["/settings"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("settings-page")).toBeInTheDocument();
   });
 
   it("redirects unknown routes to the project list page", async () => {
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={["/does-not-exist"]}>
-          <App />
-        </MemoryRouter>,
-      );
-    });
-    expect(screen.getByTestId("project-list-page")).toBeInTheDocument();
+    render(
+      <MemoryRouter initialEntries={["/does-not-exist"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("project-list-page")).toBeInTheDocument();
   });
 });
