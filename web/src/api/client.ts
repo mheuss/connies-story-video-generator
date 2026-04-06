@@ -97,22 +97,23 @@ export const api = {
 
   rerunFromPhase: (projectId: string, phase: string) =>
     request<RerunResponse>(
-      `/projects/${projectId}/rerun-from/${encodeURIComponent(phase)}`,
+      `/projects/${encodeURIComponent(projectId)}/rerun-from/${encodeURIComponent(phase)}`,
       { method: "POST" },
     ),
 
   // Artifacts
   listArtifacts: (projectId: string, phase: string) =>
-    request<ArtifactList>(`/projects/${projectId}/artifacts/${phase}`, {
-      method: "GET",
-    }),
+    request<ArtifactList>(
+      `/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}`,
+      { method: "GET" },
+    ),
 
   getArtifactText: async (projectId: string, phase: string, filename: string) => {
     let response: Response;
 
     try {
       response = await fetch(
-        `${BASE}/projects/${projectId}/artifacts/${phase}/${filename}`,
+        `${BASE}/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}/${encodeURIComponent(filename)}`,
       );
     } catch (error) {
       if (error instanceof TypeError) {
@@ -129,7 +130,7 @@ export const api = {
   },
 
   getArtifactUrl: (projectId: string, phase: string, filename: string) =>
-    `${BASE}/projects/${projectId}/artifacts/${phase}/${filename}`,
+    `${BASE}/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}/${encodeURIComponent(filename)}`,
 
   updateArtifact: (
     projectId: string,
@@ -138,7 +139,7 @@ export const api = {
     content: string,
   ) =>
     request<{ status: string; filename: string }>(
-      `/projects/${projectId}/artifacts/${phase}/${filename}`,
+      `/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(phase)}/${encodeURIComponent(filename)}`,
       {
         method: "PUT",
         body: JSON.stringify({ content }),
