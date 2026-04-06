@@ -9,7 +9,11 @@ from fastapi import HTTPException
 from story_video.config import load_config
 from story_video.models import InputMode, SceneImagePrompt
 from story_video.state import ProjectState
-from story_video.web.routes_artifacts import _export_image_prompts, _resolve_artifact_dir
+from story_video.web.routes_artifacts import (
+    _export_image_prompts,
+    _guard_path_traversal,
+    _resolve_artifact_dir,
+)
 
 
 @pytest.fixture()
@@ -161,6 +165,41 @@ class TestExportImagePrompts:
 
         _export_image_prompts(project_dir)
         assert existing.read_text(encoding="utf-8") == "CUSTOM EDIT"
+
+
+class TestGuardPathTraversal:
+    """_guard_path_traversal validates against both base_dir and _output_dir."""
+
+    def test_allows_valid_filename(self, output_dir):
+        """A simple filename within base_dir and _output_dir passes."""
+        base = output_dir / "test-project"
+        base.mkdir()
+        target = base / "analysis.json"
+        target.touch()
+        with patch("story_video.web.routes_artifacts._output_dir", output_dir):
+            result = _guard_path_traversal(base, "analysis.json")
+        assert result == target.resolve()
+
+    def test_rejects_traversal_out_of_base_dir(self, output_dir):
+        """Path traversal escaping base_dir is rejected."""
+        base = output_dir / "test-project" / "scenes"
+        base.mkdir(parents=True)
+        with patch("story_video.web.routes_artifacts._output_dir", output_dir):
+            with pytest.raises(HTTPException) as exc_info:
+                _guard_path_traversal(base, "../../pyproject.toml")
+            assert exc_info.value.status_code == 400
+
+    def test_rejects_path_outside_output_dir(self, tmp_path):
+        """Even if base_dir is outside _output_dir, the safety net catches it."""
+        real_output = tmp_path / "output"
+        real_output.mkdir()
+        rogue_base = tmp_path / "sensitive"
+        rogue_base.mkdir()
+        (rogue_base / "secrets.json").touch()
+        with patch("story_video.web.routes_artifacts._output_dir", real_output):
+            with pytest.raises(HTTPException) as exc_info:
+                _guard_path_traversal(rogue_base, "secrets.json")
+            assert exc_info.value.status_code == 400
 
 
 class TestResolveArtifactDir:

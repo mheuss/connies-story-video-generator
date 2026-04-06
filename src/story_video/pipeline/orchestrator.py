@@ -17,7 +17,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 
 from story_video.models import (
     AssetType,
@@ -78,6 +81,20 @@ _CHECKPOINT_PHASES = frozenset(
         PipelinePhase.TTS_GENERATION,
     }
 )
+
+
+def _atomic_write_json(path: Path, data: object) -> None:
+    """Write JSON data to *path* atomically via tempfile + rename."""
+    content = json.dumps(data)
+    fd, tmp_path_str = tempfile.mkstemp(suffix=".tmp", dir=str(path.parent))
+    os.close(fd)
+    tmp_path = Path(tmp_path_str)
+    try:
+        tmp_path.write_text(content, encoding="utf-8")
+        os.replace(tmp_path_str, str(path))
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def run_pipeline(
@@ -495,8 +512,10 @@ def _run_narration_prep(state: ProjectState, claude_client: ClaudeClient) -> Non
             changelog.append({"scene": scene.scene_number, **change})
 
         # Persist tracker after each scene so mid-phase failures don't re-process.
+        # Atomic write (tempfile + rename) prevents a crash mid-write from
+        # corrupting the tracker and forcing a full re-run.
         done_scenes.add(scene.scene_number)
-        done_path.write_text(json.dumps(sorted(done_scenes)), encoding="utf-8")
+        _atomic_write_json(done_path, sorted(done_scenes))
 
     if changelog:
         write_narration_changelog(changelog, state.project_dir)
